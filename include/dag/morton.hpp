@@ -69,14 +69,14 @@ static void morton_code_sort(std::vector<glm::vec3>& points, std::vector<std::pa
     
     // sort morton code vector
     auto sorter = [](const auto& a, const auto& b){
-        return std::get<0>(a) > std::get<0>(b);
+        return a.first > b.first;
     };
     std::sort(std::execution::par_unseq, morton_codes.begin(), morton_codes.end(), sorter);
     
     // insert sorted morton code points back into points vector
     auto points_it = points.begin();
-    for (auto morton_it = morton_codes.cbegin(); morton_it != morton_codes.cend(); morton_it++, points_it++) {
-        *points_it = std::get<1>(*morton_it);
+    for (auto morton_it = morton_codes.cbegin(); morton_it != morton_codes.cend(); morton_it++) {
+        *points_it++ = morton_it->second;
     }
     
     auto end = std::chrono::steady_clock::now();
@@ -92,22 +92,23 @@ static auto morton_code_normals(std::vector<std::pair<MortonCode, glm::vec3>>& m
         MortonIt end_it;
     };
     // lambda function to get a map of neighbourhoods
-    auto fnc_get_neigh_map = [&morton_codes](std::size_t neigh_level) {
+    auto fnc_get_neigh_map = [&morton_codes](uint64_t neigh_level) {
         // the level up to which is checked to see if two morton codes belong to the same neighbourhood
-        phmap::flat_hash_map<typeof(MortonCode::_code), Neighbourhood> neigh_map;
+        phmap::flat_hash_map<uint64_t, Neighbourhood> neigh_map;
 
         // create mask to group morton codes up to a certain level
-        const std::size_t mask = std::numeric_limits<std::size_t>::max() << neigh_level * 3;
+        const uint64_t mask = std::numeric_limits<uint64_t>::max() << neigh_level * (uint64_t)3;
         MortonCode neigh_mc = morton_codes.front().first;
         neigh_mc._code &= mask;
         // insert the first neighbourhood
-        auto neigh_it = neigh_map.emplace(neigh_mc._code, Neighbourhood{morton_codes.cbegin(), morton_codes.cbegin()}).first;
+        Neighbourhood neigh { morton_codes.cbegin(), morton_codes.cbegin() };
+        auto neigh_it = neigh_map.emplace(neigh_mc._code, neigh).first;
 
         // iterate through all points to build neighbourhoods
         for (auto morton_it = morton_codes.cbegin() + 1; morton_it != morton_codes.cend(); morton_it++) {
             // get morton codes from current point and current neighbourhood
-            MortonCode point_mc = std::get<0>(*morton_it);
-            MortonCode neigh_mc = std::get<0>(*neigh_it->second.beg_it);
+            MortonCode point_mc = morton_it->first;
+            MortonCode neigh_mc = neigh_it->second.beg_it->first;
             point_mc._code &= mask;
             neigh_mc._code &= mask;
 
@@ -116,7 +117,8 @@ static auto morton_code_normals(std::vector<std::pair<MortonCode, glm::vec3>>& m
                 // set past-the-end iterator for current neighbourhood
                 neigh_it->second.end_it = morton_it;
                 // create a new neighbourhood starting at current point
-                neigh_it = neigh_map.emplace(point_mc._code, Neighbourhood(morton_it, morton_it)).first;
+                Neighbourhood neigh { morton_it, morton_it };
+                neigh_it = neigh_map.emplace(point_mc._code, neigh).first;
             }
         }
         // set end() iterator for final neighbourhood
@@ -130,7 +132,7 @@ static auto morton_code_normals(std::vector<std::pair<MortonCode, glm::vec3>>& m
     // rough approximation of points per neighbourhood
     std::size_t pts_per_neigh = morton_codes.size() / neigh_map.size();
     // decrease neigh level if too many points per neighbourhood are present
-    while (pts_per_neigh > 50) {
+    while (pts_per_neigh > 50 && neigh_level > 0) {
         neigh_level--;
         neigh_map = fnc_get_neigh_map(neigh_level);
         // rough approximation of points per neighbourhood
