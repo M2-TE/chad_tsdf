@@ -16,6 +16,12 @@ struct MortonCode {
     MortonCode(glm::ivec3 vox_pos): _code(encode(vox_pos)) {}
     MortonCode(uint64_t code): _code(code) {}
     
+    void static sort(std::vector<glm::vec3>& points, std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes);
+    auto static calc(std::vector<glm::vec3>& points)
+        -> std::vector<std::pair<MortonCode, glm::vec3>>;
+    auto static normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos)
+        -> std::vector<glm::vec3>;
+
     auto static inline encode(glm::ivec3 vox_pos) -> uint64_t {
         // truncate from two's complement 32-bit to 21-bit integer
         uint32_t x, y, z;
@@ -41,7 +47,7 @@ struct MortonCode {
     uint64_t _code;
 };
 
-static auto morton_code_calc(std::vector<glm::vec3>& points) -> std::vector<std::pair<MortonCode, glm::vec3>> {
+auto MortonCode::calc(std::vector<glm::vec3>& points) -> std::vector<std::pair<MortonCode, glm::vec3>> {
     auto beg = std::chrono::high_resolution_clock::now();
 
     // create a vector to hold sortable morton codes alongside position
@@ -64,7 +70,7 @@ static auto morton_code_calc(std::vector<glm::vec3>& points) -> std::vector<std:
     fmt::println("mort calc {:.2f}", dur);
     return morton_codes;
 }
-static void morton_code_sort(std::vector<glm::vec3>& points, std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes) {
+void MortonCode::sort(std::vector<glm::vec3>& points, std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes) {
     auto beg = std::chrono::steady_clock::now();
     
     // sort morton code vector
@@ -83,7 +89,7 @@ static void morton_code_sort(std::vector<glm::vec3>& points, std::vector<std::pa
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("pnts sort {:.2f}", dur);
 }
-static auto morton_code_normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
+auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
     auto beg = std::chrono::steady_clock::now();
     
     typedef std::vector<std::pair<MortonCode, glm::vec3>>::const_iterator MortonIt;
