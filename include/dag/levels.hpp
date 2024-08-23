@@ -43,7 +43,9 @@ public:
     NodeLevel(): 
         _lookup_set(0, HashFnc(_raw_data), CompFnc(_raw_data)),
         _raw_data(1),
-        _occupied_count(1) {}
+        _occupied_count(1),
+        _unique_count(0),
+        _dupe_count(0) {}
     // TODO: 8 separate hash sets for different node sizes?
     phmap::parallel_flat_hash_set<uint32_t, HashFnc, CompFnc> _lookup_set;
     std::vector<uint32_t> _raw_data;
@@ -55,7 +57,9 @@ public:
 struct LeafLevel {
     LeafLevel(): 
         _lookup_map(),
-        _raw_data(1, 0) {}
+        _raw_data(1, 0),
+        _unique_count(0),
+        _dupe_count(0) {}
     typedef uint64_t LeafValue;
     phmap::parallel_flat_hash_map<LeafValue, uint32_t> _lookup_map;
     std::vector<LeafValue> _raw_data;

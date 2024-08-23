@@ -15,6 +15,9 @@ public:
     void print_stats();
 
 private:
+    void insert_octree(struct Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals);
+
+private:
     static constexpr std::size_t _level_count = 21; // TODO: standardize this better alongside normal levels + leaf level
     std::array<NodeLevel, _level_count> _node_levels;
     LeafLevel _leaf_level;
