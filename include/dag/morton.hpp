@@ -89,6 +89,7 @@ void MortonCode::sort(std::vector<glm::vec3>& points, std::vector<std::pair<Mort
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("pnts sort {:.2f}", dur);
 }
+// TODO: figure out why its so slow compared to before
 auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
     auto beg = std::chrono::steady_clock::now();
     

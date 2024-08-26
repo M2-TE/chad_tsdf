@@ -66,7 +66,45 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
 
         // when all children were iterated
         if (child_i == 8) {
-            // TODO
+            _leaf_level._unique_count++;
+            // gather all children for this new node
+            std::vector<uint32_t> children;
+            for (auto i = 0; i < 8; i++) {
+                if (nodes_dag[depth][i] == 0) continue;
+                children.push_back(nodes_dag[depth][i]);
+                children[0] |= 1 << i; // child mask
+            }
+
+            // reset node tracker for handled nodes
+            nodes_dag[depth].fill(0);
+            
+            // check path in parent depth to know this node's child ID
+            uint32_t index_in_parent = path[depth - 1] - 1;
+
+            // resize data if necessary and then copy over
+            auto& level = _node_levels[depth];
+            level._raw_data.resize(level._occupied_count + children.size());
+            std::memcpy(
+                level._raw_data.data() + level._occupied_count,
+                children.data(),
+                children.size() * sizeof(uint32_t));
+            // check if the same node existed previously
+            uint32_t temporary = level._occupied_count;
+            auto [pIndex, bNew] = level._lookup_set.emplace(temporary);
+            if (bNew) {
+                level._occupied_count += children.size();
+                level._unique_count++;
+                if (depth > 0) {
+                    nodes_dag[depth - 1][index_in_parent] = temporary;
+                }
+            }
+            else { // TODO: can check for depth>0 earlier
+                level._dupe_count++;
+                if (depth > 0) {
+                    nodes_dag[depth - 1][index_in_parent] = *pIndex;
+                }
+            }
+            depth--;
         }
         // standard node
         else if (depth < 63/3 - 1) {
@@ -80,12 +118,30 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
         }
         // leaf cluster
         else {
-            // TODO
+            // get node containing the points closest to each leaf
+            Octree::Node* clusterPoints = nodes_octree[depth]->children[child_i];
+            if (clusterPoints == nullptr) continue;
+            continue;
+
+            // check if this leaf cluster already exists
+            auto temporary = _leaf_level._raw_data.size();
+            auto [pIter, bNew] = _leaf_level._lookup_map.emplace(69696969, temporary);
+            if (bNew) {
+                _leaf_level._unique_count++;
+                _leaf_level._raw_data.push_back(696969669);
+                nodes_dag[depth][child_i] = temporary;
+            }
+            else {
+                _leaf_level._dupe_count++;
+                // simply update references to the existing cluster
+                nodes_dag[depth][child_i] = pIter->second;
+            }
         }
     }
 
     auto end = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    fmt::println(" dag  ins {:.2f}", dur);
+    fmt::println("dag  ins  {:.2f}", dur);
+    fmt::println("{}", _leaf_level._unique_count);
     return root_addr;
 }

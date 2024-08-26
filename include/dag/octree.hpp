@@ -115,6 +115,7 @@ struct Octree {
         std::vector<Key> collisions;
         phmap::flat_hash_map<Key, Node*> a_parents;
         phmap::flat_hash_map<Key, Node*> a_layer, b_layer;
+        uint32_t prev_collision_count = 0;
         uint_fast32_t depth = 0;
 
         // set up initial roots
@@ -197,15 +198,18 @@ struct Octree {
                 break;
             }
 
-            // break if collision target is met
-            if (depth > 0 && collisions.size() >= collision_target) break;
+            if (prev_collision_count > 0) {
+                // break if collision target is met
+                if (collisions.size() >= collision_target) break;
+            }
+            prev_collision_count = collisions.size();
         }
         // return the remaining collisions alongside their depth
         return { collisions, depth };
     }
     // fully  merge  via previously found collisions (invalidates src octree)
     void static merge(Octree& dst, Octree& src, Key start_key, uint_fast32_t start_depth, uint32_t thread_i) {
-        auto beg = std::chrono::steady_clock::now();
+        // auto beg = std::chrono::steady_clock::now();
         const uint_fast32_t path_length = 63/3 - start_depth;
         if (path_length == 0) return;
         std::vector<uint_fast8_t> path(path_length);
@@ -321,8 +325,8 @@ struct Octree {
             }
         }
 
-        auto end = std::chrono::steady_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        // auto end = std::chrono::steady_clock::now();
+        // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         // fmt::println("duration: {:.2f} {}", dur, DEBUG_COUNTER);
     }
 
