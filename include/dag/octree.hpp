@@ -2,7 +2,6 @@
 #include <iostream>
 #include <set>
 #include <array>
-#include <bitset>
 #include <cstddef>
 #include <sstream>
 #include <vector>
@@ -79,9 +78,7 @@ struct Octree {
         }
         return node_p;
     }
-    // insert node at given depth while creating new nodes along path if necessary
-    // TODO: cache node path to speed up access
-    auto insert(Key key, uint_fast32_t target_depth) -> Node* {
+    auto insert(Key key) -> Node* {
         // check if memory block has enough space left
         if (_mem_blocks.back()._capacity - _mem_blocks.back()._size < 63/3) {
             _mem_blocks.emplace_back();
@@ -89,16 +86,14 @@ struct Octree {
         auto& mem_block = _mem_blocks.back();
 
         // depth from 20 (root) to 0 (leaf)
-        uint_fast32_t depth_r = 63/3 - 1;
-        // reverse target depth to fit internal depth iterator
-        target_depth = depth_r - target_depth;
+        int_fast32_t depth_r = 63/3 - 1;
         Node* node_p = _root_p;
-        for (;depth_r > target_depth; depth_r--) {
+        for (;depth_r >= 0; depth_r--) {
             uint64_t shift = 3 * depth_r;
             uint64_t idx = (key >> shift) & 0b111;
             if (node_p->children[idx] == nullptr) {
                 node_p->children[idx] = mem_block.allocate_node();
-                // TODO: can continue to create nodes here, since entire subtree is missing
+                // TODO: could continue to create nodes here, since entire subtree is missing
             }
             node_p = node_p->children[idx];
         }
@@ -120,7 +115,6 @@ struct Octree {
         std::vector<Key> collisions;
         phmap::flat_hash_map<Key, Node*> a_parents;
         phmap::flat_hash_map<Key, Node*> a_layer, b_layer;
-        uint_fast32_t prev_collision_count = 0;
         uint_fast32_t depth = 0;
 
         // set up initial roots
@@ -203,31 +197,26 @@ struct Octree {
                 break;
             }
 
-            // only check for break condition if collision count has changed
-            if (depth > 0 && collisions.size() != prev_collision_count) {
-                // break if collision target is met or collisions are decreasing
-                if (collisions.size() >= collision_target) break;
-                if (collisions.size() < prev_collision_count) break;
-            }
-            prev_collision_count = collisions.size();
+            // break if collision target is met
+            if (depth > 0 && collisions.size() >= collision_target) break;
         }
         // return the remaining collisions alongside their depth
         return { collisions, depth };
     }
     // fully  merge  via previously found collisions (invalidates src octree)
-    void static merge(Octree& dst, Octree& src, Key start_key, uint_fast32_t start_depth, bool debug = false) {
-        start_depth += 1; // constant offset
+    void static merge(Octree& dst, Octree& src, Key start_key, uint_fast32_t start_depth, uint32_t thread_i) {
+        auto beg = std::chrono::steady_clock::now();
         const uint_fast32_t path_length = 63/3 - start_depth;
         if (path_length == 0) return;
         std::vector<uint_fast8_t> path(path_length);
         std::vector<Node*> nodes_a(path_length);
         std::vector<Node*> nodes_b(path_length);
-        
         // find the colliding nodes in both trees
         path[0] = 0;
         nodes_a[0] = dst.find(start_key, start_depth);
         nodes_b[0] = src.find(start_key, start_depth);
         uint_fast32_t depth = 0;
+        uint32_t DEBUG_COUNTER = 0;
 
         // begin traversal
         while (path[0] <= 8) {
@@ -241,54 +230,46 @@ struct Octree {
             Node* a_child_p = nodes_a[depth]->children[child_i];
             Node* b_child_p = nodes_b[depth]->children[child_i];
             
+            // if this node is missing from B, simply skip it
+            if (b_child_p == nullptr) continue;
             if (a_child_p != nullptr) {
-                // if this node is missing from B, simply skip it
-                if (b_child_p == nullptr) continue;
-
-                // if child nodes are leaves clusters (hence -2), resolve collision
+                // if child nodes are leaf clusters, resolve collision between leaves
                 if (depth >= path_length - 2) {
+                    DEBUG_COUNTER++;
                     // reconstruct morton code from path
                     uint64_t code = start_key;
                     for (uint64_t k = 0; k < path_length - 1; k++) {
                         uint64_t part = path[k] - 1;
-                        uint64_t shift = path_length*3 - k*3 - 3;
+                        uint64_t shift = path_length*3 - k*3 - 6;
                         code |= part << shift;
                     }
                     // convert to actual cluster chunk position
                     glm::ivec3 cluster_chunk = MortonCode::decode(code);
-
-                    // retrieve leaf cluster node
-                    Node* node_cluster_a = nodes_a[depth]->children[child_i];
-                    Node* node_cluster_b = nodes_b[depth]->children[child_i];
 
                     uint8_t leaf_i = 0;
                     for (int32_t z = 0; z <= 1; z++) {
                     for (int32_t y = 0; y <= 1; y++) {
                     for (int32_t x = 0; x <= 1; x++, leaf_i++) {
                         // get clusters of closest points to this leaf
-                        Node* leaf_a = node_cluster_a->children[leaf_i];
-                        Node* leaf_b = node_cluster_b->children[leaf_i];
+                        Node* leaf_a = a_child_p->children[leaf_i];
+                        Node* leaf_b = b_child_p->children[leaf_i];
 
-                        // check validity of pointers
+                        // check validity of leaf nodes
                         if (leaf_b == nullptr) continue;
                         else if (leaf_a == nullptr) {
-                            node_cluster_a->children[leaf_i] = leaf_b;
+                            a_child_p->children[leaf_i] = leaf_b;
                             continue;
                         }
-
-                        // calc leaf position in world space
-                        glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
-                        glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
 
                         // count total leaf candidates in both leaves
                         std::vector<const glm::vec3*> candidates;
                         candidates.reserve(leaf_a->leaf_candidates.size() * 2);
                         for (uint32_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
                             if (leaf_a->leaf_candidates[i] != nullptr) {
-                                candidates.emplace_back(leaf_a->leaf_candidates[i]);
+                                candidates.push_back(leaf_a->leaf_candidates[i]);
                             }
                             if (leaf_b->leaf_candidates[i] != nullptr) {
-                                candidates.emplace_back(leaf_b->leaf_candidates[i]);
+                                candidates.push_back(leaf_b->leaf_candidates[i]);
                             }
                         }
 
@@ -300,6 +281,10 @@ struct Octree {
                         }
                         // merge only closest points if not
                         else {
+                            // calc leaf position in world space
+                            glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
+                            glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
+
                             // calc distances for each point to this leaf
                             typedef std::pair<const glm::vec3*, float> PairedDist;
                             std::vector<PairedDist> distances;
@@ -335,6 +320,10 @@ struct Octree {
                 nodes_a[depth]->children[child_i] = b_child_p;
             }
         }
+
+        auto end = std::chrono::steady_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        // fmt::println("duration: {:.2f} {}", dur, DEBUG_COUNTER);
     }
 
     Node* _root_p;
@@ -349,13 +338,60 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p, std::s
 
     // chunk of a 2x2x2 leaf cluster that the point is in
     glm::ivec3 chunk_base = chunk_center - chunk_center % 2;
+
+    // fill leaves in a 4x4x4 radius around point
+    // chunk will be from -1 to +2 in each dimension (inclusive)
+    // center chunk is 0 to 1
+    for (int_fast32_t z = chunk_base.z - 1; z <= chunk_base.z + 2; z++) {
+    for (int_fast32_t y = chunk_base.y - 1; y <= chunk_base.y + 2; y++) {
+    for (int_fast32_t x = chunk_base.x - 1; x <= chunk_base.x + 2; x++) {
+        // get leaf position in voxel space and insert into octree
+        glm::ivec3 chunk_leaf = chunk_base + glm::ivec3(x, y, z);
+        MortonCode mc { chunk_leaf };
+        Octree::Node* leaf_p = octree.insert(mc._code);
+
+        // add point_p if leaf candidate array has space left
+        bool is_inserted = false;
+        for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
+            if (leaf_p->leaf_candidates[i] == nullptr) {
+                leaf_p->leaf_candidates[i] = point_p;
+                is_inserted = true;
+                break;
+            }
+        }
+        if (is_inserted) continue;
+
+        // get leaf position in world space to calc distance
+        glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
+        glm::vec3 diff = *point_p - pos_leaf;
+        float dist_sqr = glm::dot(diff, diff);
+        // try to replace furthest point with this one
+        float dist_sqr_max = 0.0f;
+        uint_fast8_t dist_sqr_max_i = 0;
+        for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
+            glm::vec3 diff = *leaf_p->leaf_candidates[i] - pos_leaf;
+            float dist_sqr = glm::dot(diff, diff);
+            if (dist_sqr > dist_sqr_max) {
+                dist_sqr_max = dist_sqr;
+                dist_sqr_max_i = i;
+            }
+        }
+        // replace furthest point if closer
+        if (dist_sqr < dist_sqr_max) {
+            leaf_p->leaf_candidates[dist_sqr_max_i] = point_p;
+        }
+    }}}
+    return;
+
+    // DEPRECATED
     // fill leaves in a 6x6x6 radius around the incoming point
     for (int_fast32_t z2 = -2; z2 <= +2; z2 += 2) {
     for (int_fast32_t y2 = -2; y2 <= +2; y2 += 2) {
     for (int_fast32_t x2 = -2; x2 <= +2; x2 += 2) {
         glm::ivec3 chunk_cluster = chunk_base + glm::ivec3(x2, y2, z2);
         MortonCode mc { chunk_cluster };
-        Octree::Node* cluster_p = octree.insert(mc._code, 20);
+        // Octree::Node* cluster_p = octree.insert(mc._code, 20);
+        Octree::Node* cluster_p;
 
         // iterate over leaves within 2x2x2 cluster
         uint_fast8_t leaf_i = 0;
@@ -377,8 +413,6 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p, std::s
             }
             // try to add point to leaf candidates
             else {
-                glm::vec3 diff = *point_p - pos_leaf;
-                float dist_sqr = glm::dot(diff, diff);
 
                 // try finding an empty slot
                 bool is_inserted = false;
@@ -392,6 +426,8 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p, std::s
                 if (is_inserted) continue;
 
                 // get furthest point and its index
+                glm::vec3 diff = *point_p - pos_leaf;
+                float dist_sqr = glm::dot(diff, diff);
                 float dist_sqr_max = 0.0f;
                 uint_fast8_t dist_sqr_max_i = 0;
                 for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
@@ -542,7 +578,7 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
                     Octree::merge(
                         *group.trees[0], *group.trees[1], 
                         group.collisions[collision_i], 
-                        group.collision_depth, thread_i == 0);
+                        group.collision_depth, thread_i); // DEBUG: pass thread id for prints
                     collision_i += stage.group_size;
                 }
 
@@ -560,6 +596,6 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
 
     end = std::chrono::steady_clock::now();
     dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    fmt::println("trie merg {:.2f}", dur);
+    fmt::println("trie merg {:.2f} (TODO)", dur);
     return std::move(octrees[0]);
 }

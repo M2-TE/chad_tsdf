@@ -30,7 +30,7 @@ struct MortonCode {
         z = (1 << 20) + (uint32_t)vox_pos.z;
         return mortonnd::MortonNDBmi_3D_64::Encode(x, y, z);
     }
-    auto static inline decode(uint64_t code) -> glm::ivec3{
+    auto static inline decode(uint64_t code) -> glm::ivec3 {
         auto [x, y, z] = mortonnd::MortonNDBmi_3D_64::Decode(code);
         x -= 1 << 20;
         y -= 1 << 20;
