@@ -240,7 +240,6 @@ struct Octree {
     }
     // fully  merge  via previously found collisions (invalidates src octree)
     void static merge(Octree& dst, Octree& src, Key start_key, uint_fast32_t start_depth, uint32_t thread_i) {
-        auto beg = std::chrono::steady_clock::now();
         const uint_fast32_t path_length = 63/3 - start_depth;
         if (path_length <= 1) {
             fmt::println("no merging job");
@@ -254,7 +253,6 @@ struct Octree {
         nodes_a[0] = dst.find(start_key, start_depth);
         nodes_b[0] = src.find(start_key, start_depth);
         uint_fast32_t depth = 0;
-        uint32_t DEBUG_COUNTER = 0;
 
         // begin traversal
         while (path[0] <= 8) {
@@ -276,7 +274,6 @@ struct Octree {
                 nodes_a[depth]->children[child_i] = b_child_p;
                 continue;
             }
-            // if (thread_i == 0) fmt::println("{}", depth);
             
             // if child nodes are leaf clusters, resolve collision between leaves
             if (depth >= path_length - 2) { // todo: adjust actual path_length variable
@@ -359,10 +356,6 @@ struct Octree {
                 nodes_b[depth] = b_child_p;
             }
         }
-
-        auto end = std::chrono::steady_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        // if (thread_i == 0) fmt::println("{:2} duration: {:.2f} {}", thread_i, dur, DEBUG_COUNTER);
     }
 
     Node* _root_p;
@@ -370,7 +363,7 @@ struct Octree {
 };
 
 // todo: needs a better name to distinguish between octree::insert and this
-void static octree_insert_point_(Octree& octree, const glm::vec3* point_p) {
+void static octree_insert_point_new(Octree& octree, const glm::vec3* point_p) {
     // discretize position to leaf chunk
     glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
     glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
