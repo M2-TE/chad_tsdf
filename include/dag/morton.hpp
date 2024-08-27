@@ -89,7 +89,6 @@ void MortonCode::sort(std::vector<glm::vec3>& points, std::vector<std::pair<Mort
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("pnts sort {:.2f}", dur);
 }
-// TODO: figure out why its so slow compared to before
 auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
     auto beg = std::chrono::steady_clock::now();
     
@@ -107,6 +106,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
         const uint64_t mask = std::numeric_limits<uint64_t>::max() << neigh_level * (uint64_t)3;
         MortonCode neigh_mc = morton_codes.front().first;
         neigh_mc._code &= mask;
+        
         // insert the first neighbourhood
         Neighbourhood neigh { morton_codes.cbegin(), morton_codes.cbegin() };
         auto neigh_it = neigh_map.emplace(neigh_mc._code, neigh).first;
@@ -168,27 +168,25 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
     auto fnc_approx_norms = [&normals, &neigh_map, &morton_codes, pose_pos, dist_max](NeighIt beg, NeighIt end) {
         for (auto neigh_it = beg; neigh_it != end; neigh_it++) {
             // get morton code for current neighbourhood
-            MortonCode neigh_mc = neigh_it->first;
             const Neighbourhood& neigh = neigh_it->second;
+            MortonCode neigh_mc = neigh_it->first;
             glm::ivec3 neigh_pos = neigh_mc.decode();
 
             // gather adjacent neighbourhoods
             std::vector<Neighbourhood*> adj_neighs;
             for (int32_t z = -1; z <= +1; z++) {
-                for (int32_t y = -1; y <= +1; y++) {
-                    for (int32_t x = -1; x <= +1; x++) {\
-                        // offset based on neighbourhood level
-                        glm::ivec3 offset { x, y, z };
-                        offset *= 1 << neigh_level;
-                        MortonCode near_mc { neigh_pos + offset };
-                        // attempt to find adjacent neighbourhood in map
-                        auto near_it = neigh_map.find(near_mc._code);
-                        if (near_it != neigh_map.cend()) {
-                            adj_neighs.push_back(&near_it->second);	
-                        }
-                    }
+            for (int32_t y = -1; y <= +1; y++) {
+            for (int32_t x = -1; x <= +1; x++) {
+                // offset based on neighbourhood level
+                glm::ivec3 offset { x, y, z };
+                offset *= 1 << neigh_level;
+                MortonCode near_mc { neigh_pos + offset };
+                // attempt to find adjacent neighbourhood in map
+                auto near_it = neigh_map.find(near_mc._code);
+                if (near_it != neigh_map.cend()) {
+                    adj_neighs.push_back(&near_it->second);	
                 }
-            }
+            }}}
 
             // count total points in all adjacent neighbourhoods
             std::size_t point_count = 0;
@@ -197,13 +195,12 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
             }
 
             // collect all points in all adjacent neighbourhoods
-            std::vector<glm::vec3> points_local { point_count };
-            auto points_local_it = points_local.begin();
-            for (auto it_neigh = adj_neighs.cbegin(); it_neigh != adj_neighs.cend(); it_neigh++) {
+            std::vector<glm::vec3> points_local;
+            points_local.reserve(point_count);
+            for (auto neigh_it = adj_neighs.cbegin(); neigh_it != adj_neighs.cend(); neigh_it++) {
                 // go over points in this neighbourhood
-                for (auto it_point = (**it_neigh).beg_it; it_point != (**it_neigh).end_it; it_point++) {
-                    *points_local_it = it_point->second;
-                    points_local_it++;
+                for (auto point_it = (**neigh_it).beg_it; point_it != (**neigh_it).end_it; point_it++) {
+                    points_local.push_back(point_it->second);
                 }
             }
 
@@ -212,6 +209,9 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
             nearest_points.reserve(point_count);
             // for every point within the central neighbourhood, find its nearest neighbours for normal calc
             for (auto point_it = neigh.beg_it; point_it != neigh.end_it; point_it++) {
+                // every point will have its own set of nearest points
+                nearest_points.clear();
+
                 // go over all points and store the nearest ones (within bounds)
                 for (auto other_it = points_local.cbegin(); other_it != points_local.cend(); other_it++) {
                     glm::vec3 diff = *other_it - point_it->second;

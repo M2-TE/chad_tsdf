@@ -12,6 +12,7 @@
 #include "dag/morton.hpp"
 #include "fmt/base.h"
 #include "glm/fwd.hpp"
+#include <bitset>
 
 struct Octree {
     typedef uint64_t Key; // only 63 bits valid
@@ -40,6 +41,7 @@ struct Octree {
 
         auto allocate_node() -> Node* {
             Node* node_p = _data_p + _size++;
+            std::memset(node_p, 0, sizeof(Node));
             return node_p;
         }
 
@@ -71,7 +73,7 @@ struct Octree {
         // reverse target depth to fit internal depth iterator
         target_depth = depth_r - target_depth;
         Node* node_p = _root_p;
-        for (;depth_r > target_depth; depth_r--) {
+        for (;depth_r >= target_depth; depth_r--) {
             uint64_t shift = 3 * depth_r;
             uint64_t idx = (key >> shift) & 0b111;
             node_p = node_p->children[idx];
@@ -99,6 +101,31 @@ struct Octree {
         }
         return node_p;
     }
+    auto insert(Key key, uint_fast32_t target_depth) -> Node* {
+        // depth from 20 (root) to 0 (leaf)
+        uint_fast32_t rDepth = 63/3 - 1;
+        // reverse target depth to fit internal depth iterator
+        target_depth = rDepth - target_depth;
+        
+        // check if memory block has enough space left
+        if (_mem_blocks.back()._capacity - _mem_blocks.back()._size < 63/3) {
+            _mem_blocks.emplace_back();
+        }
+        auto& mem_block = _mem_blocks.back();
+        
+        // go from root to leaf parent
+        Node* pNode = _root_p;
+        while (rDepth >= target_depth) {
+            size_t index = (key >> rDepth*3) & 0b111;
+            if (pNode->children[index] == nullptr) {
+                pNode->children[index] = mem_block.allocate_node();
+            }
+            pNode = pNode->children[index];
+            rDepth--;
+        }
+        // return pointer to the requested child node
+        return pNode;
+    }
     // allocate node from most recent memory block, creating a new one if necessary
     auto allocate_node() -> Node* {
         // check if remaining space is sufficient for a single node
@@ -106,8 +133,6 @@ struct Octree {
             _mem_blocks.emplace_back();
         }
         Node* node_p = _mem_blocks.back().allocate_node();
-        // zero out node contents
-        std::memset(node_p, 0, sizeof(Node));
         return node_p;
     }
     // merge up to certain depth where collision target is met
@@ -121,6 +146,11 @@ struct Octree {
         // set up initial roots
         a_layer[0] = dst._root_p;
         b_layer[0] = src._root_p;
+
+        // build initial hash map for a_layer
+        for (uint_fast8_t i = 0; i < 8; i++) {
+
+        }
 
         // move memory block to merge target (pointers remain stable)
         for (auto& memblock: src._mem_blocks) {
@@ -179,7 +209,7 @@ struct Octree {
                     child_key &= 0b111;
                     // remove child part from key to get parent key
                     Key parent_key = key ^ (child_key << (60 - depth*3));
-                    
+
                     // use parent key to find the parent node in previous layer
                     Node* parent_p = a_parents[parent_key];
                     // insert new child into it
@@ -193,25 +223,29 @@ struct Octree {
             for (auto& key: b_queued_removals) b_layer.erase(key);
             if (b_layer.empty()) {
                 // return early, merging is already complete
+                fmt::println("breaking out of octree merge early");
                 collisions.clear();
                 depth = 63/3;
                 break;
             }
-
             if (prev_collision_count > 0) {
                 // break if collision target is met
                 if (collisions.size() >= collision_target) break;
             }
             prev_collision_count = collisions.size();
         }
+        // fmt::println("Collisions: {} ({}) {}", collisions.size(), collision_target, depth);
         // return the remaining collisions alongside their depth
         return { collisions, depth };
     }
     // fully  merge  via previously found collisions (invalidates src octree)
     void static merge(Octree& dst, Octree& src, Key start_key, uint_fast32_t start_depth, uint32_t thread_i) {
-        // auto beg = std::chrono::steady_clock::now();
+        auto beg = std::chrono::steady_clock::now();
         const uint_fast32_t path_length = 63/3 - start_depth;
-        if (path_length == 0) return;
+        if (path_length <= 1) {
+            fmt::println("no merging job");
+            return;
+        }
         std::vector<uint_fast8_t> path(path_length);
         std::vector<Node*> nodes_a(path_length);
         std::vector<Node*> nodes_b(path_length);
@@ -230,104 +264,105 @@ struct Octree {
                 depth--;
                 continue;
             }
+            
             // retrieve child nodes
             Node* a_child_p = nodes_a[depth]->children[child_i];
             Node* b_child_p = nodes_b[depth]->children[child_i];
             
             // if this node is missing from B, simply skip it
+            // else if this node is missing from A, add from B
             if (b_child_p == nullptr) continue;
-            if (a_child_p != nullptr) {
-                // if child nodes are leaf clusters, resolve collision between leaves
-                if (depth >= path_length - 2) {
-                    DEBUG_COUNTER++;
-                    // reconstruct morton code from path
-                    uint64_t code = start_key;
-                    for (uint64_t k = 0; k < path_length - 1; k++) {
-                        uint64_t part = path[k] - 1;
-                        uint64_t shift = path_length*3 - k*3 - 6;
-                        code |= part << shift;
-                    }
-                    // convert to actual cluster chunk position
-                    glm::ivec3 cluster_chunk = MortonCode::decode(code);
-
-                    uint8_t leaf_i = 0;
-                    for (int32_t z = 0; z <= 1; z++) {
-                    for (int32_t y = 0; y <= 1; y++) {
-                    for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-                        // get clusters of closest points to this leaf
-                        Node* leaf_a = a_child_p->children[leaf_i];
-                        Node* leaf_b = b_child_p->children[leaf_i];
-
-                        // check validity of leaf nodes
-                        if (leaf_b == nullptr) continue;
-                        else if (leaf_a == nullptr) {
-                            a_child_p->children[leaf_i] = leaf_b;
-                            continue;
-                        }
-
-                        // count total leaf candidates in both leaves
-                        std::vector<const glm::vec3*> candidates;
-                        candidates.reserve(leaf_a->leaf_candidates.size() * 2);
-                        for (uint32_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
-                            if (leaf_a->leaf_candidates[i] != nullptr) {
-                                candidates.push_back(leaf_a->leaf_candidates[i]);
-                            }
-                            if (leaf_b->leaf_candidates[i] != nullptr) {
-                                candidates.push_back(leaf_b->leaf_candidates[i]);
-                            }
-                        }
-
-                        // simply copy into target if all candidates fit
-                        if (candidates.size() <= leaf_a->leaf_candidates.size()) {
-                            for (std::size_t i = 0; i < candidates.size(); i++) {
-                                leaf_a->leaf_candidates[i] = candidates[i];
-                            }
-                        }
-                        // merge only closest points if not
-                        else {
-                            // calc leaf position in world space
-                            glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
-                            glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
-
-                            // calc distances for each point to this leaf
-                            typedef std::pair<const glm::vec3*, float> PairedDist;
-                            std::vector<PairedDist> distances;
-                            distances.reserve(candidates.size());
-                            std::ostringstream oss;
-                            for (std::size_t i = 0; i < candidates.size(); i++) {
-                                glm::vec3 diff = *candidates[i] - leaf_pos;
-                                float dist_sqr = glm::dot(diff, diff);
-                                distances.emplace_back(candidates[i], dist_sqr);
-                            }
-                            // sort via distances
-                            std::sort(distances.begin(), distances.end(), [](PairedDist& a, PairedDist& b) {
-                                return a.second < b.second;
-                            });
-
-                            // insert the 8 closest points into a
-                            for (std::size_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
-                                leaf_a->leaf_candidates[i] = distances[i].first;
-                            }
-                        }
-                    }}}
-                }
-                else {
-                    // walk down path
-                    depth++;
-                    path[depth] = 0;
-                    nodes_a[depth] = a_child_p;
-                    nodes_b[depth] = b_child_p;
-                }
-            }
-            else if (b_child_p != nullptr) {
-                // add missing child to A
+            else if (a_child_p == nullptr) {
                 nodes_a[depth]->children[child_i] = b_child_p;
+                continue;
+            }
+            // if (thread_i == 0) fmt::println("{}", depth);
+            
+            // if child nodes are leaf clusters, resolve collision between leaves
+            if (depth >= path_length - 2) { // todo: adjust actual path_length variable
+                // reconstruct morton code from path
+                uint64_t code = start_key;
+                for (uint64_t k = 0; k < path_length - 1; k++) { // todo: adjust for new path length thing
+                    uint64_t part = path[k] - 1;
+                    uint64_t shift = path_length*3 - k*3 - 6;
+                    code |= part << shift;
+                }
+                // convert to actual cluster chunk position
+                glm::ivec3 cluster_chunk = MortonCode::decode(code);
+
+                uint8_t leaf_i = 0;
+                for (int32_t z = 0; z <= 1; z++) {
+                for (int32_t y = 0; y <= 1; y++) {
+                for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                    // get clusters of closest points to this leaf
+                    Node* leaf_a = a_child_p->children[leaf_i];
+                    Node* leaf_b = b_child_p->children[leaf_i];
+
+                    // check validity of leaf nodes
+                    if (leaf_b == nullptr) continue;
+                    else if (leaf_a == nullptr) {
+                        a_child_p->children[leaf_i] = leaf_b;
+                        continue;
+                    }
+
+                    // count total leaf candidates in both leaves
+                    std::vector<const glm::vec3*> candidates;
+                    candidates.reserve(leaf_a->leaf_candidates.size() * 2);
+                    for (uint32_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
+                        if (leaf_a->leaf_candidates[i] != nullptr) {
+                            candidates.push_back(leaf_a->leaf_candidates[i]);
+                        }
+                        if (leaf_b->leaf_candidates[i] != nullptr) {
+                            candidates.push_back(leaf_b->leaf_candidates[i]);
+                        }
+                    }
+
+                    // simply copy into target if all candidates fit
+                    if (candidates.size() <= leaf_a->leaf_candidates.size()) {
+                        for (std::size_t i = 0; i < candidates.size(); i++) {
+                            leaf_a->leaf_candidates[i] = candidates[i];
+                        }
+                    }
+                    // merge only closest points if not
+                    else {
+                        // calc leaf position in world space
+                        glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
+                        glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
+
+                        // calc distances for each point to this leaf
+                        typedef std::pair<const glm::vec3*, float> PairedDist;
+                        std::vector<PairedDist> distances;
+                        distances.reserve(candidates.size());
+                        std::ostringstream oss;
+                        for (std::size_t i = 0; i < candidates.size(); i++) {
+                            glm::vec3 diff = *candidates[i] - leaf_pos;
+                            float dist_sqr = glm::dot(diff, diff);
+                            distances.emplace_back(candidates[i], dist_sqr);
+                        }
+                        // sort via distances
+                        std::sort(distances.begin(), distances.end(), [](PairedDist& a, PairedDist& b) {
+                            return a.second < b.second;
+                        });
+
+                        // insert the 8 closest points into a
+                        for (std::size_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
+                            leaf_a->leaf_candidates[i] = distances[i].first;
+                        }
+                    }
+                }}}
+            }
+            else {
+                // walk down path
+                depth++;
+                path[depth] = 0;
+                nodes_a[depth] = a_child_p;
+                nodes_b[depth] = b_child_p;
             }
         }
 
-        // auto end = std::chrono::steady_clock::now();
-        // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        // fmt::println("duration: {:.2f} {}", dur, DEBUG_COUNTER);
+        auto end = std::chrono::steady_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        // if (thread_i == 0) fmt::println("{:2} duration: {:.2f} {}", thread_i, dur, DEBUG_COUNTER);
     }
 
     Node* _root_p;
@@ -335,17 +370,13 @@ struct Octree {
 };
 
 // todo: needs a better name to distinguish between octree::insert and this
-void static octree_insert_point(Octree& octree, const glm::vec3* point_p, std::size_t thread_i) {
+void static octree_insert_point_(Octree& octree, const glm::vec3* point_p) {
     // discretize position to leaf chunk
-    glm::vec3 chunk = *point_p / (float)LEAF_RESOLUTION;
+    glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
     glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
+    glm::ivec3 chunk_base = chunk_center;
 
-    // chunk of a 2x2x2 leaf cluster that the point is in
-    glm::ivec3 chunk_base = chunk_center - chunk_center % 2;
-
-    // fill leaves in a 4x4x4 radius around point
-    // chunk will be from -1 to +2 in each dimension (inclusive)
-    // center chunk is 0 to 1
+    // write to leaves in a 4x4x4 voxel radius around point (+2 since point is floored)
     for (int_fast32_t z = chunk_base.z - 1; z <= chunk_base.z + 2; z++) {
     for (int_fast32_t y = chunk_base.y - 1; y <= chunk_base.y + 2; y++) {
     for (int_fast32_t x = chunk_base.x - 1; x <= chunk_base.x + 2; x++) {
@@ -385,69 +416,93 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p, std::s
             leaf_p->leaf_candidates[dist_sqr_max_i] = point_p;
         }
     }}}
-    return;
+}
+void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
+    // discretize position to leaf chunk
+    glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
+    glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
 
-    // DEPRECATED
-    // fill leaves in a 6x6x6 radius around the incoming point
-    for (int_fast32_t z2 = -2; z2 <= +2; z2 += 2) {
-    for (int_fast32_t y2 = -2; y2 <= +2; y2 += 2) {
-    for (int_fast32_t x2 = -2; x2 <= +2; x2 += 2) {
-        glm::ivec3 chunk_cluster = chunk_base + glm::ivec3(x2, y2, z2);
-        MortonCode mc { chunk_cluster };
-        // Octree::Node* cluster_p = octree.insert(mc._code, 20);
-        Octree::Node* cluster_p;
+    // set constraints for which leaf clusters get created
+    glm::ivec3 min = chunk_center + glm::ivec3(-1, -1, -1);
+    glm::ivec3 max = chunk_center + glm::ivec3(+2, +2, +2);
 
-        // iterate over leaves within 2x2x2 cluster
-        uint_fast8_t leaf_i = 0;
-        for (int_fast32_t z1 = 0; z1 <= 1; z1++) {
-        for (int_fast32_t y1 = 0; y1 <= 1; y1++) {
-        for (int_fast32_t x1 = 0; x1 <= 1; x1++, leaf_i++) {
-            // get leaf position in world space
-            glm::ivec3 chunk_leaf = chunk_cluster + glm::ivec3(x1, y1, z1);
-            glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
-            
-            // get leaf node from cluster parent
-            Octree::Node* leaf_p = cluster_p->children[leaf_i];
-            if (leaf_p == nullptr) {
-                // create new array of leaf candidates
-                leaf_p = octree.allocate_node();
-                leaf_p->leaf_candidates[0] = point_p;
-                // link new node to parent
-                cluster_p->children[leaf_i] = leaf_p;
-            }
-            // try to add point to leaf candidates
-            else {
+    // fill large 3x3x3 neighbourhood around point with signed distances. Most will be discarded
+    glm::ivec3 chunk_base = chunk_center - chunk_center % 4;
+    for (int32_t z4 = -4; z4 <= +4; z4 += 4) {
+    for (int32_t y4 = -4; y4 <= +4; y4 += 4) {
+    for (int32_t x4 = -4; x4 <= +4; x4 += 4) {
+        // position of current main chunk
+        glm::ivec3 chunk_base4 = chunk_base + glm::ivec3(x4, y4, z4);
+        MortonCode mc {chunk_base4 };
+        // mc._code = mc._code >> 3; // shift to cover the 3 LSB (leaves), which wont be encoded
+        Octree::Node* oct_node = octree.insert(mc._code, 19);
 
-                // try finding an empty slot
-                bool is_inserted = false;
-                for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
-                    if (leaf_p->leaf_candidates[i] == nullptr) {
-                        leaf_p->leaf_candidates[i] = point_p;
-                        is_inserted = true;
-                        break;
-                    }
-                }
-                if (is_inserted) continue;
-
-                // get furthest point and its index
-                glm::vec3 diff = *point_p - pos_leaf;
-                float dist_sqr = glm::dot(diff, diff);
-                float dist_sqr_max = 0.0f;
-                uint_fast8_t dist_sqr_max_i = 0;
-                for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
-                    glm::vec3 diff = *leaf_p->leaf_candidates[i] - pos_leaf;
-                    float dist_sqr = glm::dot(diff, diff);
-                    if (dist_sqr > dist_sqr_max) {
-                        dist_sqr_max = dist_sqr;
-                        dist_sqr_max_i = i;
-                    }
-                }
-                // replace furthest point if closer
-                if (dist_sqr < dist_sqr_max) {
-                    leaf_p->leaf_candidates[dist_sqr_max_i] = point_p;
-                }
+        // iterate over 2x2x2 sub chunks within the 4x4x4 main chunk
+        uint8_t cluster_i = 0;
+        for (int32_t z2 = 0; z2 <= 2; z2 += 2) {
+        for (int32_t y2 = 0; y2 <= 2; y2 += 2) {
+        for (int32_t x2 = 0; x2 <= 2; x2 += 2, cluster_i++) {
+            glm::ivec3 chunk_base2 = chunk_base4 + glm::ivec3(x2, y2, z2);
+            Octree::Node* cluster = oct_node->children[cluster_i];
+            // if it doesnt exist yet, allocate it manually
+            if (cluster == nullptr) {
+                cluster = octree.allocate_node();
+                oct_node->children[cluster_i] = cluster;
             }
 
+            // iterate over leaves within clusters
+            uint8_t iLeaf = 0;
+            for (int32_t z1 = 0; z1 <= 1; z1++) {
+            for (int32_t y1 = 0; y1 <= 1; y1++) {
+            for (int32_t x1 = 0; x1 <= 1; x1++, iLeaf++) {
+                glm::ivec3 chunk_leaf = chunk_base2 + glm::ivec3(x1, y1, z1);
+                // test if leaf falls within the constraints for current scan point
+                bool valid = true;
+                if (chunk_leaf.x < min.x || chunk_leaf.x > max.x) valid = false;
+                if (chunk_leaf.y < min.y || chunk_leaf.y > max.y) valid = false;
+                if (chunk_leaf.z < min.z || chunk_leaf.z > max.z) valid = false;
+                if (!valid) continue;
+
+                // if valid, calc real position of leaf
+                glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
+
+                // add to point to the leaf's closest points
+                Octree::Node* closestPoints = cluster->children[iLeaf];
+                // if not a single point landed on leaf yet, create new array for potential candidates
+                if (closestPoints == nullptr) {
+                    closestPoints = octree.allocate_node();
+                    closestPoints->leaf_candidates[0] = point_p;
+                    cluster->children[iLeaf] = closestPoints;
+                }
+                // add as a candidate for signed distance
+                else {
+                    glm::vec3 diff = *point_p - pos_leaf;
+                    float distSqr = glm::dot(diff, diff);
+                    // check to see if theres a free spot (8 points per leaf max)
+                    float furthest_distance = 0.0f;
+                    uint32_t furthest_distance_index = 0;
+                    uint32_t i = 0;
+                    for (; i < closestPoints->leaf_candidates.size(); i++) {
+                        if (closestPoints->leaf_candidates[i] == nullptr) break;
+                        // calc distance to find furthest point that can be replaced
+                        glm::vec3 diff = *closestPoints->leaf_candidates[i] - pos_leaf;
+                        float dist_sqr = glm::dot(diff, diff);
+                        if (dist_sqr > furthest_distance) {
+                            furthest_distance = dist_sqr;
+                            furthest_distance_index = i;
+                        }
+                    }
+                    // found an empty spot
+                    if (i < closestPoints->leaf_candidates.size()) {
+                        closestPoints->leaf_candidates[i] = point_p;
+                    }
+                    // replace spot with furthest point if its further than this point
+                    else if (distSqr < furthest_distance) {
+                        closestPoints->leaf_candidates[furthest_distance_index] = point_p;
+                    }
+                    // else discard point for this leaf
+                }
+            }}}
         }}}
     }}}
 }
@@ -467,7 +522,6 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
     for (uint_fast32_t thread_i = 0; thread_i < thread_count; thread_i++) {
         uint_fast32_t point_count = points.size() / thread_count;
         if (thread_i == thread_count - 1) point_count = 0; // special value for final thread to read the rest
-        // build one octree per thread
         threads.emplace_back([&points, &octrees, progress, thread_i, point_count](){
             auto cur_it = points.cbegin() + progress;
             auto end_it = (point_count == 0) ? points.cend() : (cur_it + point_count);
@@ -475,7 +529,7 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
             // Octree::PathCache cache(octree);
             for (; cur_it != end_it; cur_it++) {
                 const glm::vec3* point_p = &*cur_it;
-                octree_insert_point(octree, point_p, thread_i);
+                octree_insert_point(octree, point_p);
             }
         });
         progress += point_count;
@@ -542,7 +596,7 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
                         auto& stage_prev = stages[stage_i - 1];
                         uint32_t group_prev_i = thread_i / stage_prev.group_size;
                         // wait for group A to finish
-                        auto& group_a = stage_prev.groups[group_prev_i + 0];
+                        auto& group_a = stage_prev.groups[group_prev_i];
                         std::unique_lock lock_a(*group_a.mutex);
                         group_a.cv->wait(lock_a, [&]{ 
                             return group_a.completed_count >= stage_prev.group_size; 
@@ -571,6 +625,7 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
                     group.mutex->unlock();
                     group.cv->notify_all();
                 }
+                // fmt::println("stage {} thread {} group {} local {}", stage_i, thread_i, group_i, local_i);
                 // wait until this group is prepared
                 std::unique_lock lock(*group.mutex);
                 group.cv->wait(lock, [&]{ return group.is_prepared; });

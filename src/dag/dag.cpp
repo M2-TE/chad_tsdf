@@ -22,6 +22,7 @@ void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat r
     MortonCode::sort(points, morton_codes);
     auto normals = MortonCode::normals(morton_codes, position);
     // create octree from points and insert into DAG
+
     Octree octree = octree_build(points);
     // insert_octree(octree, points, normals);
     

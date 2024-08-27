@@ -21,8 +21,8 @@ void static read_pcl_file() {
     // insert into DAG and print stats
     DAG dag;
     dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
-    dag.print_stats();
-    dag.reconstruct();
+    // dag.print_stats();
+    // dag.reconstruct();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -47,9 +47,9 @@ void static do_sphere_thing() {
         dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
     }
     // dag.print_stats();
-    dag.reconstruct();
+    // dag.reconstruct();
 }
 int main() {
-    if (false) read_pcl_file();
+    if (true) read_pcl_file();
     else do_sphere_thing();
 }
