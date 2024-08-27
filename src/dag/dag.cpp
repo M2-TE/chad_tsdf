@@ -71,6 +71,7 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
     nodes_octree[0] = octree._root_p;
 
     // iterate through octree depth-first and insert nodes into DAG bottom-up
+     // TODO: the depth checking is really weird, can improve it
     while (depth >= 0) {
         auto child_i = path[depth]++;
 
@@ -106,7 +107,7 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
                     nodes_dag[depth - 1][index_in_parent] = temporary;
                 }
             }
-            else { // TODO: can check for depth>0 earlier
+            else {
                 level._dupe_count++;
                 if (depth > 0) {
                     nodes_dag[depth - 1][index_in_parent] = *pIndex;
