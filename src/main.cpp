@@ -21,7 +21,7 @@ void static read_pcl_file() {
     // insert into DAG and print stats
     DAG dag;
     dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
-    // dag.print_stats();
+    dag.print_stats();
     // dag.reconstruct();
 }
 void static do_sphere_thing() {

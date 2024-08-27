@@ -19,7 +19,6 @@ private:
         -> uint32_t;
 
 private:
-    static constexpr std::size_t _level_count = 21; // TODO: standardize this better alongside normal levels + leaf level
-    std::array<NodeLevel, _level_count> _node_levels;
+    std::array<NodeLevel, 63/3 - 1> _node_levels;
     LeafLevel _leaf_level;
 };

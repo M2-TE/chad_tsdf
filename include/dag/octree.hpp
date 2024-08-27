@@ -648,6 +648,6 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
 
     end = std::chrono::steady_clock::now();
     dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    fmt::println("trie merg {:.2f} (TODO)", dur);
+    fmt::println("trie merg {:.2f}", dur);
     return std::move(octrees[0]);
 }
