@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <parallel_hashmap/phmap.h>
+#include "dag/leaf_cluster.hpp"
 
 class NodeLevel {
     struct HashFnc {
@@ -60,9 +61,13 @@ struct LeafLevel {
         _raw_data(1),
         _unique_count(0),
         _dupe_count(0) {}
-    typedef uint64_t LeafValue;
-    phmap::flat_hash_map<LeafValue, uint32_t> _lookup_map;
-    std::vector<LeafValue> _raw_data;
+#if LEAF_BITS == 8
+    typedef uint64_t ClusterValue;
+#elif LEAF_BITS == 4
+    typedef uint32_t ClusterValue;
+#endif
+    phmap::flat_hash_map<ClusterValue, uint32_t> _lookup_map;
+    std::vector<ClusterValue> _raw_data;
     // debug trackers
     uint32_t _unique_count;
     uint32_t _dupe_count;

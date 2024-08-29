@@ -276,10 +276,10 @@ struct Octree {
             }
             
             // if child nodes are leaf clusters, resolve collision between leaves
-            if (depth >= path_length - 2) { // todo: adjust actual path_length variable
+            if (depth == path_length - 3) { // todo: adjust actual path_length variable?
                 // reconstruct morton code from path
                 uint64_t code = start_key;
-                for (uint64_t k = 0; k < path_length - 1; k++) { // todo: adjust for new path length thing
+                for (uint64_t k = 0; k < path_length - 2; k++) { // todo: adjust for new path length thing
                     uint64_t part = path[k] - 1;
                     uint64_t shift = path_length*3 - k*3 - 6;
                     code |= part << shift;
@@ -330,7 +330,6 @@ struct Octree {
                         typedef std::pair<const glm::vec3*, float> PairedDist;
                         std::vector<PairedDist> distances;
                         distances.reserve(candidates.size());
-                        std::ostringstream oss;
                         for (std::size_t i = 0; i < candidates.size(); i++) {
                             glm::vec3 diff = *candidates[i] - leaf_pos;
                             float dist_sqr = glm::dot(diff, diff);
@@ -428,7 +427,7 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
         glm::ivec3 chunk_base4 = chunk_base + glm::ivec3(x4, y4, z4);
         MortonCode mc {chunk_base4 };
         // mc._code = mc._code >> 3; // shift to cover the 3 LSB (leaves), which wont be encoded
-        Octree::Node* oct_node = octree.insert(mc._code, 19);
+        Octree::Node* oct_node = octree.insert(mc._code, 18);
 
         // iterate over 2x2x2 sub chunks within the 4x4x4 main chunk
         uint8_t cluster_i = 0;
@@ -444,10 +443,10 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
             }
 
             // iterate over leaves within clusters
-            uint8_t iLeaf = 0;
+            uint8_t leaf_i = 0;
             for (int32_t z1 = 0; z1 <= 1; z1++) {
             for (int32_t y1 = 0; y1 <= 1; y1++) {
-            for (int32_t x1 = 0; x1 <= 1; x1++, iLeaf++) {
+            for (int32_t x1 = 0; x1 <= 1; x1++, leaf_i++) {
                 glm::ivec3 chunk_leaf = chunk_base2 + glm::ivec3(x1, y1, z1);
                 // test if leaf falls within the constraints for current scan point
                 bool valid = true;
@@ -460,12 +459,12 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
                 glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
 
                 // add to point to the leaf's closest points
-                Octree::Node* closestPoints = cluster->children[iLeaf];
+                Octree::Node* closestPoints = cluster->children[leaf_i];
                 // if not a single point landed on leaf yet, create new array for potential candidates
                 if (closestPoints == nullptr) {
                     closestPoints = octree.allocate_node();
                     closestPoints->leaf_candidates[0] = point_p;
-                    cluster->children[iLeaf] = closestPoints;
+                    cluster->children[leaf_i] = closestPoints;
                 }
                 // add as a candidate for signed distance
                 else {
