@@ -198,6 +198,6 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
 
     auto end = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    fmt::println("dag  ins  {:.2f}", dur);
+    fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
