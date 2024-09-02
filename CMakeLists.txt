@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 project(chad LANGUAGES CXX)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
-include (_global)
 
 # check if project is top level
 set(CHAD_TOP_LEVEL OFF)
 if (PROJECT_IS_TOP_LEVEL)
     set(CHAD_TOP_LEVEL ON)
+    include(_global)
 endif()
 
 # set build options
