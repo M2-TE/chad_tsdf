@@ -11,6 +11,7 @@ class DAG {
 public:
     DAG();
     void insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation);
+    void merge_primary(uint_fast32_t root_addr);
     void reconstruct();
     void print_stats();
 

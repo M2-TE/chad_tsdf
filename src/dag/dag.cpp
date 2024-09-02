@@ -22,9 +22,9 @@ void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat r
     MortonCode::sort(points, morton_codes);
     auto normals = MortonCode::normals(morton_codes, position);
     // create octree from points and insert into DAG
-
     Octree octree = octree_build(points);
-    insert_octree(octree, points, normals);
+    uint_fast32_t root_addr = insert_octree(octree, points, normals);
+    merge_primary(root_addr);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
@@ -39,7 +39,7 @@ void DAG::print_stats() {
         hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
 
         fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", i, 
-            _node_levels[i]._unique_count, 
+            _node_levels[i]._unique_count,
             _node_levels[i]._dupe_count,
             (double)(_node_levels[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
             (double)hashset_size / 1024.0 / 1024.0);
@@ -62,15 +62,15 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
     std::array<uint_fast8_t, max_depth> path;
     std::array<std::array<uint32_t, 8>, max_depth> nodes_dag;
     std::array<const Octree::Node*, max_depth> nodes_octree;
-    uint32_t root_addr = 0xffffffff;
+    uint_fast32_t root_addr = 0xffffffff;
     // initialize
     path.fill(0);
     nodes_octree.fill(nullptr);
     for (auto& level: nodes_dag) level.fill(0);
-    int_fast32_t depth = 0;
     nodes_octree[0] = octree._root_p;
 
     // iterate through octree depth-first and insert nodes into DAG bottom-up
+    int_fast32_t depth = 0;
     while (depth >= 0) {
         auto child_i = path[depth]++;
 
@@ -200,4 +200,87 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
+}
+
+// pure helper struct for managing DAG nodes, will never be explicitly created or destroyed
+struct Node {
+    Node() = delete;
+    ~Node() = delete;
+    Node(const Node&) = delete;
+    Node(Node&&) = delete;
+    Node& operator=(const Node&) = delete;
+    Node& operator=(Node&&) = delete;
+
+    // reinterpret a node address as a valid Node object
+    auto static inline from_addr(std::vector<uint32_t>& data, uint_fast32_t addr) -> Node* {
+        return reinterpret_cast<Node*>(&data[addr]);
+    }
+    // check header mask for a specific child
+    bool inline contains_child(uint32_t child_i) const {
+        uint32_t child_bit = 1 << child_i;
+        return header & child_bit;
+    }
+    // retrieve child addr from sparse children array
+    uint32_t get_child_addr(uint32_t child_i) const {
+
+        // count how many children come before this one
+        uint32_t child_bit = 1 << child_i;
+        uint32_t masked = header & (child_bit - 1);
+        uint32_t child_count;
+#       ifdef POPCOUNT_INSTRUCTION
+            child_count = std::popcount<uint32_t>(masked);
+#       else
+            // popcount lookup table: https://stackoverflow.com/a/51388543
+            constexpr uint8_t popcount_table[] = {
+                0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+                1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+                1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+                1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+                2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+                3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+                3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+                4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8,
+            };
+            child_count = popcount_table[masked];
+#       endif
+        return children[child_count];
+    }
+
+    uint32_t header;
+    std::array<uint32_t, 8> children; // at least 1 valid child, at most 8
+};
+void DAG::merge_primary(uint_fast32_t root_addr) {
+    auto beg = std::chrono::steady_clock::now();
+
+    // trackers that will be updated during traversal
+    static constexpr std::size_t max_depth = 63/3 - 1;
+    std::array<uint_fast8_t, max_depth> path;
+    std::array<const Node*, max_depth> nodes_dst;
+    std::array<const Node*, max_depth> nodes_src;
+    std::array<std::array<uint32_t, 8>, max_depth> nodes_new;
+    // initialize
+    path.fill(0);
+    nodes_dst.fill(nullptr);
+    nodes_src.fill(nullptr);
+    for (auto& level: nodes_new) level.fill(0);
+    // nodes_dst[0] = octree._root_p;
+    // nodes_src[0] = octree._root_p;
+    
+    // iterate through dag depth-first and merge nodes into primary dag subtree bottom-up
+    int_fast32_t depth = 0;
+    while (depth >= 0) {
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+    fmt::println("dag  merg {:.2f}", dur);
+    exit(0);
 }

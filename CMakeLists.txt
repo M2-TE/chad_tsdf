@@ -6,6 +6,7 @@ include (_global)
 file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 add_executable(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_definitions(${PROJECT_NAME} PRIVATE POPCOUNT_INSTRUCTION=1)
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=0.1)
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=8)
 # todo: some options
