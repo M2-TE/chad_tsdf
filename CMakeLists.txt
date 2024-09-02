@@ -11,7 +11,9 @@ endif()
 
 # set build options
 option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" CHAD_TOP_LEVEL)
-set(CHAD_POPCOUNT_INSTRUCTION std::popcount<uint8_t> CACHE STRING "Use popcount instruction")
+if (NOT DEFINED CHAD_POPCOUNT_INSTRUCTION)
+    set(CHAD_POPCOUNT_INSTRUCTION std::popcount<uint8_t>)
+endif()
 
 # create executable/library
 file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
