@@ -14,8 +14,14 @@ DAG::DAG() {
     _node_levels[0]._occupied_count += 9;
     _node_levels[0]._unique_count++;
 }
-void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
+// void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
+void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
     auto beg = std::chrono::high_resolution_clock::now();
+    // convert anonymous inputs to named inputs
+    glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
+    // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
+    std::vector<glm::vec3> points { points_count };
+    std::memcpy(points.data(), points_p, points_count * sizeof(glm::vec3));
 
     // create morton codes to sort points and approx normals
     auto morton_codes = MortonCode::calc(points);

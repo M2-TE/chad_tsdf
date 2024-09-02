@@ -2,10 +2,9 @@
 #include <random>
 #include <fstream>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
 #include "dag/dag.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/fwd.hpp"
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -21,9 +20,9 @@ void static read_pcl_file() {
     fmt::println("Read {} points from file", point_count);
     // insert into DAG and print stats
     DAG dag;
-    dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
+    auto rot = glm::identity<glm::quat>();
+    dag.insert(points, glm::vec3(0, 0, 0), rot);
     dag.print_stats();
-    // dag.reconstruct();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -48,7 +47,6 @@ void static do_sphere_thing() {
         dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
     }
     // dag.print_stats();
-    // dag.reconstruct();
 }
 int main() {
     if (true) read_pcl_file();

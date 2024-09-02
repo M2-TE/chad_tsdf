@@ -8,6 +8,7 @@ set(CHAD_TOP_LEVEL OFF)
 if (PROJECT_IS_TOP_LEVEL)
     set(CHAD_TOP_LEVEL ON)
 endif()
+
 # set build options
 option(CHAD_POPCOUNT_INSTRUCTION "Use popcount instruction" ON)
 option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" CHAD_TOP_LEVEL)
