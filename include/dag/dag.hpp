@@ -3,7 +3,6 @@
 #pragma once
 #include <array>
 #include <vector>
-#include "dag/levels.hpp"
 
 class DAG {
 public:
@@ -25,6 +24,6 @@ private:
     auto insert_octree(struct Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals) -> uint32_t;
 
 private:
-    std::array<NodeLevel, 63/3 - 1> _node_levels;
-    LeafLevel _leaf_level;
+    std::array<struct NodeLevel, 63/3 - 1>* _node_levels_p;
+    struct LeafLevel* _leaf_level_p;
 };

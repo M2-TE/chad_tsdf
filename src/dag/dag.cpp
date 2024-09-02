@@ -9,10 +9,10 @@ DAG::DAG() {
     // create the main root node (will be empty still)
     // contains 1 header + 8 children
     for (auto i = 0; i < 9; i++) {
-        _node_levels[0]._raw_data.push_back(0);
+        (*_node_levels_p)[0]._raw_data.push_back(0);
     }
-    _node_levels[0]._occupied_count += 9;
-    _node_levels[0]._unique_count++;
+    (*_node_levels_p)[0]._occupied_count += 9;
+    (*_node_levels_p)[0]._unique_count++;
 }
 // void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
 void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
@@ -39,25 +39,25 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
 void DAG::reconstruct() {
 }
 void DAG::print_stats() {
-    for (std::size_t i = 0; i < _node_levels.size(); i++) {
-        auto hashset = _node_levels[i]._lookup_set;
+    for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
+        auto hashset = (*_node_levels_p)[i]._lookup_set;
         uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
         hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
 
         fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", i, 
-            _node_levels[i]._unique_count,
-            _node_levels[i]._dupe_count,
-            (double)(_node_levels[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
+            (*_node_levels_p)[i]._unique_count,
+            (*_node_levels_p)[i]._dupe_count,
+            (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
             (double)hashset_size / 1024.0 / 1024.0);
     }
     // print same stats for leaf level
-    auto hashmap = _leaf_level._lookup_map;
+    auto hashmap = _leaf_level_p->_lookup_map;
     uint64_t hashset_size = hashmap.size() / hashmap.max_load_factor();
     hashset_size *= sizeof(decltype(hashmap)::value_type) + 1;
-    fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", _node_levels.size(), 
-        _leaf_level._unique_count, 
-        _leaf_level._dupe_count,
-        (double)(_leaf_level._raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
+    fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", _node_levels_p->size(), 
+        _leaf_level_p->_unique_count, 
+        _leaf_level_p->_dupe_count,
+        (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
         (double)hashset_size / 1024.0 / 1024.0);
 }
 auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals) -> uint32_t {
@@ -96,7 +96,7 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
             uint32_t index_in_parent = path[depth - 1] - 1;
 
             // resize data if necessary and then copy over
-            auto& level = _node_levels[depth];
+            auto& level = (*_node_levels_p)[depth];
             level._raw_data.resize(level._occupied_count + children.size());
             std::memcpy(
                 level._raw_data.data() + level._occupied_count,
@@ -187,15 +187,15 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
             LeafCluster cluster(cluster_sds);
 
             // check if this leaf cluster already exists
-            auto temporary_i = _leaf_level._raw_data.size();
-            auto [pIter, bNew] = _leaf_level._lookup_map.emplace(cluster._value, temporary_i);
+            auto temporary_i = _leaf_level_p->_raw_data.size();
+            auto [pIter, bNew] = _leaf_level_p->_lookup_map.emplace(cluster._value, temporary_i);
             if (bNew) {
-                _leaf_level._unique_count++;
-                _leaf_level._raw_data.push_back(cluster._value);
+                _leaf_level_p->_unique_count++;
+                _leaf_level_p->_raw_data.push_back(cluster._value);
                 nodes_dag[depth][child_i] = temporary_i;
             }
             else {
-                _leaf_level._dupe_count++;
+                _leaf_level_p->_dupe_count++;
                 // simply update references to the existing cluster
                 nodes_dag[depth][child_i] = pIter->second;
             }
@@ -276,8 +276,8 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
     path.fill(0);
     nodes_dst.fill(nullptr);
     nodes_src.fill(nullptr);
-    nodes_dst[0] = Node::from_addr(_node_levels[0]._raw_data, 1);
-    nodes_src[0] = Node::from_addr(_node_levels[0]._raw_data, root_addr);
+    nodes_dst[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, 1);
+    nodes_src[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, root_addr);
     for (auto& level: nodes_new) level.fill(0);
 
     fmt::println("TODO: check if new node is equal to existing node");
@@ -305,7 +305,7 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                 // TODO: check if new node is equal to the existing one at this tree position
 
                 // resize data if necessary and then copy over
-                auto& level = _node_levels[depth];
+                auto& level = (*_node_levels_p)[depth];
                 level._raw_data.resize(level._occupied_count + children.size());
                 std::memcpy(
                     level._raw_data.data() + level._occupied_count,
@@ -348,7 +348,7 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                 }
 
                 // overwrite old root node
-                auto& level = _node_levels[0];
+                auto& level = (*_node_levels_p)[0];
                 std::memcpy(
                     level._raw_data.data() + 1,
                     node_contents.data(),
@@ -371,8 +371,8 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                     // walk deeper
                     depth++;
                     path[depth] = 0;
-                    nodes_dst[depth] = Node::from_addr(_node_levels[depth]._raw_data, child_addr_dst);
-                    nodes_src[depth] = Node::from_addr(_node_levels[depth]._raw_data, child_addr_src);
+                    nodes_dst[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_dst);
+                    nodes_src[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_src);
                 }
             }
             // preserve the already existing node from dst
