@@ -11,7 +11,7 @@ class NodeLevel {
         HashFnc(std::vector<uint32_t>& raw_data): _raw_data(raw_data) {}
         inline uint64_t operator()(uint32_t key) const noexcept {
             // count children
-#           ifdef POPCOUNT_INSTRUCTION
+#           ifdef CHAD_POPCOUNT_INSTRUCTION
                 uint8_t nChildren = std::popcount<uint8_t>(_raw_data[key]);
 #           else
                 static_assert(false, "popcount instruction not available");
@@ -34,7 +34,7 @@ class NodeLevel {
 
             // count children
             // TODO: count children of a vs b? could be a performance improvement
-#           ifdef POPCOUNT_INSTRUCTION
+#           ifdef CHAD_POPCOUNT_INSTRUCTION
                 uint8_t nChildren = std::popcount<uint8_t>(_raw_data[key_a]);
 #           else
                 static_assert(false, "popcount instruction not available");

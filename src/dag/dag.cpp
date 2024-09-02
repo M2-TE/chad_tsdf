@@ -226,7 +226,7 @@ struct Node {
         uint32_t child_bit = 1 << child_i;
         uint32_t masked = _header & (child_bit - 1);
         uint32_t child_count;
-#       ifdef POPCOUNT_INSTRUCTION
+#       ifdef CHAD_POPCOUNT_INSTRUCTION
             child_count = std::popcount<uint32_t>(masked);
 #       else
             // popcount lookup table: https://stackoverflow.com/a/51388543

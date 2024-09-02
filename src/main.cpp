@@ -1,3 +1,4 @@
+#ifdef CHAD_MAIN
 #include <random>
 #include <fstream>
 #include <glm/glm.hpp>
@@ -53,3 +54,4 @@ int main() {
     if (true) read_pcl_file();
     else do_sphere_thing();
 }
+#endif

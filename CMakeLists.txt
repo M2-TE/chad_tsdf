@@ -3,14 +3,29 @@ project(chad LANGUAGES CXX)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 include (_global)
 
+# check if project is top level
+set(CHAD_TOP_LEVEL OFF)
+if (PROJECT_IS_TOP_LEVEL)
+    set(CHAD_TOP_LEVEL ON)
+endif()
+# set build options
+option(CHAD_POPCOUNT_INSTRUCTION "Use popcount instruction" ON)
+option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" CHAD_TOP_LEVEL)
+
+# create executable/library
 file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-add_executable(${PROJECT_NAME} ${CPP_SOURCE_FILES})
+if (CHAD_TOP_LEVEL)
+    add_executable(${PROJECT_NAME} ${CPP_SOURCE_FILES})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_MAIN)
+else()
+    add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
+endif()
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_compile_definitions(${PROJECT_NAME} PRIVATE POPCOUNT_INSTRUCTION=1)
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=0.1)
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=8)
-# todo: some options
-# option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" ON)
+if (CHAD_POPCOUNT_INSTRUCTION)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_POPCOUNT_INSTRUCTION)
+endif()
 
 # fetch project dependencies
 include(FetchContent)
@@ -20,4 +35,6 @@ include(glm)
 include(fmt)
 include(phmap)
 include(morton)
-set(FETCHCONTENT_FULLY_DISCONNECTED ON CACHE BOOL "Faster config after FetchContent has run once" FORCE)
+if (CHAD_TOP_LEVEL)
+    set(FETCHCONTENT_FULLY_DISCONNECTED ON CACHE BOOL "Faster config after FetchContent has run once" FORCE)
+endif()
