@@ -12,7 +12,7 @@ class NodeLevel {
         inline uint64_t operator()(uint32_t key) const noexcept {
             // count children
 #           ifdef CHAD_POPCOUNT_INSTRUCTION
-                uint8_t nChildren = std::popcount<uint8_t>(_raw_data[key]);
+                uint8_t nChildren = CHAD_POPCOUNT_INSTRUCTION(_raw_data[key]);
 #           else
                 static_assert(false, "popcount instruction not available");
 #           endif
@@ -35,7 +35,7 @@ class NodeLevel {
             // count children
             // TODO: count children of a vs b? could be a performance improvement
 #           ifdef CHAD_POPCOUNT_INSTRUCTION
-                uint8_t nChildren = std::popcount<uint8_t>(_raw_data[key_a]);
+                uint8_t nChildren = CHAD_POPCOUNT_INSTRUCTION(_raw_data[key_a]);
 #           else
                 static_assert(false, "popcount instruction not available");
 #           endif

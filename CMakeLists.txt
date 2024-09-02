@@ -10,8 +10,8 @@ if (PROJECT_IS_TOP_LEVEL)
 endif()
 
 # set build options
-option(CHAD_POPCOUNT_INSTRUCTION "Use popcount instruction" ON)
 option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" CHAD_TOP_LEVEL)
+set(CHAD_POPCOUNT_INSTRUCTION std::popcount<uint8_t> CACHE STRING "Use popcount instruction")
 
 # create executable/library
 file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -24,9 +24,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=0.1)
 target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=8)
-if (CHAD_POPCOUNT_INSTRUCTION)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_POPCOUNT_INSTRUCTION)
-endif()
+target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_POPCOUNT_INSTRUCTION=${CHAD_POPCOUNT_INSTRUCTION})
 
 # fetch project dependencies
 include(FetchContent)

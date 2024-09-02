@@ -233,7 +233,7 @@ struct Node {
         uint32_t masked = _header & (child_bit - 1);
         uint32_t child_count;
 #       ifdef CHAD_POPCOUNT_INSTRUCTION
-            child_count = std::popcount<uint32_t>(masked);
+            child_count = CHAD_POPCOUNT_INSTRUCTION(masked);
 #       else
             // popcount lookup table: https://stackoverflow.com/a/51388543
             constexpr uint8_t popcount_table[] = {
