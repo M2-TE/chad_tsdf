@@ -5,65 +5,9 @@
 #include "dag/morton.hpp"
 #include "dag/octree.hpp"
 
-DAG::DAG() {
-    // create tree levels
-    _node_levels_p = new std::array<NodeLevel, 63/3 - 1>();
-    _leaf_level_p = new LeafLevel();
-
-    // create the main root node (will be empty still)
-    for (auto i = 0; i < 9; i++) {
-        (*_node_levels_p)[0]._raw_data.push_back(0);
-    }
-    (*_node_levels_p)[0]._occupied_count += 9;
-    (*_node_levels_p)[0]._unique_count++;
-}
-// void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
-void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
-    auto beg = std::chrono::high_resolution_clock::now();
-    // convert anonymous inputs to named inputs
-    glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
-    // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
-    std::vector<glm::vec3> points { points_count };
-    std::memcpy(points.data(), points_p, points_count * sizeof(glm::vec3));
-
-    // create morton codes to sort points and approx normals
-    auto morton_codes = MortonCode::calc(points);
-    MortonCode::sort(points, morton_codes);
-    auto normals = MortonCode::normals(morton_codes, position);
-    // create octree from points and insert into DAG
-    Octree octree = octree_build(points);
-    uint_fast32_t root_addr = insert_octree(octree, points, normals);
-    merge_primary(root_addr);
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
-    fmt::println("full dur  {}", dur.count());
-}
-void DAG::reconstruct() {
-}
-void DAG::print_stats() {
-    for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
-        auto hashset = (*_node_levels_p)[i]._lookup_set;
-        uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
-        hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
-
-        fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", i, 
-            (*_node_levels_p)[i]._unique_count,
-            (*_node_levels_p)[i]._dupe_count,
-            (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
-            (double)hashset_size / 1024.0 / 1024.0);
-    }
-    // print same stats for leaf level
-    auto hashmap = _leaf_level_p->_lookup_map;
-    uint64_t hashset_size = hashmap.size() / hashmap.max_load_factor();
-    hashset_size *= sizeof(decltype(hashmap)::value_type) + 1;
-    fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", _node_levels_p->size(), 
-        _leaf_level_p->_unique_count, 
-        _leaf_level_p->_dupe_count,
-        (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
-        (double)hashset_size / 1024.0 / 1024.0);
-}
-auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals) -> uint32_t {
+auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals, 
+    std::array<NodeLevel, 20>& node_levels, LeafLevel& leaf_level) -> uint32_t
+{
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -99,7 +43,7 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
             uint32_t index_in_parent = path[depth - 1] - 1;
 
             // resize data if necessary and then copy over
-            auto& level = (*_node_levels_p)[depth];
+            auto& level = node_levels[depth];
             level._raw_data.resize(level._occupied_count + children.size());
             std::memcpy(
                 level._raw_data.data() + level._occupied_count,
@@ -190,15 +134,15 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
             LeafCluster cluster(cluster_sds);
 
             // check if this leaf cluster already exists
-            auto temporary_i = _leaf_level_p->_raw_data.size();
-            auto [pIter, bNew] = _leaf_level_p->_lookup_map.emplace(cluster._value, temporary_i);
+            auto temporary_i = leaf_level._raw_data.size();
+            auto [pIter, bNew] = leaf_level._lookup_map.emplace(cluster._value, temporary_i);
             if (bNew) {
-                _leaf_level_p->_unique_count++;
-                _leaf_level_p->_raw_data.push_back(cluster._value);
+                leaf_level._unique_count++;
+                leaf_level._raw_data.push_back(cluster._value);
                 nodes_dag[depth][child_i] = temporary_i;
             }
             else {
-                _leaf_level_p->_dupe_count++;
+                leaf_level._dupe_count++;
                 // simply update references to the existing cluster
                 nodes_dag[depth][child_i] = pIter->second;
             }
@@ -210,7 +154,6 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
-
 // pure helper struct for managing DAG nodes, will never be explicitly created or destroyed
 struct Node {
     Node() = delete;
@@ -266,7 +209,7 @@ struct Node {
     std::array<uint32_t, 8> _children; // at least 1 valid child, at most 8
 };
 // merge dag subtree obtained from scan into primary subtree
-void DAG::merge_primary(uint_fast32_t root_addr) {
+void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_levels, LeafLevel& leaf_level) {
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -279,8 +222,8 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
     path.fill(0);
     nodes_dst.fill(nullptr);
     nodes_src.fill(nullptr);
-    nodes_dst[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, 1);
-    nodes_src[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, root_addr);
+    nodes_dst[0] = Node::from_addr(node_levels[0]._raw_data, 1);
+    nodes_src[0] = Node::from_addr(node_levels[0]._raw_data, root_addr);
     for (auto& level: nodes_new) level.fill(0);
 
     fmt::println("TODO: check if new node is equal to existing node");
@@ -308,7 +251,7 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                 // TODO: check if new node is equal to the existing one at this tree position
 
                 // resize data if necessary and then copy over
-                auto& level = (*_node_levels_p)[depth];
+                auto& level = node_levels[depth];
                 level._raw_data.resize(level._occupied_count + children.size());
                 std::memcpy(
                     level._raw_data.data() + level._occupied_count,
@@ -351,7 +294,7 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                 }
 
                 // overwrite old root node
-                auto& level = (*_node_levels_p)[0];
+                auto& level = node_levels[0];
                 std::memcpy(
                     level._raw_data.data() + 1,
                     node_contents.data(),
@@ -374,8 +317,8 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
                     // walk deeper
                     depth++;
                     path[depth] = 0;
-                    nodes_dst[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_dst);
-                    nodes_src[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_src);
+                    nodes_dst[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_dst);
+                    nodes_src[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_src);
                 }
             }
             // preserve the already existing node from dst
@@ -393,4 +336,61 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
     auto end = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("dag  merg {:.2f}", dur);
+}
+
+DAG::DAG() {
+    // create tree levels
+    _node_levels_p = new std::array<NodeLevel, 63/3 - 1>();
+    _leaf_level_p = new LeafLevel();
+
+    // create the main root node (will be empty still)
+    for (auto i = 0; i < 9; i++) {
+        (*_node_levels_p)[0]._raw_data.push_back(0);
+    }
+    (*_node_levels_p)[0]._occupied_count += 9;
+    (*_node_levels_p)[0]._unique_count++;
+}
+// void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
+void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
+    auto beg = std::chrono::high_resolution_clock::now();
+    // convert anonymous inputs to named inputs
+    glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
+    // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
+    std::vector<glm::vec3> points { points_count };
+    std::memcpy(points.data(), points_p, points_count * sizeof(glm::vec3));
+
+    // create morton codes to sort points and approx normals
+    auto morton_codes = MortonCode::calc(points);
+    MortonCode::sort(points, morton_codes);
+    auto normals = MortonCode::normals(morton_codes, position);
+    // create octree from points and insert into DAG
+    Octree octree = octree_build(points);
+    uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
+    merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
+    fmt::println("full dur  {}", dur.count());
+}
+void DAG::print_stats() {
+    for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
+        auto hashset = (*_node_levels_p)[i]._lookup_set;
+        uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
+        hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
+
+        fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", i, 
+            (*_node_levels_p)[i]._unique_count,
+            (*_node_levels_p)[i]._dupe_count,
+            (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
+            (double)hashset_size / 1024.0 / 1024.0);
+    }
+    // print same stats for leaf level
+    auto hashmap = _leaf_level_p->_lookup_map;
+    uint64_t hashset_size = hashmap.size() / hashmap.max_load_factor();
+    hashset_size *= sizeof(decltype(hashmap)::value_type) + 1;
+    fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", _node_levels_p->size(), 
+        _leaf_level_p->_unique_count, 
+        _leaf_level_p->_dupe_count,
+        (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
+        (double)hashset_size / 1024.0 / 1024.0);
 }
