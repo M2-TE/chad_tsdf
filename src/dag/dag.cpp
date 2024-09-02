@@ -98,8 +98,8 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
                 children.size() * sizeof(uint32_t));
             // check if the same node existed previously
             uint32_t temporary = level._occupied_count;
-            auto [pIndex, bNew] = level._lookup_set.emplace(temporary);
-            if (bNew) {
+            auto [index_p, is_new] = level._lookup_set.emplace(temporary);
+            if (is_new) {
                 level._occupied_count += children.size();
                 level._unique_count++;
                 if (depth > 0) nodes_dag[depth - 1][index_in_parent] = temporary;
@@ -107,8 +107,8 @@ auto DAG::insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vec
             }
             else {
                 level._dupe_count++;
-                if (depth > 0) nodes_dag[depth - 1][index_in_parent] = *pIndex;
-                else root_addr = *pIndex;
+                if (depth > 0) nodes_dag[depth - 1][index_in_parent] = *index_p;
+                else root_addr = *index_p;
             }
             depth--;
         }
@@ -218,14 +218,13 @@ struct Node {
     // check header mask for a specific child
     bool inline contains_child(uint32_t child_i) const {
         uint32_t child_bit = 1 << child_i;
-        return header & child_bit;
+        return _header & child_bit;
     }
     // retrieve child addr from sparse children array
-    uint32_t get_child_addr(uint32_t child_i) const {
-
+    auto inline get_child_addr(uint32_t child_i) const -> uint32_t {
         // count how many children come before this one
         uint32_t child_bit = 1 << child_i;
-        uint32_t masked = header & (child_bit - 1);
+        uint32_t masked = _header & (child_bit - 1);
         uint32_t child_count;
 #       ifdef POPCOUNT_INSTRUCTION
             child_count = std::popcount<uint32_t>(masked);
@@ -251,12 +250,13 @@ struct Node {
             };
             child_count = popcount_table[masked];
 #       endif
-        return children[child_count];
+        return _children[child_count];
     }
 
-    uint32_t header;
-    std::array<uint32_t, 8> children; // at least 1 valid child, at most 8
+    uint32_t _header;
+    std::array<uint32_t, 8> _children; // at least 1 valid child, at most 8
 };
+// merge dag subtree obtained from scan into primary subtree
 void DAG::merge_primary(uint_fast32_t root_addr) {
     auto beg = std::chrono::steady_clock::now();
 
@@ -270,17 +270,118 @@ void DAG::merge_primary(uint_fast32_t root_addr) {
     path.fill(0);
     nodes_dst.fill(nullptr);
     nodes_src.fill(nullptr);
+    nodes_dst[0] = Node::from_addr(_node_levels[0]._raw_data, 1);
+    nodes_src[0] = Node::from_addr(_node_levels[0]._raw_data, root_addr);
     for (auto& level: nodes_new) level.fill(0);
-    // nodes_dst[0] = octree._root_p;
-    // nodes_src[0] = octree._root_p;
+
+    fmt::println("TODO: check if new node is equal to existing node");
     
     // iterate through dag depth-first and merge nodes into primary dag subtree bottom-up
-    int_fast32_t depth = 0;
-    while (depth >= 0) {
+    uint_fast32_t depth = 0;
+    while (true) {
+        auto child_i = path[depth]++;
+        if (child_i == 8) {
+            // normal node
+            if (depth > 0) {
+                // gather all children for this new node
+                std::vector<uint32_t> children(1); // first element is child mask
+                for (auto i = 0; i < 8; i++) {
+                    if (nodes_new[depth][i] == 0) continue;
+                    children.push_back(nodes_new[depth][i]);
+                    children[0] |= 1 << i; // child mask
+                }
+
+                // reset node tracker for handled nodes
+                nodes_new[depth].fill(0);
+                // check path in parent depth to know this node's child ID
+                uint32_t index_in_parent = path[depth - 1] - 1;
+
+                // TODO: check if new node is equal to the existing one at this tree position
+
+                // resize data if necessary and then copy over
+                auto& level = _node_levels[depth];
+                level._raw_data.resize(level._occupied_count + children.size());
+                std::memcpy(
+                    level._raw_data.data() + level._occupied_count,
+                    children.data(),
+                    children.size() * sizeof(uint32_t));
+                // check if the same node existed previously
+                uint32_t temporary = level._occupied_count;
+                auto [index_p, is_new] = level._lookup_set.emplace(temporary);
+                if (is_new) {
+                    level._occupied_count += children.size();
+                    level._unique_count++;
+                    nodes_new[depth - 1][index_in_parent] = temporary;
+                }
+                else {
+                    level._dupe_count++;
+                    nodes_new[depth - 1][index_in_parent] = *index_p;
+                }
+                depth--;
+            }
+            // root node
+            else {
+                // the root node "dst" will always exist
+                // and will already have space allocated for all 8 children
+                const Node* root = nodes_dst[0];
+                std::array<uint32_t, 9> node_contents;
+                for (auto i = 0; i < 8; i++) {
+                    uint32_t addr = 0;
+                    // first get existing node
+                    if (root->contains_child(i)) {
+                        addr = root->get_child_addr(i);
+                    }
+                    // overwrite with new node if present
+                    if (nodes_new[depth][i] > 0) {
+                        addr = nodes_new[depth][i];
+                    }
+                    // write child address to node
+                    node_contents[i + 1] = addr;
+                    // add valid node to child mask
+                    if (addr > 0) node_contents[0] |= 1 << i;
+                }
+
+                // overwrite old root node
+                auto& level = _node_levels[0];
+                std::memcpy(
+                    level._raw_data.data() + 1,
+                    node_contents.data(),
+                    node_contents.size() * sizeof(uint32_t));
+                break; // exit main loop
+            }
+        }
+        // normal node
+        else if (depth < max_depth - 1) {
+            const Node* node_dst_p = nodes_dst[depth];
+            const Node* node_src_p = nodes_src[depth];
+
+            // insert new node if present in src tree but not in dst tree
+            if (node_src_p->contains_child(child_i)) {
+                uint32_t child_addr_src = node_src_p->get_child_addr(child_i);
+
+                // check if child is present in primary subtree
+                if (node_dst_p->contains_child(child_i)) {
+                    uint32_t child_addr_dst = node_dst_p->get_child_addr(child_i);
+                    // walk deeper
+                    depth++;
+                    path[depth] = 0;
+                    nodes_dst[depth] = Node::from_addr(_node_levels[depth]._raw_data, child_addr_dst);
+                    nodes_src[depth] = Node::from_addr(_node_levels[depth]._raw_data, child_addr_src);
+                }
+            }
+            // preserve the already existing node from dst
+            else if (node_dst_p->contains_child(child_i)) {
+                uint32_t child_addr_dst = node_dst_p->get_child_addr(child_i);
+                nodes_new[depth][child_i] = child_addr_dst;
+            }
+        }
+        // leaf cluster node
+        else {
+            // TODO
+        }
     }
 
     auto end = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("dag  merg {:.2f}", dur);
-    exit(0);
 }
