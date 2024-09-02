@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(chad LANGUAGES CXX)
+project(chad_tsdf LANGUAGES CXX)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
 # check if project is top level
