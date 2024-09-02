@@ -18,6 +18,6 @@ public:
     void print_stats();
 
 private:
-    std::array<struct NodeLevel, 63/3 - 1>* _node_levels_p;
-    struct LeafLevel* _leaf_level_p;
+    std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
+    struct LeafLevel* const _leaf_level_p;
 };

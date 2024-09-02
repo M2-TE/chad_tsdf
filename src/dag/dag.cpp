@@ -338,11 +338,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
     fmt::println("dag  merg {:.2f}", dur);
 }
 
-DAG::DAG() {
-    // create tree levels
-    _node_levels_p = new std::array<NodeLevel, 63/3 - 1>();
-    _leaf_level_p = new LeafLevel();
-
+DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
     // create the main root node (will be empty still)
     for (auto i = 0; i < 9; i++) {
         (*_node_levels_p)[0]._raw_data.push_back(0);
