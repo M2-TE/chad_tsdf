@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <algorithm>
 
 struct LeafCluster {
 #if LEAF_BITS == 8
@@ -26,9 +27,10 @@ struct LeafCluster {
             sd = std::clamp(sd, -1.0f, 1.0f);
             // scale up to fit into n-bit integer
             sd = sd * (float)LEAF_RANGE;
-            auto sd_i = (ClusterValue)sd; // use standard rounding towards 0
-            // add offset that values are linear from 0 to 255
-            sd_i = sd_i + LEAF_RANGE;
+            // add offset that values range from 0 to 255
+            sd = sd + (float)LEAF_RANGE;
+            // use standard rounding
+            auto sd_i = (ClusterValue)sd;
             // pack the bits into the leaf cluster value
             _value |= sd_i << (i * 8);
         }
@@ -39,7 +41,13 @@ struct LeafCluster {
     std::optional<float> inline get_leaf(ClusterValue index) {
         ClusterValue leaf = (_value >> (index * 8)) & LEAF_MASK;
         if (_value == LEAF_NULL) return std::nullopt;
-        else return std::make_optional<float>(leaf);
+        // offset value to represent [-128, 127]
+        float sd = ((float)leaf - (float)LEAF_RANGE);
+        // scale signed distance back up to [-1, 1]
+        sd *= (float)(1.0 / (double)LEAF_RANGE);
+        // scale back to real-coord signed distance
+        sd *= (float)LEAF_RESOLUTION;
+        return std::make_optional<float>(sd);
     }
 
     ClusterValue _value;
