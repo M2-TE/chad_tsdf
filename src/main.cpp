@@ -49,7 +49,7 @@ void static do_sphere_thing() {
     // dag.print_stats();
 }
 int main() {
-    if (false) read_pcl_file();
+    if (true) read_pcl_file();
     else do_sphere_thing();
 }
 #endif

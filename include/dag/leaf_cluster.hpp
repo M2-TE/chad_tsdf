@@ -15,7 +15,7 @@ struct LeafCluster {
     LeafCluster(std::array<float, 8>& leaves): _value(0) {
         for (ClusterValue i = 0; i < 8; i++) {
             // check if leaf is valid
-            if (leaves[i] == LEAF_NULL_F) {
+            if (leaves[i] > LEAF_NULL_F - 1.0f) {
                 _value |= LEAF_NULL << (i * 8);
                 continue;
             }
@@ -40,7 +40,8 @@ struct LeafCluster {
     // }
     std::optional<float> inline get_leaf(ClusterValue index) {
         ClusterValue leaf = (_value >> (index * 8)) & LEAF_MASK;
-        if (_value == LEAF_NULL) return std::nullopt;
+        // leaf is null when all bits are set
+        if (leaf == LEAF_NULL) return std::nullopt;
         // offset value to represent [-128, 127]
         float sd = ((float)leaf - (float)LEAF_RANGE);
         // scale signed distance back up to [-1, 1]
@@ -51,7 +52,7 @@ struct LeafCluster {
     }
 
     ClusterValue _value;
-    static constexpr float LEAF_NULL_F = std::numeric_limits<float>::max();
+    static constexpr float LEAF_NULL_F = 999.0f;
     static constexpr ClusterValue LEAF_MASK = (1 << LEAF_BITS) - 1; // mask for a single leaf
     static constexpr ClusterValue LEAF_NULL = LEAF_MASK; // leaf is null when all bits are set
     static constexpr ClusterValue LEAF_RANGE = LEAF_MASK / 2; // achievable range with data bits

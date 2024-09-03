@@ -91,9 +91,6 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
             // convert into chunk position of leaf cluster
             MortonCode mc(code);
             glm::ivec3 cluster_chunk = mc.decode();
-            // glm::vec3 cluster_pos = (glm::vec3)cluster_chunk * (float)LEAF_RESOLUTION;
-            // fmt::println("{} {} {}", cluster_pos.x, cluster_pos.y, cluster_pos.z);
-            // fmt::println("{} {} {}", cluster_chunk.x, cluster_chunk.y, cluster_chunk.z);
 
             // create array of signed distances to each leaf
             std::array<float, 8> cluster_sds;
@@ -133,9 +130,10 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
                 glm::vec3 diff = leaf_pos - avg_pos;
                 cluster_sds[leaf_i] = glm::dot(diff, avg_normal);
             }}}
-            
             // compress signed distances into a single 64/32-bit value
-            LeafCluster cluster(cluster_sds);
+            LeafCluster cluster{ cluster_sds };
+            // skip clusters that contain only invalid nodes
+            if (cluster._value == std::numeric_limits<LeafCluster::ClusterValue>::max()) continue;
 
             // check if this leaf cluster already exists
             auto temporary_i = leaf_level._raw_data.size();
