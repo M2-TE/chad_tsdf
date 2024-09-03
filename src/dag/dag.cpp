@@ -390,3 +390,13 @@ void DAG::print_stats() {
         (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
         (double)hashset_size / 1024.0 / 1024.0);
 }
+auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
+    std::array<std::vector<uint32_t>*, 63/3 - 1> levels;
+    for (std::size_t i = 0; i < levels.size(); i++) {
+        levels[i] = &(*_node_levels_p)[i]._raw_data;
+    }
+    return levels;
+}
+auto DAG::get_leaf_level() -> std::vector<uint64_t>& {
+    return _leaf_level_p->_raw_data;
+}
