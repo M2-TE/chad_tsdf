@@ -2,9 +2,9 @@
 #include <span>
 #include <array>
 #include <vector>
+// #include <parallel_hashmap/phmap.h>
 
-class DAG {
-public:
+struct DAG {
     DAG();
     // helper function to insert points into DAG
     template<typename PosArr, typename RotArr>
@@ -16,6 +16,23 @@ public:
     // main function to insert points into DAG
     void insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 4> rotation);
     void print_stats();
+
+    void create_grid() {
+        // phmap::flat_hash_map<uint64_t, uint32_t> grid;
+    }
+
+    // get raw data from normal dag levels
+    auto get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
+        std::array<std::vector<uint32_t>*, 63/3 - 1> levels;
+        for (std::size_t i = 0; i < levels.size(); i++) {
+            levels[i] = &(*_node_levels_p)[i]._raw_data;
+        }
+        return levels;
+    }
+    // get raw data from leaf dag level
+    auto get_leaf_level() -> std::vector<LeafLevel::ClusterValue>& {
+        return _leaf_level_p->_raw_data;
+    }
 
 private:
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
