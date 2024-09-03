@@ -30,9 +30,9 @@ else()
     add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 endif()
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=${CHAD_LEAF_RESOLUTION})
-target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=${CHAD_LEAF_BITS})
-target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_POPCOUNT_INSTRUCTION=${CHAD_POPCOUNT_INSTRUCTION})
+target_compile_definitions(${PROJECT_NAME} PUBLIC LEAF_RESOLUTION=${CHAD_LEAF_RESOLUTION})
+target_compile_definitions(${PROJECT_NAME} PUBLIC LEAF_BITS=${CHAD_LEAF_BITS})
+target_compile_definitions(${PROJECT_NAME} PUBLIC CHAD_POPCOUNT_INSTRUCTION=${CHAD_POPCOUNT_INSTRUCTION})
 
 # fetch project dependencies
 include(FetchContent)
