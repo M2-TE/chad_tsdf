@@ -21,7 +21,8 @@ struct DAG {
     auto get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1>;
     // get raw data from leaf dag level
     auto get_leaf_level() -> std::vector<uint64_t>&;
-
+    // get voxel resolution
+    auto get_voxel_resolution() -> double;
 private:
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
     struct LeafLevel* const _leaf_level_p;

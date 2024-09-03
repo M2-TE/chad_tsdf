@@ -347,3 +347,6 @@ auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
 auto DAG::get_leaf_level() -> std::vector<uint64_t>& {
     return _leaf_level_p->_raw_data;
 }
+auto DAG::get_voxel_resolution() -> double {
+    return LEAF_RESOLUTION;
+}
