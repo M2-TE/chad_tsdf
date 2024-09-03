@@ -14,6 +14,12 @@ option(CHAD_ENABLE_ENTRY "Enables entrypoint in main.cpp" CHAD_TOP_LEVEL)
 if (NOT DEFINED CHAD_POPCOUNT_INSTRUCTION)
     set(CHAD_POPCOUNT_INSTRUCTION std::popcount<uint8_t>)
 endif()
+if (NOT DEFINED CHAD_LEAF_RESOLUTION)
+    set(CHAD_LEAF_RESOLUTION 0.1)
+endif()
+if (NOT DEFINED CHAD_LEAF_BITS)
+    set(CHAD_LEAF_BITS 8)
+endif()
 
 # create executable/library
 file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -24,8 +30,8 @@ else()
     add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 endif()
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=0.1)
-target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=8)
+target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_RESOLUTION=${CHAD_LEAF_RESOLUTION})
+target_compile_definitions(${PROJECT_NAME} PRIVATE LEAF_BITS=${CHAD_LEAF_BITS})
 target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_POPCOUNT_INSTRUCTION=${CHAD_POPCOUNT_INSTRUCTION})
 
 # fetch project dependencies
