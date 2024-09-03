@@ -238,7 +238,6 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                     node_contents[i + 1] = addr;
                     // add valid node to child mask
                     if (addr > 0) node_contents[0] |= 1 << i;
-                    fmt::println("{}", addr);
                 }
 
                 // overwrite old root node
