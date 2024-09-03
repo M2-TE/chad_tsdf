@@ -1,5 +1,4 @@
 #pragma once
-#include "glm/geometric.hpp"
 #include <cstddef>
 #include <vector>
 #include <chrono>

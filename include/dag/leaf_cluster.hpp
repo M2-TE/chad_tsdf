@@ -33,19 +33,18 @@ struct LeafCluster {
             _value |= sd_i << (i * 8);
         }
     }
-    void merge() {
-
-    }
-    // std::optional<float> get_leaf(uint_fast8_t index) {
-    //     uint8_t mask = 0; // TODO
-    //     uint8_t leaf = (_value >> (index * 8)) & 0xff;
-
-    //     if (_value == NULL_LEAF) return std::nullopt;
+    // void merge() {
+    //     // TODO
     // }
+    std::optional<float> inline get_leaf(ClusterValue index) {
+        ClusterValue leaf = (_value >> (index * 8)) & LEAF_MASK;
+        if (_value == LEAF_NULL) return std::nullopt;
+        else return std::make_optional<float>(leaf);
+    }
 
     ClusterValue _value;
     static constexpr float LEAF_NULL_F = std::numeric_limits<float>::max();
-    static constexpr ClusterValue LEAF_NULL = 0xff;
     static constexpr ClusterValue LEAF_MASK = (1 << LEAF_BITS) - 1; // mask for a single leaf
+    static constexpr ClusterValue LEAF_NULL = LEAF_MASK; // leaf is null when all bits are set
     static constexpr ClusterValue LEAF_RANGE = LEAF_MASK / 2; // achievable range with data bits
 };
