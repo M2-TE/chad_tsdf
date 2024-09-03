@@ -238,6 +238,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                     node_contents[i + 1] = addr;
                     // add valid node to child mask
                     if (addr > 0) node_contents[0] |= 1 << i;
+                    fmt::println("{}", addr);
                 }
 
                 // overwrite old root node
@@ -267,6 +268,8 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                     nodes_dst[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_dst);
                     nodes_src[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_src);
                 }
+                // add to dst tree if it does not have a node at this position
+                else nodes_new[depth][child_i] = child_addr_src;
             }
             // preserve the already existing node from dst
             else if (node_dst_p->contains_child(child_i)) {
