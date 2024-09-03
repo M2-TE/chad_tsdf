@@ -425,7 +425,7 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
     for (int32_t x4 = -4; x4 <= +4; x4 += 4) {
         // position of current main chunk
         glm::ivec3 chunk_base4 = chunk_base + glm::ivec3(x4, y4, z4);
-        MortonCode mc {chunk_base4 };
+        MortonCode mc{ chunk_base4 };
         // mc._code = mc._code >> 3; // shift to cover the 3 LSB (leaves), which wont be encoded
         Octree::Node* oct_node = octree.insert(mc._code, 18);
 

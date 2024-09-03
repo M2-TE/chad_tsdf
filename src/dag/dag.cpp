@@ -7,7 +7,7 @@
 #include "dag/node.hpp"
 
 auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals, 
-    std::array<NodeLevel, 20>& node_levels, LeafLevel& leaf_level) -> uint32_t
+    std::array<NodeLevel, 63/3-1>& node_levels, LeafLevel& leaf_level) -> uint32_t
 {
     auto beg = std::chrono::steady_clock::now();
 
@@ -91,6 +91,9 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
             // convert into chunk position of leaf cluster
             MortonCode mc(code);
             glm::ivec3 cluster_chunk = mc.decode();
+            // glm::vec3 cluster_pos = (glm::vec3)cluster_chunk * (float)LEAF_RESOLUTION;
+            // fmt::println("{} {} {}", cluster_pos.x, cluster_pos.y, cluster_pos.z);
+            // fmt::println("{} {} {}", cluster_chunk.x, cluster_chunk.y, cluster_chunk.z);
 
             // create array of signed distances to each leaf
             std::array<float, 8> cluster_sds;
@@ -127,7 +130,7 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
                 glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
                 glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
                 // calc signed distance to leaf
-                glm::vec3 diff = avg_pos - leaf_pos;
+                glm::vec3 diff = leaf_pos - avg_pos;
                 cluster_sds[leaf_i] = glm::dot(diff, avg_normal);
             }}}
             
