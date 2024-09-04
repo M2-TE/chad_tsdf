@@ -5,6 +5,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
 #include "dag/dag.hpp"
+// DEBUG
+// #include <dag/leaf_cluster.hpp>
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -49,6 +51,19 @@ void static do_sphere_thing() {
     // dag.print_stats();
 }
 int main() {
+    // std::array<float, 8> sds {
+    //     -100.0, 100.0, 0.1, -0.05, 0.075, 0.002, 0.0, -0.125
+    // };
+    // for (auto i = 0; i < 8; i++) {
+    //     fmt::print("{:.2f}\t", sds[i]);
+    // }
+    // fmt::println("");
+    // LeafCluster lc(sds);
+    // for (auto i = 0; i < 8; i++) {
+    //     fmt::print("{:.2f}\t", lc.get_leaf(i).value());
+    // }
+    // fmt::println("");
+    // exit(0);
     if (false) read_pcl_file();
     else do_sphere_thing();
 }

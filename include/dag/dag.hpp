@@ -28,8 +28,6 @@ struct DAG {
 #endif
     // get voxel resolution
     auto get_voxel_resolution() -> double;
-    // save some stuff to disk
-    void save_to_disk();
 private:
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
     struct LeafLevel* const _leaf_level_p;

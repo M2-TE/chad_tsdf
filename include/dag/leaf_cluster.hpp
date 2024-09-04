@@ -32,14 +32,14 @@ struct LeafCluster {
             // use standard rounding
             auto sd_i = (ClusterValue)sd;
             // pack the bits into the leaf cluster value
-            _value |= sd_i << (i * 8);
+            _value |= sd_i << (i * LEAF_BITS);
         }
     }
     // void merge() {
     //     // TODO
     // }
     std::optional<float> inline get_leaf(ClusterValue index) {
-        ClusterValue leaf = (_value >> (index * 8)) & LEAF_MASK;
+        ClusterValue leaf = (_value >> (index * LEAF_BITS)) & LEAF_MASK;
         // leaf is null when all bits are set
         if (leaf == LEAF_NULL) return std::nullopt;
         // offset value to represent [-128, 127]
