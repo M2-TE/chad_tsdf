@@ -19,10 +19,17 @@ struct DAG {
 
     // get raw data from normal dag levels
     auto get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1>;
+#if LEAF_BITS == 8
     // get raw data from leaf dag level
     auto get_leaf_level() -> std::vector<uint64_t>&;
+#elif LEAF_BITS == 4
+    // get raw data from leaf dag level
+    auto get_leaf_level() -> std::vector<uint32_t>&;
+#endif
     // get voxel resolution
     auto get_voxel_resolution() -> double;
+    // save some stuff to disk
+    void save_to_disk();
 private:
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
     struct LeafLevel* const _leaf_level_p;

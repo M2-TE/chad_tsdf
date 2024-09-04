@@ -1,3 +1,5 @@
+#include <array>
+#include <vector>
 #include <chrono>
 #include <fmt/base.h>
 #include "dag/dag.hpp"
@@ -6,8 +8,12 @@
 #include "dag/octree.hpp"
 #include "dag/node.hpp"
 
-auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<glm::vec3>& normals, 
-    std::array<NodeLevel, 63/3-1>& node_levels, LeafLevel& leaf_level) -> uint32_t
+auto insert_octree(
+    Octree& octree, 
+    std::vector<glm::vec3>& points, 
+    std::vector<glm::vec3>& normals, 
+    std::array<NodeLevel, 63/3-1>& node_levels, 
+    LeafLevel& leaf_level) -> uint32_t
 {
     auto beg = std::chrono::steady_clock::now();
     fmt::println("NOTE: normalizing avg norm");
@@ -130,8 +136,6 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
                 // calc signed distance to leaf
                 glm::vec3 diff = leaf_pos - avg_pos;
                 cluster_sds[leaf_i] = glm::dot(avg_normal, diff);
-
-                float sd_perfect = glm::length(leaf_pos) - 5.0f;
             }}}
             // compress signed distances into a single 64/32-bit value
             LeafCluster cluster{ cluster_sds };
@@ -350,7 +354,7 @@ auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
     }
     return levels;
 }
-auto DAG::get_leaf_level() -> std::vector<uint64_t>& {
+auto DAG::get_leaf_level() -> std::vector<LeafCluster::ClusterValue>& {
     return _leaf_level_p->_raw_data;
 }
 auto DAG::get_voxel_resolution() -> double {
