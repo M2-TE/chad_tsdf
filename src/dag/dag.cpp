@@ -10,6 +10,7 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
     std::array<NodeLevel, 63/3-1>& node_levels, LeafLevel& leaf_level) -> uint32_t
 {
     auto beg = std::chrono::steady_clock::now();
+    fmt::println("NOTE: normalizing avg norm");
 
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;
@@ -107,20 +108,20 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
                 }
 
                 // average out the position of candidates and their normals
-                glm::vec3 avg_pos { 0, 0, 0 };
-                glm::vec3 avg_normal { 0, 0, 0 };
+                glm::vec3 avg_normal{ 0, 0, 0 };
+                glm::vec3 avg_pos{ 0, 0, 0 };
                 float avg_count = 0;
                 for (uint_fast32_t i = 0; i < candidates->leaf_candidates.size(); i++) {
                     if (candidates->leaf_candidates[i] == nullptr) continue;
                     // reverse engineer the index of the current candidate
                     size_t index = candidates->leaf_candidates[i] - points.data();
-                    avg_pos += *candidates->leaf_candidates[i];
                     avg_normal += normals[index];
+                    avg_pos += *candidates->leaf_candidates[i];
                     avg_count++;
                 }
 
                 avg_pos /= avg_count;
-                avg_normal /= avg_normal;
+                avg_normal /= avg_count;
                 avg_normal = glm::normalize(avg_normal); // TODO: test the necessity of this
 
                 // get leaf position
@@ -128,7 +129,9 @@ auto insert_octree(Octree& octree, std::vector<glm::vec3>& points, std::vector<g
                 glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
                 // calc signed distance to leaf
                 glm::vec3 diff = leaf_pos - avg_pos;
-                cluster_sds[leaf_i] = glm::dot(diff, avg_normal);
+                cluster_sds[leaf_i] = glm::dot(avg_normal, diff);
+
+                float sd_perfect = glm::length(leaf_pos) - 5.0f;
             }}}
             // compress signed distances into a single 64/32-bit value
             LeafCluster cluster{ cluster_sds };

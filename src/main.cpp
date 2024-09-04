@@ -22,7 +22,7 @@ void static read_pcl_file() {
     DAG dag;
     auto rot = glm::identity<glm::quat>();
     dag.insert(points, glm::vec3(0, 0, 0), rot);
-    // dag.print_stats();
+    dag.print_stats();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -49,7 +49,7 @@ void static do_sphere_thing() {
     // dag.print_stats();
 }
 int main() {
-    if (true) read_pcl_file();
+    if (false) read_pcl_file();
     else do_sphere_thing();
 }
 #endif
