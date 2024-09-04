@@ -52,7 +52,7 @@ void static do_sphere_thing() {
 }
 int main() {
     // std::array<float, 8> sds {
-    //     -100.0, 100.0, 0.1, -0.05, 0.075, 0.002, 0.0, -0.125
+    //     0.1, -0.05, 0.075, 0.02, 0.0, -0.125, -0.1, -0.2
     // };
     // for (auto i = 0; i < 8; i++) {
     //     fmt::print("{:.2f}\t", sds[i]);

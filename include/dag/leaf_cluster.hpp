@@ -16,7 +16,7 @@ struct LeafCluster {
         for (ClusterValue i = 0; i < 8; i++) {
             // check if leaf is valid
             if (leaves[i] > LEAF_NULL_F - 1.0f) {
-                _value |= LEAF_NULL << (i * 8);
+                _value |= LEAF_NULL << (i * LEAF_BITS);
                 continue;
             }
 

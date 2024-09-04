@@ -1,6 +1,7 @@
 #include <array>
 #include <vector>
 #include <chrono>
+#include <cstdint>
 #include <fmt/base.h>
 #include "dag/dag.hpp"
 #include "dag/levels.hpp"
