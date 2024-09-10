@@ -207,6 +207,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                         break;
                     }
                 }
+                equal_nodes = false; // DEBUGDEBUGEDUBG
 
                 if (equal_nodes) {
                     uint32_t this_node_addr = nodes_dst[depth - 1]->get_child_addr(index_in_parent);
