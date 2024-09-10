@@ -35,10 +35,7 @@ struct LeafCluster {
             _value |= sd_i << (i * LEAF_BITS);
         }
     }
-    // void merge() {
-    //     // TODO
-    // }
-    std::optional<float> inline get_leaf(ClusterValue index) {
+    auto inline get_leaf(ClusterValue index) -> std::optional<float>{
         ClusterValue leaf = (_value >> (index * LEAF_BITS)) & LEAF_MASK;
         // leaf is null when all bits are set
         if (leaf == LEAF_NULL) return std::nullopt;
@@ -50,10 +47,35 @@ struct LeafCluster {
         sd *= (float)LEAF_RESOLUTION;
         return std::make_optional<float>(sd);
     }
+    auto static inline merge(LeafCluster a, LeafCluster b) -> LeafCluster {
+        // check if a and b are equal already
+        if (a._value == b._value) return a;
+        // merge the two leaf clusters leaf by leaf
+        ClusterValue result = 0;
+        for (ClusterValue i = 0; i < 8; i++) {
+            ClusterValue leaf_a = (a._value >> (i * LEAF_BITS)) & LEAF_MASK;
+            ClusterValue leaf_b = (b._value >> (i * LEAF_BITS)) & LEAF_MASK;
+            // check if leaves are equal or one of them is null
+            if (leaf_a == leaf_b)         result |= leaf_a << (i * LEAF_BITS);
+            else if (leaf_a == LEAF_NULL) result |= leaf_b << (i * LEAF_BITS);
+            else if (leaf_b == LEAF_NULL) result |= leaf_a << (i * LEAF_BITS);
+            else {
+                // no need to compare floats, simply compare and merge the integer values
+                int16_t sd_a = (int16_t)leaf_a - (int16_t)LEAF_RANGE;
+                int16_t sd_b = (int16_t)leaf_b - (int16_t)LEAF_RANGE;
+                // pick the signed distance closest to the leaf (closest to 0)
+                if (std::abs(sd_a) < std::abs(sd_b)) result |= leaf_a << (i * LEAF_BITS);
+                else                                 result |= leaf_b << (i * LEAF_BITS);
+            }
+        }
+        return { result };
+    }
 
     ClusterValue _value;
     static constexpr float LEAF_NULL_F = 999.0f;
     static constexpr ClusterValue LEAF_MASK = (1 << LEAF_BITS) - 1; // mask for a single leaf
     static constexpr ClusterValue LEAF_NULL = LEAF_MASK; // leaf is null when all bits are set
     static constexpr ClusterValue LEAF_RANGE = LEAF_MASK / 2; // achievable range with data bits
+    static constexpr ClusterValue CLUSTER_NULL = std::numeric_limits<ClusterValue>::max(); // cluster is null when all bits are set
+    static_assert(LEAF_BITS == 8 || LEAF_BITS == 4, "LEAF_BITS must be 8 or 4");
 };
