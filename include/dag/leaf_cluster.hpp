@@ -60,12 +60,22 @@ struct LeafCluster {
             else if (leaf_a == LEAF_NULL) result |= leaf_b << (i * LEAF_BITS);
             else if (leaf_b == LEAF_NULL) result |= leaf_a << (i * LEAF_BITS);
             else {
-                // no need to compare floats, simply compare and merge the integer values
-                int16_t sd_a = (int16_t)leaf_a - (int16_t)LEAF_RANGE;
-                int16_t sd_b = (int16_t)leaf_b - (int16_t)LEAF_RANGE;
-                // pick the signed distance closest to the leaf (closest to 0)
-                if (std::abs(sd_a) < std::abs(sd_b)) result |= leaf_a << (i * LEAF_BITS);
-                else                                 result |= leaf_b << (i * LEAF_BITS);
+                float sd_a = a.get_leaf(i).value();
+                float sd_b = b.get_leaf(i).value();
+                // merge the two signed distances
+                float sd = (sd_a + sd_b) / 2.0f;
+                // scale signed distance to be 1.0 for each voxel unit of distance
+                sd = sd * (float)(1.0 / LEAF_RESOLUTION);
+                // normalize signed distance to [-1, 1]
+                sd = std::clamp(sd, -1.0f, 1.0f);
+                // scale up to fit into n-bit integer
+                sd = sd * (float)LEAF_RANGE;
+                // add offset that values range from 0 to 255
+                sd = sd + (float)LEAF_RANGE;
+                // use standard rounding
+                auto sd_i = (ClusterValue)sd;
+                // pack the bits into the leaf cluster value
+                result |= sd_i << (i * LEAF_BITS);
             }
         }
         return { result };
