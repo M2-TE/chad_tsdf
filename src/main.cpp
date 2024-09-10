@@ -35,6 +35,9 @@ void static do_sphere_thing() {
 
     // insert into tsdf DAG
     DAG dag;
+    std::vector<glm::vec3> positions {
+        { 10, 10, 10 },
+    };
     for (size_t i = 0; i < 1; i++) {
         for (auto& point: points) {
             glm::dvec3 pointd = {
@@ -45,8 +48,9 @@ void static do_sphere_thing() {
             pointd = glm::normalize(pointd);
             pointd *= 5.0;
             point = (glm::vec3)pointd;
+            point += positions[i];
         }
-        dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
+        dag.insert(points, positions[i], glm::identity<glm::quat>());
         dag.print_stats();
     }
 }

@@ -251,32 +251,12 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             }
             // root node
             else {
-                // the root node "dst" will always exist
-                // and will already have space allocated for all 8 children
-                const Node* root = nodes_dst[0];
-                std::array<uint32_t, 9> node_contents;
+                // the root node "dst" will always exist and always has all 8 children
+                Node* root_p = Node::from_addr(node_levels[0]._raw_data, 1);
+                // simply copy over all children from the new root (prev nodes are preserved)
                 for (auto i = 0; i < 8; i++) {
-                    uint32_t addr = 0;
-                    // first get existing node
-                    if (root->contains_child(i)) {
-                        addr = root->get_child_addr(i);
-                    }
-                    // overwrite with new node if present
-                    if (nodes_new[depth][i] > 0) {
-                        addr = nodes_new[depth][i];
-                    }
-                    // write child address to node
-                    node_contents[i + 1] = addr;
-                    // add valid node to child mask
-                    if (addr > 0) node_contents[0] |= 1 << i;
+                    root_p->_children[i] = nodes_new[0][i];
                 }
-
-                // overwrite old root node
-                auto& level = node_levels[0];
-                std::memcpy(
-                    level._raw_data.data() + 1,
-                    node_contents.data(),
-                    node_contents.size() * sizeof(uint32_t));
                 break; // exit main loop
             }
         }
@@ -365,6 +345,8 @@ DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p
     }
     (*_node_levels_p)[0]._occupied_count += 9;
     (*_node_levels_p)[0]._unique_count++;
+    // write root child mask to always contain all 8 children
+    (*_node_levels_p)[0]._raw_data[1] = 0xff;
 }
 // void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
 void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
