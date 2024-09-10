@@ -207,7 +207,6 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                         break;
                     }
                 }
-                equal_nodes = false; // DEBUGDEBUGEDUBG
 
                 if (equal_nodes) {
                     uint32_t this_node_addr = nodes_dst[depth - 1]->get_child_addr(index_in_parent);
@@ -266,7 +265,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             const Node* node_dst_p = nodes_dst[depth];
             const Node* node_src_p = nodes_src[depth];
 
-            // insert new node if present in src tree but not in dst tree
+            // potentially insert new node if present in src tree
             if (node_src_p->contains_child(child_i)) {
                 uint32_t child_addr_src = node_src_p->get_child_addr(child_i);
 
@@ -293,10 +292,11 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             const Node* node_dst_p = nodes_dst[depth];
             const Node* node_src_p = nodes_src[depth];
 
-            // insert new node if present in src tree but not in dst tree
+            // potentially insert new cluster if present in src tree
             if (node_src_p->contains_child(child_i)) {
                 uint32_t lc_addr_src = node_src_p->get_child_addr(child_i);
                 LeafCluster lc_src = leaf_level._raw_data[lc_addr_src];
+
                 // check if child is present in dst subtree
                 if (node_dst_p->contains_child(child_i)) {
                     uint32_t lc_addr_dst = node_dst_p->get_child_addr(child_i);
@@ -324,6 +324,10 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                             nodes_new[depth][child_i] = iter->second;
                         }
                     }
+                }
+                // add to dst tree if it does not have a node at this position
+                else {
+                    nodes_new[depth][child_i] = lc_addr_src;
                 }
             }
             // preserve the already existing node from dst
