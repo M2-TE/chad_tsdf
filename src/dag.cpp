@@ -145,8 +145,8 @@ auto insert_octree(
 
             // check if this leaf cluster already exists
             auto temporary_i = leaf_level._raw_data.size();
-            auto [pIter, bNew] = leaf_level._lookup_map.emplace(cluster._value, temporary_i);
-            if (bNew) {
+            auto [it, is_new] = leaf_level._lookup_map.emplace(cluster._value, temporary_i);
+            if (is_new) {
                 leaf_level._unique_count++;
                 leaf_level._raw_data.push_back(cluster._value);
                 nodes_dag[depth][child_i] = temporary_i;
@@ -154,7 +154,7 @@ auto insert_octree(
             else {
                 leaf_level._dupe_count++;
                 // simply update references to the existing cluster
-                nodes_dag[depth][child_i] = pIter->second;
+                nodes_dag[depth][child_i] = it->second;
             }
         }
     }
@@ -181,8 +181,6 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
     nodes_dst[0] = Node::from_addr(node_levels[0]._raw_data, 1);
     nodes_src[0] = Node::from_addr(node_levels[0]._raw_data, root_addr);
     for (auto& level: nodes_new) level.fill(0);
-
-    fmt::println("TODO: check if new node is equal to existing node");
     
     // iterate through dag depth-first and merge nodes into primary dag subtree bottom-up
     uint_fast32_t depth = 0;
@@ -191,6 +189,34 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
         if (child_i == 8) {
             // normal node
             if (depth > 0) {
+                // check path in parent depth to know this node's child ID
+                uint32_t index_in_parent = path[depth - 1] - 1;
+
+                // check if the node that's about to be created is equal to the current one in dst
+                bool equal_nodes = true;
+                for (auto i = 0; i < 8; i++) {
+                    // compare both child addresses
+                    uint32_t addr_new = nodes_new[depth][i];
+                    uint32_t addr_dst = 0;
+                    // dst node may not always be a valid pointer
+                    if (nodes_dst[depth]->contains_child(i)) {
+                        addr_dst = nodes_dst[depth]->get_child_addr(i);
+                    }
+                    if (addr_new != addr_dst) {
+                        equal_nodes = false;
+                        break;
+                    }
+                }
+
+                if (equal_nodes) {
+                    uint32_t this_node_addr = nodes_dst[depth - 1]->get_child_addr(index_in_parent);
+                    nodes_new[depth - 1][index_in_parent] = this_node_addr;
+                    // reset node tracker for handled nodes
+                    nodes_new[depth].fill(0);
+                    depth--;
+                    continue;
+                }
+
                 // gather all children for this new node
                 std::vector<uint32_t> children(1); // first element is child mask
                 for (auto i = 0; i < 8; i++) {
@@ -201,10 +227,6 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
 
                 // reset node tracker for handled nodes
                 nodes_new[depth].fill(0);
-                // check path in parent depth to know this node's child ID
-                uint32_t index_in_parent = path[depth - 1] - 1;
-
-                // TODO: check if new node is equal to the existing one at this tree position
 
                 // resize data if necessary and then copy over
                 auto& level = node_levels[depth];
@@ -267,7 +289,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             if (node_src_p->contains_child(child_i)) {
                 uint32_t child_addr_src = node_src_p->get_child_addr(child_i);
 
-                // check if child is present in primary subtree
+                // check if child is present in dst subtree
                 if (node_dst_p->contains_child(child_i)) {
                     uint32_t child_addr_dst = node_dst_p->get_child_addr(child_i);
                     // walk deeper
@@ -287,7 +309,47 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
         }
         // leaf cluster node
         else {
-            // TODO
+            const Node* node_dst_p = nodes_dst[depth];
+            const Node* node_src_p = nodes_src[depth];
+
+            // insert new node if present in src tree but not in dst tree
+            if (node_src_p->contains_child(child_i)) {
+                uint32_t lc_addr_src = node_src_p->get_child_addr(child_i);
+                LeafCluster lc_src = leaf_level._raw_data[lc_addr_src];
+                // check if child is present in dst subtree
+                if (node_dst_p->contains_child(child_i)) {
+                    uint32_t lc_addr_dst = node_dst_p->get_child_addr(child_i);
+                    LeafCluster lc_dst = leaf_level._raw_data[lc_addr_dst];
+
+                    // merge leaf clusters
+                    LeafCluster merged = LeafCluster::merge(lc_dst, lc_src);
+                    // check if merged lc is equal to dst, preserve if so
+                    if (merged._value == lc_dst._value) {
+                        nodes_new[depth][child_i] = lc_addr_dst;
+                    }
+                    // if merged lc is not equal, insert as new cluster
+                    else {
+                        // check if merged lc already exists
+                        uint32_t lc_addr_new = leaf_level._raw_data.size();;
+                        auto [iter, is_new] = leaf_level._lookup_map.emplace(merged._value, lc_addr_new);
+                        if (is_new) {
+                            leaf_level._unique_count++;
+                            leaf_level._raw_data.push_back(merged._value);
+                            nodes_new[depth][child_i] = lc_addr_new;
+                        }
+                        else {
+                            leaf_level._dupe_count++;
+                            // simply update references to the existing cluster
+                            nodes_new[depth][child_i] = iter->second;
+                        }
+                    }
+                }
+            }
+            // preserve the already existing node from dst
+            else if (node_dst_p->contains_child(child_i)) {
+                uint32_t lc_addr_dst = node_dst_p->get_child_addr(child_i);
+                nodes_new[depth][child_i] = lc_addr_dst;
+            }
         }
     }
 

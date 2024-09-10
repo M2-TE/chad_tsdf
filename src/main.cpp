@@ -5,7 +5,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
 #include "dag/dag.hpp"
-// DEBUG
+// // DEBUG
 // #include <dag/leaf_cluster.hpp>
 
 void static read_pcl_file() {
@@ -47,21 +47,21 @@ void static do_sphere_thing() {
             point = (glm::vec3)pointd;
         }
         dag.insert(points, { 0, 0, 0 }, glm::identity<glm::quat>());
+        dag.print_stats();
     }
-    // dag.print_stats();
 }
 int main() {
-    // std::array<float, 8> sds {
-    //     0.1, -0.05, 0.075, 0.02, 0.0, -0.125, -0.1, -0.2
-    // };
-    // for (auto i = 0; i < 8; i++) {
-    //     fmt::print("{:.2f}\t", sds[i]);
-    // }
+    // std::array<float, 8> sds { 0.1, -0.05, 0.075, 0.02, 0.0, LeafCluster::LEAF_NULL_F, -0.1, LeafCluster::LEAF_NULL_F };
+    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds[i]);
     // fmt::println("");
+    // std::array<float, 8> sds2 { 0.05, +0.05, -0.074, 0.0125, 0.2, -0.225, LeafCluster::LEAF_NULL_F, LeafCluster::LEAF_NULL_F };
+    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds2[i]);
+    // fmt::println("");
+    
     // LeafCluster lc(sds);
-    // for (auto i = 0; i < 8; i++) {
-    //     fmt::print("{:.2f}\t", lc.get_leaf(i).value());
-    // }
+    // LeafCluster lc2(sds2);
+    // lc = LeafCluster::merge(lc, lc2);
+    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", lc.get_leaf(i).value_or(0.99f));
     // fmt::println("");
     // exit(0);
     if (false) read_pcl_file();

@@ -18,7 +18,7 @@ if (NOT DEFINED CHAD_LEAF_RESOLUTION)
     set(CHAD_LEAF_RESOLUTION 0.1)
 endif()
 if (NOT DEFINED CHAD_LEAF_BITS)
-    set(CHAD_LEAF_BITS 4)
+    set(CHAD_LEAF_BITS 8)
 endif()
 
 # create executable/library
