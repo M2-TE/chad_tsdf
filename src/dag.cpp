@@ -384,7 +384,7 @@ void DAG::print_stats() {
         auto hashset = (*_node_levels_p)[i]._lookup_set;
         uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
         hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
-        double mem_vector = (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0;
+        double mem_vector = (double)((*_node_levels_p)[i]._raw_data.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
         double mem_hashing = (double)hashset_size / 1024.0 / 1024.0;
         total_vector += mem_vector;
         total_hashing += mem_hashing;
