@@ -29,8 +29,9 @@ struct DAG {
     // get voxel resolution
     auto get_voxel_resolution() -> double;
 
-private:
+public:
     std::vector<Subtree> _subtrees;
+private:
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
     struct LeafLevel* const _leaf_level_p;
 };
