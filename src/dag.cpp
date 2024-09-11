@@ -378,26 +378,39 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
     fmt::println("full dur  {}", dur.count());
 }
 void DAG::print_stats() {
+    double total_hashing = 0.0;
+    double total_vector = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         auto hashset = (*_node_levels_p)[i]._lookup_set;
         uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
         hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
+        double mem_vector = (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0;
+        double mem_hashing = (double)hashset_size / 1024.0 / 1024.0;
+        total_vector += mem_vector;
+        total_hashing += mem_hashing;
 
         fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", i, 
             (*_node_levels_p)[i]._unique_count,
             (*_node_levels_p)[i]._dupe_count,
-            (double)((*_node_levels_p)[i]._occupied_count * sizeof(uint32_t)) / 1024.0 / 1024.0,
-            (double)hashset_size / 1024.0 / 1024.0);
+            mem_vector,
+            mem_hashing);
     }
     // print same stats for leaf level
     auto hashmap = _leaf_level_p->_lookup_map;
     uint64_t hashset_size = hashmap.size() / hashmap.max_load_factor();
     hashset_size *= sizeof(decltype(hashmap)::value_type) + 1;
+    double mem_vector = (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0;
+    double mem_hashing = (double)hashset_size / 1024.0 / 1024.0;
+    total_vector += mem_vector;
+    total_hashing += mem_hashing;
     fmt::println("level {:2}: {:10} uniques, {:10} dupes, {:.6f} MiB (hashing: {:.6f} MiB)", _node_levels_p->size(), 
         _leaf_level_p->_unique_count, 
         _leaf_level_p->_dupe_count,
-        (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0,
-        (double)hashset_size / 1024.0 / 1024.0);
+        mem_vector,
+        mem_hashing);
+    fmt::println("total vector memory: {:.6f} MiB", total_vector);
+    fmt::println("total hashing memory: {:.6f} MiB", total_hashing);
+    fmt::println("total combined memory: {:.6f} MiB", total_vector + total_hashing);
 }
 auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
     std::array<std::vector<uint32_t>*, 63/3 - 1> levels;
