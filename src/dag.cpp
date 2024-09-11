@@ -370,6 +370,8 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
     Octree octree = octree_build(points);
     uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
     merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
+    // store the root address of the subtree to keep track
+    _subtrees.emplace_back(root_addr);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);

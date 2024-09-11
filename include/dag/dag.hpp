@@ -1,8 +1,8 @@
 #pragma once
-#include <span>
 #include <array>
 #include <vector>
-// #include <parallel_hashmap/phmap.h>
+#include <cstdint>
+#include "dag/subtree.hpp"
 
 struct DAG {
     DAG();
@@ -28,7 +28,9 @@ struct DAG {
 #endif
     // get voxel resolution
     auto get_voxel_resolution() -> double;
+
 private:
+    std::vector<Subtree> _subtrees;
     std::array<struct NodeLevel, 63/3 - 1>* const _node_levels_p;
     struct LeafLevel* const _leaf_level_p;
 };
