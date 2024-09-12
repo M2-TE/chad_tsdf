@@ -52,6 +52,7 @@ void static do_sphere_thing() {
         }
         dag.insert(points, positions[i], glm::identity<glm::quat>());
         dag.print_stats();
+        fmt::println("dag size: {}", dag.get_readonly_size());
     }
 }
 int main() {
