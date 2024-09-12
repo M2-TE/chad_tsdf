@@ -236,7 +236,11 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                     glm::vec3 normal = approximate_normal(nearest_points);
                     // flip normal if needed
                     float normal_dot = glm::dot(normal, point_it->second - pose_pos);
-                    if (normal_dot < 0.0f) normal = -normal;
+                    if (abs(normal_dot) < CHAD_NORM_MIN_DOT) {
+                        rejected_points_local.emplace(normal_idx);
+                        continue;
+                    }
+                    else if (normal_dot < 0.0f) normal = -normal;
 
                     // write to shared normal vector
                     normals[normal_idx] = normal;
