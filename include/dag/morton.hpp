@@ -161,7 +161,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
     beg = std::chrono::steady_clock::now();
 
     // approximate normals using local neighbourhoods
-    const float dist_max = LEAF_RESOLUTION * (1 << neigh_level);
+    const float dist_max = LEAF_RESOLUTION * (1 << neigh_level) * CHAD_NORM_RADIUS_MOD;
     std::vector<glm::vec3> normals { morton_codes.size() };
     // create lambda function for norm approximations
     typedef decltype(neigh_map)::const_iterator NeighIt;
