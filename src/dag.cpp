@@ -164,7 +164,7 @@ auto insert_octree(
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
-// merge dag subtree obtained from scan into primary subtree
+// merge dag subtree obtained from scan into primary subtree TODO: dont need the levels params anymore
 void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_levels, LeafLevel& leaf_level) {
     auto beg = std::chrono::steady_clock::now();
 
@@ -421,6 +421,54 @@ double DAG::get_readonly_size() {
     double mem_vector = (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0;
     total_vector += mem_vector;
     return total_vector;
+}
+auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> uint32_t{
+    // trackers that will be updated during traversal
+    static constexpr std::size_t max_depth = 63/3 - 1;
+    std::array<uint_fast8_t, max_depth> path;
+    std::array<const Node*, max_depth> nodes;
+    // initialize
+    path.fill(0);
+    nodes.fill(nullptr);
+    nodes[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, root_addr);
+    uint32_t sd_count = 0;
+
+    // iterate through dag and read leaves
+    uint_fast32_t depth = 0;
+    while (true) {
+        auto child_i = path[depth]++;
+        if (child_i == 8) {
+            // walk back to parent
+            if (depth == 0) break;
+            depth--;
+        }
+        else if (depth < max_depth - 1) {
+            const Node* node_p = nodes[depth];
+            // walk deeper if child is present
+            if (node_p->contains_child(child_i)) {
+                uint32_t child_addr = node_p->get_child_addr(child_i);
+                depth++;
+                path[depth] = 0;
+                nodes[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr);
+            }
+        }
+        else {
+            const Node* node_p = nodes[depth];
+            // go to leaf cluster if it is present
+            if (node_p->contains_child(child_i)) {
+                uint32_t child_addr = node_p->get_child_addr(child_i);
+                LeafCluster lc = _leaf_level_p->_raw_data[child_addr];
+                for (auto i = 0; i < 8; i++) {
+                    // get signed distance from leaf cluster
+                    auto sd = lc.get_leaf(i);
+                    if (sd.has_value()) {
+                        sd_count++;
+                    }
+                }
+            }
+        }
+    }
+    return sd_count;
 }
 auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
     std::array<std::vector<uint32_t>*, 63/3 - 1> levels;

@@ -1,6 +1,7 @@
 #ifdef CHAD_MAIN
 #include <random>
 #include <fstream>
+#include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
@@ -52,7 +53,11 @@ void static do_sphere_thing() {
         }
         dag.insert(points, positions[i], glm::identity<glm::quat>());
         dag.print_stats();
-        fmt::println("dag size: {}", dag.get_readonly_size());
+        auto beg = std::chrono::high_resolution_clock::now();
+        uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
     }
 }
 int main() {
@@ -72,4 +77,4 @@ int main() {
     if (false) read_pcl_file();
     else do_sphere_thing();
 }
-#endif
+#endif // defined(CHAD_MAIN)
