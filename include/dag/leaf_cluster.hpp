@@ -22,7 +22,7 @@ struct LeafCluster {
 
             float sd = leaves[i];
             // scale signed distance to be 1.0 for each voxel unit of distance
-            sd = sd * (float)(1.0 / LEAF_RESOLUTION);
+            sd = sd * (float)(1.0 / LEAF_RANGE_F);
             // normalize signed distance to [-1, 1]
             sd = std::clamp(sd, -1.0f, 1.0f);
             // scale up to fit into n-bit integer
@@ -44,7 +44,7 @@ struct LeafCluster {
         // scale signed distance back up to [-1, 1]
         sd *= (float)(1.0 / (double)LEAF_RANGE);
         // scale back to real-coord signed distance
-        sd *= (float)LEAF_RESOLUTION;
+        sd *= (float)LEAF_RANGE_F;
         return std::make_optional<float>(sd);
     }
     auto static inline merge(LeafCluster a, LeafCluster b) -> LeafCluster {
@@ -63,17 +63,18 @@ struct LeafCluster {
                 float sd_a = a.get_leaf(i).value();
                 float sd_b = b.get_leaf(i).value();
                 // if one of these is around 1.0, it might be too far away for avg merge
-                if (std::abs(sd_a) > 0.95f && std::abs(sd_b) < 0.95f) {
+                static constexpr float THRESHOLD = LEAF_RANGE_F * 0.98f;
+                if (std::abs(sd_a) > THRESHOLD && std::abs(sd_b) < THRESHOLD) {
                     result |= leaf_b << (i * LEAF_BITS);
                 }
-                else if (std::abs(sd_b) > 0.95f && std::abs(sd_a) < 0.95f) {
+                else if (std::abs(sd_b) > THRESHOLD && std::abs(sd_a) < THRESHOLD) {
                     result |= leaf_a << (i * LEAF_BITS);
                 }
                 else {
                     // average the two signed distances
                     float sd = (sd_a + sd_b) / 2.0f;
                     // scale signed distance to be 1.0 for each voxel unit of distance
-                    sd = sd * (float)(1.0 / LEAF_RESOLUTION);
+                    sd = sd * (float)(1.0 / LEAF_RANGE_F);
                     // normalize signed distance to [-1, 1]
                     sd = std::clamp(sd, -1.0f, 1.0f);
                     // scale up to fit into n-bit integer
@@ -91,6 +92,7 @@ struct LeafCluster {
     }
 
     ClusterValue _value;
+    static constexpr float LEAF_RANGE_F = LEAF_RESOLUTION * 1.5f;
     static constexpr float LEAF_NULL_F = 999.0f;
     static constexpr ClusterValue LEAF_MASK = (1 << LEAF_BITS) - 1; // mask for a single leaf
     static constexpr ClusterValue LEAF_NULL = LEAF_MASK; // leaf is null when all bits are set
