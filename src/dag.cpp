@@ -17,7 +17,6 @@ auto insert_octree(
     LeafLevel& leaf_level) -> uint32_t
 {
     auto beg = std::chrono::steady_clock::now();
-    fmt::println("NOTE: normalizing avg norm");
 
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;
@@ -123,20 +122,13 @@ auto insert_octree(
                     // reverse engineer the index of the current candidate
                     size_t index = candidates->leaf_candidates[i] - points.data();
                     auto normal = normals[index];
-                    if (normal.x > 900.0f) continue; // reject points with insufficient normal data
                     avg_normal += normal;
                     avg_pos += *candidates->leaf_candidates[i];
                     avg_count++;
                 }
-                if (avg_count == 0) {
-                    // assign invalid leaf value to signify no candidates
-                    cluster_sds[leaf_i] = LeafCluster::LEAF_NULL_F;
-                    continue;
-                }
 
                 avg_pos /= avg_count;
                 avg_normal /= avg_count;
-                avg_normal = glm::normalize(avg_normal); // TODO: test the necessity of this
 
                 // get leaf position
                 glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
@@ -372,7 +364,7 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
     // create morton codes to sort points and approx normals
     auto morton_codes = MortonCode::calc(points);
     MortonCode::sort(points, morton_codes);
-    auto normals = MortonCode::normals(morton_codes, position);
+    auto normals = MortonCode::normals(morton_codes, points, position);
     // create octree from points and insert into DAG
     Octree octree = octree_build(points);
     uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);

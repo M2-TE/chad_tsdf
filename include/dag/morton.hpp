@@ -1,4 +1,5 @@
 #pragma once
+#include <set>
 #include <cstddef>
 #include <vector>
 #include <chrono>
@@ -19,7 +20,7 @@ struct MortonCode {
     void static sort(std::vector<glm::vec3>& points, std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes);
     auto static calc(std::vector<glm::vec3>& points)
         -> std::vector<std::pair<MortonCode, glm::vec3>>;
-    auto static normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos)
+    auto static normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, std::vector<glm::vec3>& points, glm::vec3 pose_pos)
         -> std::vector<glm::vec3>;
 
     auto static inline encode(glm::ivec3 vox_pos) -> uint64_t {
@@ -89,7 +90,7 @@ void MortonCode::sort(std::vector<glm::vec3>& points, std::vector<std::pair<Mort
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("pnts sort {:.2f}", dur);
 }
-auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
+auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_codes, std::vector<glm::vec3>& points, glm::vec3 pose_pos) -> std::vector<glm::vec3> {
     auto beg = std::chrono::steady_clock::now();
     
     typedef std::vector<std::pair<MortonCode, glm::vec3>>::const_iterator MortonIt;
@@ -160,12 +161,17 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
     fmt::println("neig calc {:.2f}", dur);
     beg = std::chrono::steady_clock::now();
 
+    // rejection vector shared between threads
+    std::set<uint32_t> rejected_points;
+    std::mutex rejected_points_mutex;
+
     // approximate normals using local neighbourhoods
     const float dist_max = LEAF_RESOLUTION * (1 << neigh_level) * CHAD_NORM_RADIUS_MOD;
-    std::vector<glm::vec3> normals { morton_codes.size() };
+    std::vector<glm::vec3> normals(morton_codes.size());
     // create lambda function for norm approximations
     typedef decltype(neigh_map)::const_iterator NeighIt;
-    auto fnc_approx_norms = [&normals, &neigh_map, &morton_codes, pose_pos, dist_max](NeighIt beg, NeighIt end) {
+    auto fnc_approx_norms = [&normals, &neigh_map, &morton_codes, &rejected_points, &rejected_points_mutex, pose_pos, dist_max](NeighIt beg, NeighIt end) {
+        std::set<uint32_t> rejected_points_local;
         for (auto neigh_it = beg; neigh_it != end; neigh_it++) {
             // get morton code for current neighbourhood
             const Neighbourhood& neigh = neigh_it->second;
@@ -222,24 +228,27 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                     }
                 }
 
+                // figoure out index
+                std::size_t normal_idx = point_it - morton_codes.cbegin();
+
                 // use these filtered nearest points to approximate the normal
-                glm::vec3 normal;
                 if (nearest_points.size() >= 3) {
-                    normal = approximate_normal(nearest_points);
+                    glm::vec3 normal = approximate_normal(nearest_points);
                     // flip normal if needed
                     float normal_dot = glm::dot(normal, point_it->second - pose_pos);
                     if (normal_dot < 0.0f) normal = -normal;
+
+                    // write to shared normal vector
+                    normals[normal_idx] = normal;
                 }
                 // reject point if it doesnt have enough neighbours for estimation
-                else {
-                    normal = glm::vec3{ 999.0f, 999.0f, 999.0f };
-                }
-
-                // figure out the index of the normal and write to shared vector
-                std::size_t normal_idx = point_it - morton_codes.cbegin();
-                normals[normal_idx] = normal;
+                else rejected_points_local.emplace(normal_idx);
             }
         }
+        
+        // write rejected points into shared vector
+        std::unique_lock<std::mutex> lock(rejected_points_mutex);
+        rejected_points.insert(rejected_points_local.cbegin(), rejected_points_local.cend());
     };
     // balance load across several threads using lambda invocation
     std::vector<std::thread> threads;
@@ -264,6 +273,21 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
 
     // join all threads
     for (auto& thread: threads) thread.join();
+
+    // remove rejected points from normals vector
+    fmt::println("rejected points: {}", rejected_points.size());
+    std::vector<glm::vec3> normals_filtered;
+    std::vector<glm::vec3> points_filtered;
+    normals_filtered.reserve(normals.size() - rejected_points.size());
+    points_filtered.reserve(points.size() - rejected_points.size());
+    for (std::size_t i = 0; i < normals.size(); i++) {
+        if (rejected_points.find(i) == rejected_points.cend()) {
+            normals_filtered.push_back(normals[i]);
+            points_filtered.push_back(points[i]);
+        }
+    }
+    normals = normals_filtered;
+    points = points_filtered;
 
     end = std::chrono::steady_clock::now();
     dur = std::chrono::duration<double, std::milli> (end - beg).count();
