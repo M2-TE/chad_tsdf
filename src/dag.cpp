@@ -422,7 +422,7 @@ double DAG::get_readonly_size() {
     total_vector += mem_vector;
     return total_vector;
 }
-auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> uint32_t{
+auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t{
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;
     std::array<uint_fast8_t, max_depth> path;
@@ -431,7 +431,7 @@ auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> uint32_t{
     path.fill(0);
     nodes.fill(nullptr);
     nodes[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, root_addr);
-    uint32_t sd_count = 0;
+    std::size_t sd_count = 0;
 
     // iterate through dag and read leaves
     uint_fast32_t depth = 0;

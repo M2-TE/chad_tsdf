@@ -17,7 +17,7 @@ struct DAG {
     void insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 4> rotation);
     void print_stats();
     auto get_readonly_size() -> double;
-    auto debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> uint32_t;
+    auto debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t;
 
     // get raw data from normal dag levels
     auto get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1>;
