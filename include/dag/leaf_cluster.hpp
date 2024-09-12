@@ -62,20 +62,29 @@ struct LeafCluster {
             else {
                 float sd_a = a.get_leaf(i).value();
                 float sd_b = b.get_leaf(i).value();
-                // merge the two signed distances
-                float sd = (sd_a + sd_b) / 2.0f;
-                // scale signed distance to be 1.0 for each voxel unit of distance
-                sd = sd * (float)(1.0 / LEAF_RESOLUTION);
-                // normalize signed distance to [-1, 1]
-                sd = std::clamp(sd, -1.0f, 1.0f);
-                // scale up to fit into n-bit integer
-                sd = sd * (float)LEAF_RANGE;
-                // add offset that values range from 0 to 255
-                sd = sd + (float)LEAF_RANGE;
-                // use standard rounding
-                auto sd_i = (ClusterValue)sd;
-                // pack the bits into the leaf cluster value
-                result |= sd_i << (i * LEAF_BITS);
+                // if one of these is around 1.0, it might be too far away for avg merge
+                if (std::abs(sd_a) > 0.95f && std::abs(sd_b) < 0.95f) {
+                    result |= leaf_b << (i * LEAF_BITS);
+                }
+                else if (std::abs(sd_b) > 0.95f && std::abs(sd_a) < 0.95f) {
+                    result |= leaf_a << (i * LEAF_BITS);
+                }
+                else {
+                    // average the two signed distances
+                    float sd = (sd_a + sd_b) / 2.0f;
+                    // scale signed distance to be 1.0 for each voxel unit of distance
+                    sd = sd * (float)(1.0 / LEAF_RESOLUTION);
+                    // normalize signed distance to [-1, 1]
+                    sd = std::clamp(sd, -1.0f, 1.0f);
+                    // scale up to fit into n-bit integer
+                    sd = sd * (float)LEAF_RANGE;
+                    // add offset that values range from 0 to 255
+                    sd = sd + (float)LEAF_RANGE;
+                    // use standard rounding
+                    auto sd_i = (ClusterValue)sd;
+                    // pack the bits into the leaf cluster value
+                    result |= sd_i << (i * LEAF_BITS);
+                }
             }
         }
         return { result };
