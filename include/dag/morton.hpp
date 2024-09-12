@@ -232,7 +232,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                 std::size_t normal_idx = point_it - morton_codes.cbegin();
 
                 // use these filtered nearest points to approximate the normal
-                if (nearest_points.size() >= 3) {
+                if (nearest_points.size() >= CHAD_NORM_MIN_NEIGH) {
                     glm::vec3 normal = approximate_normal(nearest_points);
                     // flip normal if needed
                     float normal_dot = glm::dot(normal, point_it->second - pose_pos);
