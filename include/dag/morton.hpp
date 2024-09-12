@@ -140,7 +140,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
     // rough approximation of points per neighbourhood
     std::size_t pts_per_neigh = morton_codes.size() / neigh_map.size();
     // decrease neigh level if too many points per neighbourhood are present
-    while (pts_per_neigh > 50 && neigh_level > 0) {
+    while (pts_per_neigh > CHAD_NORM_NEIGH_UPPER && neigh_level > 0) {
         neigh_level--;
         neigh_map = fnc_get_neigh_map(neigh_level);
         // rough approximation of points per neighbourhood
@@ -148,7 +148,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
         fmt::println("decreased normal neighbourhood level to: {}", neigh_level);
     }
     // increase neigh level until the desired amount of points per neighbourhood is reached
-    while (pts_per_neigh < 6) {
+    while (pts_per_neigh < CHAD_NORM_NEIGH_LOWER) {
         neigh_level++;
         neigh_map = fnc_get_neigh_map(neigh_level);
         // rough approximation of points per neighbourhood
