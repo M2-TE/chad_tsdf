@@ -16,6 +16,7 @@ struct DAG {
     // main function to insert points into DAG
     void insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 4> rotation);
     void print_stats();
+    double get_readonly_size();
 
     // get raw data from normal dag levels
     auto get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1>;

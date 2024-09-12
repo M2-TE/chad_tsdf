@@ -412,6 +412,16 @@ void DAG::print_stats() {
     fmt::println("total hashing memory: {:.6f} MiB", total_hashing);
     fmt::println("total combined memory: {:.6f} MiB", total_vector + total_hashing);
 }
+double DAG::get_readonly_size() {
+    double total_vector = 0.0;
+    for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
+        double mem_vector = (double)((*_node_levels_p)[i]._raw_data.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
+        total_vector += mem_vector;
+    }
+    double mem_vector = (double)(_leaf_level_p->_raw_data.size() * sizeof(LeafLevel::ClusterValue)) / 1024.0 / 1024.0;
+    total_vector += mem_vector;
+    return total_vector;
+}
 auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
     std::array<std::vector<uint32_t>*, 63/3 - 1> levels;
     for (std::size_t i = 0; i < levels.size(); i++) {
