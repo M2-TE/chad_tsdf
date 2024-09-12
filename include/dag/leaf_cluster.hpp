@@ -92,7 +92,7 @@ struct LeafCluster {
     }
 
     ClusterValue _value;
-    static constexpr float LEAF_RANGE_F = LEAF_RESOLUTION * 1.5f;
+    static constexpr float LEAF_RANGE_F = LEAF_RESOLUTION * 1.0f;
     static constexpr float LEAF_NULL_F = 999.0f;
     static constexpr ClusterValue LEAF_MASK = (1 << LEAF_BITS) - 1; // mask for a single leaf
     static constexpr ClusterValue LEAF_NULL = LEAF_MASK; // leaf is null when all bits are set
