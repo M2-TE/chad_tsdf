@@ -122,9 +122,16 @@ auto insert_octree(
                     if (candidates->leaf_candidates[i] == nullptr) continue;
                     // reverse engineer the index of the current candidate
                     size_t index = candidates->leaf_candidates[i] - points.data();
-                    avg_normal += normals[index];
+                    auto normal = normals[index];
+                    if (normal.x > 900.0f) continue; // reject points with insufficient normal data
+                    avg_normal += normal;
                     avg_pos += *candidates->leaf_candidates[i];
                     avg_count++;
+                }
+                if (avg_count == 0) {
+                    // assign invalid leaf value to signify no candidates
+                    cluster_sds[leaf_i] = LeafCluster::LEAF_NULL_F;
+                    continue;
                 }
 
                 avg_pos /= avg_count;

@@ -230,7 +230,10 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                     float normal_dot = glm::dot(normal, point_it->second - pose_pos);
                     if (normal_dot < 0.0f) normal = -normal;
                 }
-                else normal = glm::normalize(point_it->second - pose_pos);
+                // reject point if it doesnt have enough neighbours for estimation
+                else {
+                    normal = glm::vec3{ 999.0f, 999.0f, 999.0f };
+                }
 
                 // figure out the index of the normal and write to shared vector
                 std::size_t normal_idx = point_it - morton_codes.cbegin();
