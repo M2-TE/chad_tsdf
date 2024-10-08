@@ -14,7 +14,8 @@ auto insert_octree(
     std::vector<glm::vec3>& points, 
     std::vector<glm::vec3>& normals, 
     std::array<NodeLevel, 63/3-1>& node_levels, 
-    LeafLevel& leaf_level) -> uint32_t
+    LeafLevel& leaf_level)
+-> uint32_t
 {
     auto beg = std::chrono::steady_clock::now();
 
@@ -163,8 +164,7 @@ auto insert_octree(
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
-// merge dag subtree obtained from scan into primary subtree TODO: dont need the levels params anymore
-void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_levels, LeafLevel& leaf_level) {
+void DAG::merge_subtree(uint_fast32_t root_addr) {
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -177,8 +177,8 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
     path.fill(0);
     nodes_dst.fill(nullptr);
     nodes_src.fill(nullptr);
-    nodes_dst[0] = Node::from_addr(node_levels[0]._raw_data, 1);
-    nodes_src[0] = Node::from_addr(node_levels[0]._raw_data, root_addr);
+    nodes_dst[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, 1);
+    nodes_src[0] = Node::from_addr((*_node_levels_p)[0]._raw_data, root_addr);
     for (auto& level: nodes_new) level.fill(0);
     
     // iterate through dag depth-first and merge nodes into primary dag subtree bottom-up
@@ -228,7 +228,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                 nodes_new[depth].fill(0);
 
                 // resize data if necessary and then copy over
-                auto& level = node_levels[depth];
+                auto& level = (*_node_levels_p)[depth];
                 level._raw_data.resize(level._occupied_count + children.size());
                 std::memcpy(
                     level._raw_data.data() + level._occupied_count,
@@ -251,7 +251,7 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             // root node
             else {
                 // the root node "dst" will always exist and always has all 8 children
-                Node* root_p = Node::from_addr(node_levels[0]._raw_data, 1);
+                Node* root_p = Node::from_addr((*_node_levels_p)[0]._raw_data, 1);
                 // simply copy over all children from the new root (prev nodes are preserved)
                 for (auto i = 0; i < 8; i++) {
                     root_p->_children[i] = nodes_new[0][i];
@@ -274,8 +274,8 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                     // walk deeper
                     depth++;
                     path[depth] = 0;
-                    nodes_dst[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_dst);
-                    nodes_src[depth] = Node::from_addr(node_levels[depth]._raw_data, child_addr_src);
+                    nodes_dst[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_dst);
+                    nodes_src[depth] = Node::from_addr((*_node_levels_p)[depth]._raw_data, child_addr_src);
                 }
                 // add to dst tree if it does not have a node at this position
                 else nodes_new[depth][child_i] = child_addr_src;
@@ -294,12 +294,12 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
             // potentially insert new cluster if present in src tree
             if (node_src_p->contains_child(child_i)) {
                 uint32_t lc_addr_src = node_src_p->get_child_addr(child_i);
-                LeafCluster lc_src = leaf_level._raw_data[lc_addr_src];
+                LeafCluster lc_src = _leaf_level_p->_raw_data[lc_addr_src];
 
                 // check if child is present in dst subtree
                 if (node_dst_p->contains_child(child_i)) {
                     uint32_t lc_addr_dst = node_dst_p->get_child_addr(child_i);
-                    LeafCluster lc_dst = leaf_level._raw_data[lc_addr_dst];
+                    LeafCluster lc_dst = _leaf_level_p->_raw_data[lc_addr_dst];
 
                     // merge leaf clusters
                     LeafCluster merged = LeafCluster::merge(lc_dst, lc_src);
@@ -310,15 +310,15 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
                     // if merged lc is not equal, insert as new cluster
                     else {
                         // check if merged lc already exists
-                        uint32_t lc_addr_new = leaf_level._raw_data.size();;
-                        auto [iter, is_new] = leaf_level._lookup_map.emplace(merged._value, lc_addr_new);
+                        uint32_t lc_addr_new = _leaf_level_p->_raw_data.size();;
+                        auto [iter, is_new] = _leaf_level_p->_lookup_map.emplace(merged._value, lc_addr_new);
                         if (is_new) {
-                            leaf_level._unique_count++;
-                            leaf_level._raw_data.push_back(merged._value);
+                            _leaf_level_p->_unique_count++;
+                            _leaf_level_p->_raw_data.push_back(merged._value);
                             nodes_new[depth][child_i] = lc_addr_new;
                         }
                         else {
-                            leaf_level._dupe_count++;
+                            _leaf_level_p->_dupe_count++;
                             // simply update references to the existing cluster
                             nodes_new[depth][child_i] = iter->second;
                         }
@@ -340,6 +340,11 @@ void merge_primary(uint_fast32_t root_addr, std::array<NodeLevel, 20>& node_leve
     auto end = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("dag  merg {:.2f}", dur);
+}
+void DAG::merge_all_subtrees() {
+    for (auto& subtree: _subtrees) {
+        merge_subtree(subtree._root_addr);
+    }
 }
 
 DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
@@ -368,7 +373,7 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
     // create octree from points and insert into DAG
     Octree octree = octree_build(points);
     uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
-    merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
+    // merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
     // store the root address of the subtree to keep track
     _subtrees.emplace_back(root_addr);
     

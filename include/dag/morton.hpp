@@ -9,6 +9,7 @@
 #include <execution>
 #include <fmt/base.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_aligned.hpp>
 #include <parallel_hashmap/phmap.h>
 #include <morton-nd/mortonND_BMI2.h>
 #include "dag/normals.hpp"
@@ -201,46 +202,41 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
             }
 
             // collect all points in all adjacent neighbourhoods
-            std::vector<glm::vec3> points_local;
-            points_local.reserve(point_count);
+            std::vector<glm::vec3> local_neighbours;
+            local_neighbours.reserve(point_count);
             for (auto neigh_it = adj_neighs.cbegin(); neigh_it != adj_neighs.cend(); neigh_it++) {
                 // go over points in this neighbourhood
                 for (auto point_it = (**neigh_it).beg_it; point_it != (**neigh_it).end_it; point_it++) {
-                    points_local.push_back(point_it->second);
+                    local_neighbours.push_back(point_it->second);
                 }
             }
 
-            //  reserve some generous space for nearest points
-            std::vector<glm::dvec4> nearest_points;
+            // reserve some space for a vector of nearest points
+            std::vector<glm::aligned_vec4> nearest_points;
             nearest_points.reserve(point_count);
+
             // for every point within the central neighbourhood, find its nearest neighbours for normal calc
             for (auto point_it = neigh.beg_it; point_it != neigh.end_it; point_it++) {
-                // every point will have its own set of nearest points
+                // go over all points to approximate distance
                 nearest_points.clear();
-
-                // go over all points and store the nearest ones (within bounds)
-                for (auto other_it = points_local.cbegin(); other_it != points_local.cend(); other_it++) {
+                for (auto other_it = local_neighbours.begin(); other_it != local_neighbours.end(); other_it++) {
                     glm::vec3 diff = *other_it - point_it->second;
                     float dist_sqr = glm::dot(diff, diff);
-                    // add point if it falls within bounds
-                    if (dist_sqr <= dist_max * dist_max) {
+                    if (dist_sqr > dist_max * dist_max) continue;
+                    else {
                         nearest_points.emplace_back(other_it->x, other_it->y, other_it->z, 0.0);
                     }
                 }
 
-                // figoure out index
+                // figure out index
                 std::size_t normal_idx = point_it - morton_codes.cbegin();
 
                 // use these filtered nearest points to approximate the normal
                 if (nearest_points.size() >= CHAD_NORM_MIN_NEIGH) {
                     glm::vec3 normal = approximate_normal(nearest_points);
                     // flip normal if needed
-                    float normal_dot = glm::dot(normal, glm::normalize(point_it->second - pose_pos));
-                    if (abs(normal_dot) < CHAD_NORM_MIN_DOT) {
-                        rejected_points_local.emplace(normal_idx);
-                        continue;
-                    }
-                    else if (normal_dot < 0.0f) normal = -normal;
+                    float normal_dot = glm::dot(normal, point_it->second - pose_pos);
+                    if (normal_dot < 0.0f) normal = -normal;
 
                     // write to shared normal vector
                     normals[normal_idx] = normal;

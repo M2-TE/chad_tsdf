@@ -26,6 +26,7 @@ void static read_pcl_file() {
     auto rot = glm::identity<glm::quat>();
     dag.insert(points, glm::vec3(0, 0, 0), rot);
     dag.print_stats();
+    dag.merge_all_subtrees();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -39,7 +40,11 @@ void static do_sphere_thing() {
     std::vector<glm::vec3> positions {
         { 10, 10, 10 },
     };
-    for (size_t i = 0; i < 1; i++) {
+    // insert the same position again n times
+    for (size_t i = 0; i < 50; i++) {
+        positions.push_back(positions[0]);
+    }
+    for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
             glm::dvec3 pointd = {
                 dis(gen),
@@ -52,13 +57,14 @@ void static do_sphere_thing() {
             point += positions[i];
         }
         dag.insert(points, positions[i], glm::identity<glm::quat>());
-        dag.print_stats();
-        auto beg = std::chrono::high_resolution_clock::now();
-        uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
+        // dag.print_stats();
+        // auto beg = std::chrono::high_resolution_clock::now();
+        // uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
+        // auto end = std::chrono::high_resolution_clock::now();
+        // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        // fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
     }
+    // dag.merge_all_subtrees();
 }
 int main() {
     // std::array<float, 8> sds { 0.1, -0.05, 0.075, 0.02, 0.0, LeafCluster::LEAF_NULL_F, -0.1, LeafCluster::LEAF_NULL_F };
