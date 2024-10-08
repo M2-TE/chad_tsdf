@@ -135,19 +135,11 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
         return neigh_map;
     };
 
-    // use chunk at level 2 (relative from leaves) for neighbourhoods by default
-    static std::size_t neigh_level = 2;
+    // use chunk at level N (relative from leaves) for neighbourhoods by default
+    static std::size_t neigh_level = 1;
     auto neigh_map = fnc_get_neigh_map(neigh_level);
     // rough approximation of points per neighbourhood
     std::size_t pts_per_neigh = morton_codes.size() / neigh_map.size();
-    // decrease neigh level if too many points per neighbourhood are present
-    while (pts_per_neigh > CHAD_NORM_NEIGH_UPPER && neigh_level > 0) {
-        neigh_level--;
-        neigh_map = fnc_get_neigh_map(neigh_level);
-        // rough approximation of points per neighbourhood
-        pts_per_neigh = morton_codes.size() / neigh_map.size();
-        fmt::println("decreased normal neighbourhood level to: {}", neigh_level);
-    }
     // increase neigh level until the desired amount of points per neighbourhood is reached
     while (pts_per_neigh < CHAD_NORM_NEIGH_LOWER) {
         neigh_level++;
@@ -155,6 +147,14 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
         // rough approximation of points per neighbourhood
         pts_per_neigh = morton_codes.size() / neigh_map.size();
         fmt::println("increased normal neighbourhood level to: {}", neigh_level);
+    }
+    // decrease neigh level if too many points per neighbourhood are present
+    while (pts_per_neigh > CHAD_NORM_NEIGH_UPPER && neigh_level > 0) {
+        neigh_level--;
+        neigh_map = fnc_get_neigh_map(neigh_level);
+        // rough approximation of points per neighbourhood
+        pts_per_neigh = morton_codes.size() / neigh_map.size();
+        fmt::println("decreased normal neighbourhood level to: {}", neigh_level);
     }
 
     auto end = std::chrono::steady_clock::now();
@@ -234,6 +234,7 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                 // use these filtered nearest points to approximate the normal
                 if (nearest_points.size() >= CHAD_NORM_MIN_NEIGH) {
                     glm::vec3 normal = approximate_normal(nearest_points);
+                    // fmt::println("{}", nearest_points.size());
                     // flip normal if needed
                     float normal_dot = glm::dot(normal, point_it->second - pose_pos);
                     if (normal_dot < 0.0f) normal = -normal;

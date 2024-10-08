@@ -357,7 +357,6 @@ DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p
     // write root child mask to always contain all 8 children
     (*_node_levels_p)[0]._raw_data[1] = 0xff;
 }
-// void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
 void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
     auto beg = std::chrono::high_resolution_clock::now();
     // convert anonymous inputs to named inputs
