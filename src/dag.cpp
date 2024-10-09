@@ -425,6 +425,20 @@ double DAG::get_readonly_size() {
     total_vector += mem_vector;
     return total_vector;
 }
+double DAG::get_hash_size() {
+    double total_hashing = 0.0;
+    for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
+        auto hashset = (*_node_levels_p)[i]._lookup_set;
+        uint64_t hashset_size = hashset.size() / hashset.max_load_factor();
+        hashset_size *= sizeof(decltype(hashset)::value_type) + 1;
+        total_hashing += (double)hashset_size / 1024.0 / 1024.0;
+    }
+    auto hashmap = _leaf_level_p->_lookup_map;
+    uint64_t hashset_size = hashmap.size() / hashmap.max_load_factor();
+    hashset_size *= sizeof(decltype(hashmap)::value_type) + 1;
+    total_hashing += (double)hashset_size / 1024.0 / 1024.0;
+    return total_hashing;
+}
 auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t{
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;

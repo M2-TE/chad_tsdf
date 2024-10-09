@@ -19,6 +19,7 @@ struct DAG {
     void merge_all_subtrees();
     void print_stats();
     auto get_readonly_size() -> double;
+    auto get_hash_size() -> double;
     auto debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t;
 
     // get raw data from normal dag levels
