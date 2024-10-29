@@ -22,72 +22,44 @@ public:
 		_desc_set_layouts.clear();
 		_immutable_samplers.clear();
 	}
-	void write_descriptor_storage(vk::Device device, uint32_t set, uint32_t binding, Image& image) {
+	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, dv::Image& image, vk::DescriptorType type, vk::Sampler sampler = nullptr) {
 		vk::DescriptorImageInfo info_image {
+			.sampler = sampler,
 			.imageView = image._view,
-			.imageLayout = vk::ImageLayout::eGeneral,
 		};
+		switch (type) {
+			case vk::DescriptorType::eStorageImage:
+				info_image.imageLayout = vk::ImageLayout::eGeneral;
+				break;
+			case vk::DescriptorType::eSampledImage:
+			case vk::DescriptorType::eCombinedImageSampler:
+				info_image.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+				break;
+			default:
+				assert(false && "Invalid descriptor type");
+				break;
+		}
 		vk::WriteDescriptorSet write_image {
 			.dstSet = _desc_sets[set],
 			.dstBinding = binding,
 			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eStorageImage,
+			.descriptorType = type,
 			.pImageInfo = &info_image,
 		};
 		device.updateDescriptorSets(write_image, {});
 	}
-	void write_descriptor_immutable(vk::Device device, uint32_t set, uint32_t binding, Image& image) {
-		// set should have an immutable sampler
-		vk::DescriptorImageInfo info_image {
-			.imageView = image._view,
-			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		};
-		vk::WriteDescriptorSet write_image {
-			.dstSet = _desc_sets[set],
-			.dstBinding = binding,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-			.pImageInfo = &info_image,
-		};
-		device.updateDescriptorSets(write_image, {});
-	}
-	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size) {
-		if (_desc_sets.size() <= set) {
-			fmt::println("Attempted to bind invalid set"); 
-			return;
-		}
-		vk::DescriptorBufferInfo info_buffer {
-			.buffer = buffer,
-			.offset = 0,
-			.range = size
-		};
-		vk::WriteDescriptorSet write_buffer {
-			.dstSet = _desc_sets[set],
-			.dstBinding = binding,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
-			.pBufferInfo = &info_buffer
-		};
-		device.updateDescriptorSets(write_buffer, {});
-	}
-	template<typename T>
-	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, dv::Buffer<T>& buffer) {
-		if (_desc_sets.size() <= set) {
-			fmt::println("Attempted to bind invalid set"); 
-			return;
-		}
+	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, dv::Buffer& buffer, vk::DescriptorType type, vk::DeviceSize offset = 0) {
 		vk::DescriptorBufferInfo info_buffer {
 			.buffer = buffer._data,
-			.offset = 0,
-			.range = buffer.size()
+			.offset = offset,
+			.range = buffer._size,
 		};
 		vk::WriteDescriptorSet write_buffer {
 			.dstSet = _desc_sets[set],
 			.dstBinding = binding,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
+			.descriptorType = type,
 			.pBufferInfo = &info_buffer
 		};
 		device.updateDescriptorSets(write_buffer, {});

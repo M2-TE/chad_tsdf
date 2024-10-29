@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.hpp>
 #include "vk/vk.hpp"
 #include "vk/device/queues.hpp"
+#include "vk/device/buffer.hpp"
 #include "vk/device/selector.hpp"
 #include "vk/device/pipeline.hpp"
 
@@ -105,23 +106,87 @@ struct VkState {
 
         // set up device queues
         _queues.init(_device, queue_mappings);
+        init_sync();
+        init_buffers();
+        init_pipe();
 
-        // create pipeline
-        _pipe.init({
-            .device = _device,
-            .cs_path = "defaults/gradient.comp",
-        });
     }
     void destroy() {
-        _pipe.destroy(_device);
+        // vma related
+        _buffer.destroy(_vmalloc);
         _vmalloc.destroy();
+        // device related
+        _pipe.destroy(_device);
         _queues.destroy(_device);
+        _device.destroyCommandPool(_cmd_pool);
+        _device.destroyFence(_ready_to_record);
         _device.destroy();
+        //
         _instance.destroy();
     }
 
     void dostuff() {
-        fmt::println("VkState::dostuff");
+        // wait until last buffer was executed
+        while (vk::Result::eTimeout == _device.waitForFences(_ready_to_record, vk::True, UINT64_MAX));
+        _device.resetFences(_ready_to_record);
+
+        // reset and record command buffer
+        _device.resetCommandPool(_cmd_pool, {});
+        vk::CommandBuffer cmd = _cmd_buffer;
+        cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        _pipe.execute(cmd, 1, 1, 1);
+        cmd.end();
+
+        // submit command buffer
+        vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eTopOfPipe;
+        vk::SubmitInfo info_submit {
+            .pWaitDstStageMask = &wait_stage,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd,
+        };
+        _queues._universal.submit(info_submit, _ready_to_record);
+
+        // DEBUG
+        while (vk::Result::eTimeout == _device.waitForFences(_ready_to_record, vk::True, UINT64_MAX));
+        std::array<uint32_t, 64> data;
+        _buffer.read(_vmalloc, data);
+        for (auto& d: data) fmt::print("{} ", d);
+        fmt::println("");
+    }
+
+private:
+    void init_sync() {
+        // allocate single command pool and buffer pair
+        _cmd_pool = _device.createCommandPool({ .queueFamilyIndex = _queues._universal_i });
+        vk::CommandBufferAllocateInfo bufferInfo {
+            .commandPool = _cmd_pool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = 1,
+        };
+        _cmd_buffer = _device.allocateCommandBuffers(bufferInfo).front();
+        // create simple fence for cpu-gpu sync
+        _ready_to_record = _device.createFence({ .flags = vk::FenceCreateFlagBits::eSignaled });
+    }
+    void init_buffers() {
+        _buffer.init({
+            .vmalloc = _vmalloc,
+            .size = sizeof(uint32_t) * 64,
+            .usage = vk::BufferUsageFlagBits::eStorageBuffer,
+            .sharing_mode = vk::SharingMode::eExclusive,
+            .queue_families = _queues._compute_i,
+            .host_accessible = true,
+        });
+
+        std::array<uint32_t, 64> data;
+        for (uint32_t i = 0; i < 64; i++) data[i] = i;
+        _buffer.write(_vmalloc, data);
+    }
+    void init_pipe() {
+        _pipe.init({
+            .device = _device,
+            .cs_path = "hash.comp",
+        });
+        _pipe.write_descriptor(_device, 0, 0, _buffer, vk::DescriptorType::eStorageBuffer);
     }
 
     vk::Instance _instance;
@@ -130,6 +195,12 @@ struct VkState {
     vma::Allocator _vmalloc;
     dv::Queues _queues;
     dv::Compute _pipe;
+    // exec sync
+    vk::Fence _ready_to_record;
+    vk::CommandPool _cmd_pool;
+    vk::CommandBuffer _cmd_buffer;
+    // other
+    dv::Buffer _buffer;
 };
 
 void init_vk() {
