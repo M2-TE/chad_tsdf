@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.hpp>
 #include "vk/device/queues.hpp"
 
+namespace dv {
 struct Image {
     struct CreateInfo {
         vk::Device device;
@@ -365,3 +366,4 @@ struct DepthStencil: public Image {
         _view = device.createImageView(info_depth_view);
     }
 };
+} // namespace dv

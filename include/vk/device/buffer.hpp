@@ -1,9 +1,11 @@
 #pragma once
+#include <fmt/base.h>
 #include <vulkan/vulkan.hpp>
 #include <vk_mem_alloc.hpp>
 
+namespace dv {
 template<typename T>
-struct DeviceBuffer {
+struct Buffer {
 	void init(vma::Allocator vmalloc, const vk::BufferCreateInfo& info_buffer, const vma::AllocationCreateInfo& info_allocation) {
 		std::tie(_data, _allocation) = vmalloc.createBuffer(info_buffer, info_allocation);
 
@@ -54,3 +56,4 @@ struct DeviceBuffer {
 	bool _require_staging;
 	bool _require_flushing;
 };
+} // namespace dv

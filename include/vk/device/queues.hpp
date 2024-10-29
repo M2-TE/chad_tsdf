@@ -1,6 +1,7 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
 
+namespace dv{
 struct Queues {
     void init(vk::Device device, std::span<uint32_t> queue_mappings) {
         _universal_i = queue_mappings[0];
@@ -51,3 +52,4 @@ private:
     // oneshot command pool
     vk::CommandPool _universal_pool;
 };
+} // namespace dv

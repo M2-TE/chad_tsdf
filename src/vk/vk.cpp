@@ -128,7 +128,7 @@ struct VkState {
     vk::PhysicalDevice _phys_device;
     vk::Device _device;
     vma::Allocator _vmalloc;
-    Queues _queues;
+    dv::Queues _queues;
     dv::Compute _pipe;
 };
 

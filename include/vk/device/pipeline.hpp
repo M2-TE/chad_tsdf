@@ -72,7 +72,7 @@ public:
 		device.updateDescriptorSets(write_buffer, {});
 	}
 	template<typename T>
-	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, DeviceBuffer<T>& buffer) {
+	void write_descriptor(vk::Device device, uint32_t set, uint32_t binding, dv::Buffer<T>& buffer) {
 		if (_desc_sets.size() <= set) {
 			fmt::println("Attempted to bind invalid set"); 
 			return;
