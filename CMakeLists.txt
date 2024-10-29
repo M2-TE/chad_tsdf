@@ -39,6 +39,11 @@ file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR
 if (CHAD_TOP_LEVEL)
     add_executable(${PROJECT_NAME} ${CPP_SOURCE_FILES})
     target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_MAIN)
+    set_target_properties(${PROJECT_NAME} PROPERTIES 
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/bin/"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin/"
+        CXXFLAGS "${CMAKE_CXX_FLAGS} ${WARNING_FLAGS}")
 else()
     add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 endif()
@@ -60,6 +65,5 @@ include(glm)
 include(fmt)
 include(phmap)
 include(morton)
-if (CHAD_TOP_LEVEL)
-    set(FETCHCONTENT_FULLY_DISCONNECTED ON CACHE BOOL "Faster config after FetchContent has run once" FORCE)
-endif()
+include(vulkan)
+include(vma)

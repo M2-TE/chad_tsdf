@@ -8,6 +8,11 @@
 #include "dag/dag.hpp"
 // // DEBUG
 // #include <dag/leaf_cluster.hpp>
+#include <vk/vk.hpp>
+#include <vulkan/vulkan.hpp>
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.hpp>
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -67,19 +72,8 @@ void static do_sphere_thing() {
     // dag.merge_all_subtrees();
 }
 int main() {
-    // std::array<float, 8> sds { 0.1, -0.05, 0.075, 0.02, 0.0, LeafCluster::LEAF_NULL_F, -0.1, LeafCluster::LEAF_NULL_F };
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds[i]);
-    // fmt::println("");
-    // std::array<float, 8> sds2 { 0.05, +0.05, -0.074, 0.0125, 0.2, -0.225, LeafCluster::LEAF_NULL_F, LeafCluster::LEAF_NULL_F };
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds2[i]);
-    // fmt::println("");
-    
-    // LeafCluster lc(sds);
-    // LeafCluster lc2(sds2);
-    // lc = LeafCluster::merge(lc, lc2);
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", lc.get_leaf(i).value_or(0.99f));
-    // fmt::println("");
-    // exit(0);
+    init_vk();
+    exit(0);
     if (false) read_pcl_file();
     else do_sphere_thing();
 }
