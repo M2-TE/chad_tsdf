@@ -55,7 +55,8 @@ khronos_validation.gpuav_debug_validate_instrumented_shaders = true
 # Filter out certain messages
 # 601872502 -> info about validation layers being enabled
 # 1838131506 -> warning about 1D dispatch with image access
-khronos_validation.message_id_filter = 601872502,1838131506
+# -2047828895 -> warning about suboptimal kernel size for occupancy (should be mul of 64)
+khronos_validation.message_id_filter = 601872502,1838131506,-2047828895
 
 # Set report flags to include info, warnings, errors, and performance issues
 khronos_validation.report_flags = info,warn,error,perf")

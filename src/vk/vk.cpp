@@ -170,10 +170,10 @@ private:
     void init_buffers() {
         _buffer.init({
             .vmalloc = _vmalloc,
-            .size = sizeof(uint32_t) * 64,
+            .size = sizeof(uint32_t) * 128,
+            .alignment = sizeof(uint32_t) * 32,
             .usage = vk::BufferUsageFlagBits::eStorageBuffer,
-            .sharing_mode = vk::SharingMode::eExclusive,
-            .queue_families = _queues._compute_i,
+            .queue_families = { _queues._compute_i, _queues._transfer_i },
             .host_accessible = true,
         });
 

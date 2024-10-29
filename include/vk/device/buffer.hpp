@@ -8,8 +8,8 @@ struct Buffer {
 	struct BufferCreateInfo {
 		vma::Allocator vmalloc;
 		vk::DeviceSize size;
+		vk::DeviceSize alignment = 0;
 		vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eUniformBuffer;
-		vk::SharingMode sharing_mode = vk::SharingMode::eExclusive;
 		const vk::ArrayProxy<uint32_t>& queue_families;
 		bool host_accessible = false;
 	};
@@ -17,7 +17,7 @@ struct Buffer {
 		vk::BufferCreateInfo info_buffer {
 			.size = info.size,
 			.usage = info.usage,
-			.sharingMode = info.sharing_mode,
+			.sharingMode = info.queue_families.size() > 1 ? vk::SharingMode::eConcurrent : vk::SharingMode::eExclusive,
 			.queueFamilyIndexCount = info.queue_families.size(),
 			.pQueueFamilyIndices = info.queue_families.data(),
 		};
@@ -34,7 +34,12 @@ struct Buffer {
 				vk::MemoryPropertyFlagBits::eHostCoherent;
 		}
 		// create buffer
-		std::tie(_data, _allocation) = info.vmalloc.createBuffer(info_buffer, info_allocation);
+		if (info.alignment > 0) {
+			std::tie(_data, _allocation) = info.vmalloc.createBufferWithAlignment(info_buffer, info_allocation, info.alignment);
+		}
+		else {
+			std::tie(_data, _allocation) = info.vmalloc.createBuffer(info_buffer, info_allocation);
+		}
 		_size = info.size;
 
 		// check for host coherency and visibility
@@ -72,6 +77,17 @@ struct Buffer {
 	}
 	template<typename T> void read(vma::Allocator vmalloc, T& data) {
 		read(vmalloc, &data, sizeof(T));
+	}
+	void resize(vma::Allocator vmalloc, vk::DeviceSize new_size, bool preserve = true) {
+		vmalloc.destroyBuffer(_data, _allocation);
+		_size = new_size;
+		init({
+			.vmalloc = vmalloc,
+			.size = new_size,
+			.usage = vk::BufferUsageFlagBits::eUniformBuffer,
+			.queue_families = {0},
+			.host_accessible = false,
+		});
 	}
 
 	vk::Buffer _data;
