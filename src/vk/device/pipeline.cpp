@@ -5,8 +5,9 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_to_string.hpp>
 #include <vulkan/vulkan_format_traits.hpp>
-#include "vk/pipeline.hpp"
+#include "vk/device/pipeline.hpp"
 
+namespace dv {
 auto get_reflections(const vk::ArrayProxy<std::string_view>& shader_paths)
 -> std::vector<spv_reflect::ShaderModule> {
 	std::vector<spv_reflect::ShaderModule> reflections;
@@ -225,7 +226,7 @@ auto create_descriptor_pool(vk::Device device, std::map<uint32_t, std::map<uint3
 	});
 	return pool;
 }
-auto Pipeline::Base::reflect(vk::Device device, const vk::ArrayProxy<std::string_view>& shader_paths, const SamplerInfos& sampler_infos)
+auto dv::Base::reflect(vk::Device device, const vk::ArrayProxy<std::string_view>& shader_paths, const SamplerInfos& sampler_infos)
 -> std::pair< vk::VertexInputBindingDescription, std::vector<vk::VertexInputAttributeDescription>> {
 	// create shader reflections
 	auto reflections = get_reflections(shader_paths);
@@ -252,3 +253,4 @@ auto Pipeline::Base::reflect(vk::Device device, const vk::ArrayProxy<std::string
 	});
     return std::make_pair(vertex_input_desc, attr_descs);
 }
+} // namespace dv

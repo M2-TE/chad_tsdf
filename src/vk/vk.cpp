@@ -2,9 +2,9 @@
 #include <vulkan/vulkan.hpp>
 #include <vk_mem_alloc.hpp>
 #include "vk/vk.hpp"
-#include "vk/queues.hpp"
-#include "vk/device_selector.hpp"
-#include "vk/pipeline.hpp"
+#include "vk/device/queues.hpp"
+#include "vk/device/selector.hpp"
+#include "vk/device/pipeline.hpp"
 
 struct VkState {
     void init() {
@@ -40,7 +40,7 @@ struct VkState {
         VULKAN_HPP_DEFAULT_DISPATCHER.init(_instance);
 
         // select physical device
-        DeviceSelector device_selector {
+        dv::Selector device_selector {
             ._required_major = 1,
             ._required_minor = 1,
             ._preferred_device_type = vk::PhysicalDeviceType::eDiscreteGpu,
@@ -129,7 +129,7 @@ struct VkState {
     vk::Device _device;
     vma::Allocator _vmalloc;
     Queues _queues;
-    Pipeline::Compute _pipe;
+    dv::Compute _pipe;
 };
 
 void init_vk() {

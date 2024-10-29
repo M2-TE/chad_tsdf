@@ -1,7 +1,7 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
 #include <vk_mem_alloc.hpp>
-#include "vk/queues.hpp"
+#include "vk/device/queues.hpp"
 
 struct Image {
     struct CreateInfo {
