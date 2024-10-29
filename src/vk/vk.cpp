@@ -4,6 +4,7 @@
 #include "vk/vk.hpp"
 #include "vk/queues.hpp"
 #include "vk/device_selector.hpp"
+#include "vk/pipeline.hpp"
 
 struct VkState {
     void init() {
@@ -91,12 +92,8 @@ struct VkState {
         };
         vma::AllocatorCreateInfo info_vmalloc {
             .flags =
-                // vma::AllocatorCreateFlagBits::eKhrBindMemory2 |
-                // vma::AllocatorCreateFlagBits::eKhrMaintenance4 |
-                // vma::AllocatorCreateFlagBits::eKhrMaintenance5 |
                 vma::AllocatorCreateFlagBits::eExtMemoryBudget |
                 vma::AllocatorCreateFlagBits::eExtMemoryPriority |
-                // vma::AllocatorCreateFlagBits::eBufferDeviceAddress |
                 vma::AllocatorCreateFlagBits::eKhrDedicatedAllocation,
             .physicalDevice = _phys_device,
             .device = _device,
@@ -108,12 +105,23 @@ struct VkState {
 
         // set up device queues
         _queues.init(_device, queue_mappings);
+
+        // create pipeline
+        _pipe.init({
+            .device = _device,
+            .cs_path = "defaults/gradient.comp",
+        });
     }
     void destroy() {
+        _pipe.destroy(_device);
         _vmalloc.destroy();
         _queues.destroy(_device);
         _device.destroy();
         _instance.destroy();
+    }
+
+    void dostuff() {
+        fmt::println("VkState::dostuff");
     }
 
     vk::Instance _instance;
@@ -121,10 +129,12 @@ struct VkState {
     vk::Device _device;
     vma::Allocator _vmalloc;
     Queues _queues;
+    Pipeline::Compute _pipe;
 };
 
 void init_vk() {
     VkState vk_state;
     vk_state.init();
+    vk_state.dostuff();
     vk_state.destroy();
 }
