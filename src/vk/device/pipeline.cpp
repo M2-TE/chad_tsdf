@@ -1,5 +1,6 @@
 #include <map>
 #include <span>
+#include <limits>
 #include <fmt/base.h>
 #include <spirv_reflect.h>
 #include <vulkan/vulkan.hpp>

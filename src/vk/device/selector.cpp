@@ -1,4 +1,5 @@
 #define VULKAN_HPP_USE_REFLECT
+#include <bit>
 #include <vulkan/vulkan.hpp>
 #include "vk/device/selector.hpp"
 
