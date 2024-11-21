@@ -4,6 +4,9 @@
 #include <cstdint>
 #include "dag/subtree.hpp"
 
+// TODO doxygen comments
+// TODO retrieve subtree based on pos
+
 struct DAG {
     DAG();
     // helper function to insert points into DAG
@@ -13,8 +16,20 @@ struct DAG {
         std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
         insert(reinterpret_cast<std::array<float, 3>*>(points.data()), points.size(), *pos_p, *rot_p);
     }
-    // main function to insert points into DAG
+    // main function to insert points into DAG'
+
+
+    /**
+     * @brief 
+     * 
+     * @param points_p 
+     * @param points_count 
+     * @param position 
+     * @param rotation 
+     */
     void insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 4> rotation);
+    // TODO: insert via 4x4 mat as pose
+    // TODO: rotation as euler angles
     void merge_subtree(uint_fast32_t root_addr);
     void merge_all_subtrees();
     void print_stats();
