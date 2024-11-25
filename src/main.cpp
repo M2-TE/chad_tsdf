@@ -8,6 +8,11 @@
 #include "dag/dag.hpp"
 // // DEBUG
 // #include <dag/leaf_cluster.hpp>
+#include <vk/vk.hpp>
+#include <vulkan/vulkan.hpp>
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.hpp>
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -26,6 +31,7 @@ void static read_pcl_file() {
     auto rot = glm::identity<glm::quat>();
     dag.insert(points, glm::vec3(0, 0, 0), rot);
     dag.print_stats();
+    dag.merge_all_subtrees();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -39,7 +45,11 @@ void static do_sphere_thing() {
     std::vector<glm::vec3> positions {
         { 10, 10, 10 },
     };
-    for (size_t i = 0; i < 1; i++) {
+    // insert the same position again n times
+    for (size_t i = 0; i < 50; i++) {
+        positions.push_back(positions[0]);
+    }
+    for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
             glm::dvec3 pointd = {
                 dis(gen),
@@ -52,28 +62,18 @@ void static do_sphere_thing() {
             point += positions[i];
         }
         dag.insert(points, positions[i], glm::identity<glm::quat>());
-        dag.print_stats();
-        auto beg = std::chrono::high_resolution_clock::now();
-        uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
+        // dag.print_stats();
+        // auto beg = std::chrono::high_resolution_clock::now();
+        // uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
+        // auto end = std::chrono::high_resolution_clock::now();
+        // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        // fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
     }
+    // dag.merge_all_subtrees();
 }
 int main() {
-    // std::array<float, 8> sds { 0.1, -0.05, 0.075, 0.02, 0.0, LeafCluster::LEAF_NULL_F, -0.1, LeafCluster::LEAF_NULL_F };
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds[i]);
-    // fmt::println("");
-    // std::array<float, 8> sds2 { 0.05, +0.05, -0.074, 0.0125, 0.2, -0.225, LeafCluster::LEAF_NULL_F, LeafCluster::LEAF_NULL_F };
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", sds2[i]);
-    // fmt::println("");
-    
-    // LeafCluster lc(sds);
-    // LeafCluster lc2(sds2);
-    // lc = LeafCluster::merge(lc, lc2);
-    // for (auto i = 0; i < 8; i++) fmt::print("{:.2f}\t", lc.get_leaf(i).value_or(0.99f));
-    // fmt::println("");
-    // exit(0);
+    init_vk();
+    exit(0);
     if (false) read_pcl_file();
     else do_sphere_thing();
 }

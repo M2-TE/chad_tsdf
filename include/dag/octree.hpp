@@ -7,10 +7,10 @@
 #include <vector>
 #include <cstdint>
 #include <condition_variable>
+#include <fmt/base.h>
 #include <glm/glm.hpp>
 #include <parallel_hashmap/phmap.h>
 #include "dag/morton.hpp"
-#include "fmt/base.h"
 #include "glm/fwd.hpp"
 #include <bitset>
 

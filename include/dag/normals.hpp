@@ -2,12 +2,13 @@
 #include "glm/geometric.hpp"
 #include <vector>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_aligned.hpp>
 
 // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
-template<typename T>
-auto static approximate_normal(std::vector<glm::vec<4, T>>& points) -> glm::vec3 {
+template<typename T, glm::qualifier P>
+auto static approximate_normal(std::vector<glm::vec<4, T, P>>& points) -> glm::vec3 {
 	// calculate centroid by through coefficient average
-	glm::vec<4, T> centroid { 0, 0, 0, 0 };
+	glm::vec<4, T, P> centroid { 0, 0, 0, 0 };
 	for (auto p = points.cbegin(); p != points.cend(); p++) {
 		centroid += *p;
 	}
@@ -34,12 +35,12 @@ auto static approximate_normal(std::vector<glm::vec<4, T>>& points) -> glm::vec3
 	zz *= recip;
 
 	// weighting linear regression based on square determinant
-	glm::vec<4, T> weighted_dir = { 0, 0, 0, 0 };
+	glm::vec<4, T, P> weighted_dir = { 0, 0, 0, 0 };
 
 	// determinant x
 	{
 		T det_x = yy*zz - yz*yz;
-		glm::vec<4, T> axis_dir = {
+		glm::vec<4, T, P> axis_dir = {
 			det_x,
 			xz*yz - xy*zz,
 			xy*yz - xz*yy,
@@ -52,7 +53,7 @@ auto static approximate_normal(std::vector<glm::vec<4, T>>& points) -> glm::vec3
 	// determinant y
 	{
 		T det_y = xx*zz - xz*xz;
-		glm::vec<4, T> axis_dir = {
+		glm::vec<4, T, P> axis_dir = {
 			xz*yz - xy*zz,
 			det_y,
 			xy*xz - yz*xx,
@@ -65,7 +66,7 @@ auto static approximate_normal(std::vector<glm::vec<4, T>>& points) -> glm::vec3
 	// determinant z
 	{
 		T det_z = xx*yy - xy*xy;
-		glm::vec<4, T> axis_dir = {
+		glm::vec<4, T, P> axis_dir = {
 			xy*yz - xz*yy,
 			xy*xz - yz*xx,
 			det_z,
