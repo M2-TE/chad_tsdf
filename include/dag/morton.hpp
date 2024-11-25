@@ -228,7 +228,8 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                     }
                 }
 
-                // figoure out index
+
+                // figure out index
                 std::size_t normal_idx = point_it - morton_codes.cbegin();
 
                 // use these filtered nearest points to approximate the normal

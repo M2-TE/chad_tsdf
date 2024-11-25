@@ -14,8 +14,8 @@ auto insert_octree(
     std::vector<glm::vec3>& points, 
     std::vector<glm::vec3>& normals, 
     std::array<NodeLevel, 63/3-1>& node_levels, 
-    LeafLevel& leaf_level) -> uint32_t
-{
+    LeafLevel& leaf_level)
+-> uint32_t {
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -352,7 +352,6 @@ DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p
     // write root child mask to always contain all 8 children
     (*_node_levels_p)[0]._raw_data[1] = 0xff;
 }
-// void DAG::insert(std::vector<glm::vec3>& points, glm::vec3 position, glm::quat rotation) {
 void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
     auto beg = std::chrono::high_resolution_clock::now();
     // convert anonymous inputs to named inputs
@@ -411,7 +410,7 @@ void DAG::print_stats() {
     fmt::println("total hashing memory: {:.6f} MiB", total_hashing);
     fmt::println("total combined memory: {:.6f} MiB", total_vector + total_hashing);
 }
-double DAG::get_readonly_size() {
+auto DAG::get_readonly_size() -> double {
     double total_vector = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         double mem_vector = (double)((*_node_levels_p)[i]._raw_data.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
