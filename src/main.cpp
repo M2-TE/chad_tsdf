@@ -8,11 +8,11 @@
 #include "dag/dag.hpp"
 // // DEBUG
 // #include <dag/leaf_cluster.hpp>
-#include <vk/vk.hpp>
-#include <vulkan/vulkan.hpp>
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.hpp>
+// #include <vk/vk.hpp>
+// #include <vulkan/vulkan.hpp>
+// VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+// #define VMA_IMPLEMENTATION
+// #include <vk_mem_alloc.hpp>
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -72,7 +72,7 @@ void static do_sphere_thing() {
     // dag.merge_all_subtrees();
 }
 int main() {
-    init_vk();
+    // init_vk();
     exit(0);
     if (false) read_pcl_file();
     else do_sphere_thing();
