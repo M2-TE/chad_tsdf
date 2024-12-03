@@ -35,8 +35,9 @@ if (NOT DEFINED CHAD_LEAF_BITS)
 endif()
 
 # create executable/library
-file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/dag/*.cpp")
 if (CHAD_TOP_LEVEL)
+    set(CPP_SOURCE_FILES ${CPP_SOURCE_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
     add_executable(${PROJECT_NAME} ${CPP_SOURCE_FILES})
     target_compile_definitions(${PROJECT_NAME} PRIVATE CHAD_MAIN)
     set_target_properties(${PROJECT_NAME} PROPERTIES 

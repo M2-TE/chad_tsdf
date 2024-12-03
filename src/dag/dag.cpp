@@ -15,8 +15,7 @@ auto insert_octree(
     std::vector<glm::vec3>& normals, 
     std::array<NodeLevel, 63/3-1>& node_levels, 
     LeafLevel& leaf_level)
--> uint32_t
-{
+-> uint32_t {
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -415,7 +414,7 @@ void DAG::print_stats() {
     fmt::println("total hashing memory: {:.6f} MiB", total_hashing);
     fmt::println("total combined memory: {:.6f} MiB", total_vector + total_hashing);
 }
-double DAG::get_readonly_size() {
+auto DAG::get_readonly_size() -> double {
     double total_vector = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         double mem_vector = (double)((*_node_levels_p)[i]._raw_data.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
