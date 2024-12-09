@@ -4,11 +4,25 @@
 #include <cstdint>
 #include "dag/subtree.hpp"
 
+#if __has_include(<Eigen/Eigen>)
+    #include <span>
+    #include <Eigen/Eigen>
+    #define CHAD_EIGEN
+#endif
+
 // TODO doxygen comments
 // TODO retrieve subtree based on pos
 
 struct DAG {
     DAG();
+    
+    #ifdef CHAD_EIGEN
+    void insert(std::span<Eigen::Vector3f> points, Eigen::Vector3f position, Eigen::Quaternionf rotation) {
+        std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+        std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+        insert(reinterpret_cast<std::array<float, 3>*>(points.data()), points.size(), *pos_p, *rot_p);
+    }
+    #endif
 
     /**
      * @brief Main function to insert new points
