@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_to_string.hpp>
 #include <vulkan/vulkan_format_traits.hpp>
-#include "vk/device/pipeline.hpp"
+#include "chad/vk/device/pipeline.hpp"
 
 namespace dv {
 auto get_reflections(const vk::ArrayProxy<std::string_view>& shader_paths)

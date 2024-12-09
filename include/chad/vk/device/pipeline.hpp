@@ -3,8 +3,8 @@
 #include <vulkan/vulkan.hpp>
 #include <spvrc/spvrc.hpp>
 #include <fmt/base.h>
-#include "vk/device/buffer.hpp"
-#include "vk/device/image.hpp"
+#include "chad/vk/device/buffer.hpp"
+#include "chad/vk/device/image.hpp"
 
 namespace dv
 {
