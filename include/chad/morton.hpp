@@ -12,7 +12,7 @@
 #include <glm/gtc/type_aligned.hpp>
 #include <parallel_hashmap/phmap.h>
 #include <morton-nd/mortonND_BMI2.h>
-#include "dag/normals.hpp"
+#include "chad/normals.hpp"
 
 struct MortonCode {
     MortonCode(glm::ivec3 vox_pos): _code(encode(vox_pos)) {}

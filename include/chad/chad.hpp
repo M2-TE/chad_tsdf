@@ -2,7 +2,7 @@
 #include <array>
 #include <vector>
 #include <cstdint>
-#include "dag/subtree.hpp"
+#include "chad/subtree.hpp"
 
 #if __has_include(<Eigen/Eigen>)
     #include <span>
@@ -13,8 +13,8 @@
 // TODO doxygen comments
 // TODO retrieve subtree based on pos
 
-struct DAG {
-    DAG();
+struct Chad {
+    Chad();
     
     #ifdef CHAD_EIGEN
     void insert(std::span<Eigen::Vector3f> points, Eigen::Vector3f position, Eigen::Quaternionf rotation) {

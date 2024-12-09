@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <parallel_hashmap/phmap.h>
-#include "dag/leaf_cluster.hpp"
+#include "chad/leaf_cluster.hpp"
 
 class NodeLevel {
     struct HashFnc {

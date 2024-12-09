@@ -3,11 +3,11 @@
 #include <chrono>
 #include <cstdint>
 #include <fmt/base.h>
-#include "dag/dag.hpp"
-#include "dag/levels.hpp"
-#include "dag/morton.hpp"
-#include "dag/octree.hpp"
-#include "dag/node.hpp"
+#include "chad/chad.hpp"
+#include "chad/levels.hpp"
+#include "chad/morton.hpp"
+#include "chad/octree.hpp"
+#include "chad/node.hpp"
 
 auto insert_octree(
     Octree& octree, 
@@ -163,7 +163,7 @@ auto insert_octree(
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
-void DAG::merge_subtree(uint_fast32_t root_addr) {
+void Chad::merge_subtree(uint_fast32_t root_addr) {
     auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
@@ -340,13 +340,13 @@ void DAG::merge_subtree(uint_fast32_t root_addr) {
     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
     fmt::println("dag  merg {:.2f}", dur);
 }
-void DAG::merge_all_subtrees() {
+void Chad::merge_all_subtrees() {
     for (auto& subtree: _subtrees) {
         merge_subtree(subtree._root_addr);
     }
 }
 
-DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
+Chad::Chad(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
     // create the main root node (will be empty still)
     for (auto i = 0; i < 9; i++) {
         (*_node_levels_p)[0]._raw_data.push_back(0);
@@ -356,7 +356,7 @@ DAG::DAG(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p
     // write root child mask to always contain all 8 children
     (*_node_levels_p)[0]._raw_data[1] = 0xff;
 }
-void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
+void Chad::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
     auto beg = std::chrono::high_resolution_clock::now();
     // convert anonymous inputs to named inputs
     glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
@@ -379,7 +379,7 @@ void DAG::insert(std::array<float, 3>* points_p, std::size_t points_count, std::
     auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
     fmt::println("full dur  {}", dur.count());
 }
-void DAG::print_stats() {
+void Chad::print_stats() {
     double total_hashing = 0.0;
     double total_vector = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
@@ -414,7 +414,7 @@ void DAG::print_stats() {
     fmt::println("total hashing memory: {:.6f} MiB", total_hashing);
     fmt::println("total combined memory: {:.6f} MiB", total_vector + total_hashing);
 }
-auto DAG::get_readonly_size() -> double {
+auto Chad::get_readonly_size() -> double {
     double total_vector = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         double mem_vector = (double)((*_node_levels_p)[i]._raw_data.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
@@ -424,7 +424,7 @@ auto DAG::get_readonly_size() -> double {
     total_vector += mem_vector;
     return total_vector;
 }
-double DAG::get_hash_size() {
+double Chad::get_hash_size() {
     double total_hashing = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         auto hashset = (*_node_levels_p)[i]._lookup_set;
@@ -438,7 +438,7 @@ double DAG::get_hash_size() {
     total_hashing += (double)hashset_size / 1024.0 / 1024.0;
     return total_hashing;
 }
-auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t{
+auto Chad::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t{
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;
     std::array<uint_fast8_t, max_depth> path;
@@ -486,16 +486,16 @@ auto DAG::debug_iterate_all_leaves_of_subtree(uint32_t root_addr) -> std::size_t
     }
     return sd_count;
 }
-auto DAG::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
+auto Chad::get_node_levels() -> std::array<std::vector<uint32_t>*, 63/3 - 1> {
     std::array<std::vector<uint32_t>*, 63/3 - 1> levels;
     for (std::size_t i = 0; i < levels.size(); i++) {
         levels[i] = &(*_node_levels_p)[i]._raw_data;
     }
     return levels;
 }
-auto DAG::get_leaf_level() -> std::vector<LeafCluster::ClusterValue>& {
+auto Chad::get_leaf_level() -> std::vector<LeafCluster::ClusterValue>& {
     return _leaf_level_p->_raw_data;
 }
-auto DAG::get_voxel_resolution() -> double {
+auto Chad::get_voxel_resolution() -> double {
     return LEAF_RESOLUTION;
 }

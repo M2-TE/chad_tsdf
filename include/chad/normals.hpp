@@ -1,5 +1,4 @@
 #pragma once
-#include "glm/geometric.hpp"
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_aligned.hpp>
