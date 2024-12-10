@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
-#include "dag/dag.hpp"
+#include "chad/chad.hpp"
 // // DEBUG
 // #include <dag/leaf_cluster.hpp>
 // #include <vk/vk.hpp>
@@ -26,12 +26,12 @@ void static read_pcl_file() {
         file.read(reinterpret_cast<char*>(&point), sizeof(glm::vec3));
     }
     fmt::println("Read {} points from file", point_count);
-    // insert into DAG and print stats
-    DAG dag;
+    // insert into CHAD TSDF and print stats
+    Chad chad;
     auto rot = glm::identity<glm::quat>();
-    dag.insert(points, glm::vec3(0, 0, 0), rot);
-    dag.print_stats();
-    dag.merge_all_subtrees();
+    chad.insert(points, glm::vec3(0, 0, 0), rot);
+    chad.print_stats();
+    chad.merge_all_subtrees();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -40,8 +40,8 @@ void static do_sphere_thing() {
     std::mt19937 gen(420);
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
 
-    // insert into tsdf DAG
-    DAG dag;
+    // insert into CHAD TSDF
+    Chad chad;
     std::vector<glm::vec3> positions {
         { 10, 10, 10 },
     };
@@ -61,7 +61,7 @@ void static do_sphere_thing() {
             point = (glm::vec3)pointd;
             point += positions[i];
         }
-        dag.insert(points, positions[i], glm::identity<glm::quat>());
+        chad.insert(points, positions[i], glm::identity<glm::quat>());
         // dag.print_stats();
         // auto beg = std::chrono::high_resolution_clock::now();
         // uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
