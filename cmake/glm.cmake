@@ -10,7 +10,11 @@ cmake_host_system_information(RESULT GLM_ENABLE_SIMD_SSE2 QUERY HAS_SSE2)
 # option(GLM_ENABLE_SIMD_SSE4_2 "Enable SSE 4.2 optimizations" OFF)
 # option(GLM_ENABLE_SIMD_AVX "Enable AVX optimizations" OFF)
 # option(GLM_ENABLE_SIMD_AVX2 "Enable AVX2 optimizations" OFF)
-FetchContent_Declare(glm GIT_REPOSITORY "https://github.com/g-truc/glm.git" GIT_TAG "1.0.1" GIT_SHALLOW ON)
+FetchContent_Declare(glm
+    GIT_REPOSITORY "https://github.com/g-truc/glm.git"
+    GIT_TAG "1.0.1"
+    GIT_SHALLOW ON
+    OVERRIDE_FIND_PACKAGE)
 FetchContent_MakeAvailable(glm)
 target_compile_definitions(${PROJECT_NAME} PRIVATE 
     "GLM_FORCE_DEPTH_ZERO_TO_ONE"

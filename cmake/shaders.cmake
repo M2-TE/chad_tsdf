@@ -8,7 +8,8 @@ FetchContent_Declare(spirv-reflect
     GIT_REPOSITORY "https://github.com/KhronosGroup/SPIRV-Reflect.git"
     GIT_TAG "vulkan-sdk-1.3.290.0"
     GIT_SHALLOW ON
-    GIT_SUBMODULES "")
+    GIT_SUBMODULES ""
+    OVERRIDE_FIND_PACKAGE)
 FetchContent_MakeAvailable(spirv-reflect)
 target_link_libraries(${PROJECT_NAME} PRIVATE spirv-reflect-static)
 
