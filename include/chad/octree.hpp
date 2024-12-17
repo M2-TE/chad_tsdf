@@ -418,6 +418,13 @@ void inline octree_insert_point(Octree& octree, const glm::vec3 point, const glm
                 if (chunk_leaf.z < min.z || chunk_leaf.z > max.z) valid = false;
                 if (!valid) continue;
 
+                // // if valid, calc real position of leaf
+                // glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
+                // // check if voxel is within truncation distance squared
+                // glm::vec3 diff = point - pos_leaf;
+                // float dist_sqr = glm::dot(diff, diff);
+                // if (dist_sqr > LEAF_RESOLUTION*LEAF_RESOLUTION*2) continue;
+
                 Octree::Node* accu_leaf_p = cluster->children[leaf_i];
                 // create new leaf if it doesnt exist yet
                 if (accu_leaf_p == nullptr) {

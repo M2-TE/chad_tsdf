@@ -228,16 +228,15 @@ auto MortonCode::normals(std::vector<std::pair<MortonCode, glm::vec3>>& morton_c
                     }
                 }
 
-
                 // figure out index
                 std::size_t normal_idx = point_it - morton_codes.cbegin();
 
                 // use these filtered nearest points to approximate the normal
                 if (nearest_points.size() >= CHAD_NORM_MIN_NEIGH) {
                     glm::vec3 normal = approximate_normal(nearest_points);
-                    // fmt::println("{}", nearest_points.size());
+
                     // flip normal if needed
-                    float normal_dot = glm::dot(normal, point_it->second - pose_pos);
+                    float normal_dot = glm::dot(normal, glm::normalize(point_it->second - pose_pos));
                     if (normal_dot < 0.0f) normal = -normal;
 
                     // write to shared normal vector

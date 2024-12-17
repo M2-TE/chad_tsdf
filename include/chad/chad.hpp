@@ -2,49 +2,46 @@
 #include <array>
 #include <vector>
 #include <cstdint>
+#include <span>
 #include "chad/subtree.hpp"
-
-#if __has_include(<Eigen/Eigen>)
-    #include <Eigen/Eigen>
-    #define CHAD_EIGEN
-#endif
 
 // TODO doxygen comments
 // TODO retrieve subtree based on pos
 
 struct Chad {
     Chad();
-    
-    #ifdef CHAD_EIGEN
-    void insert(std::vector<Eigen::Vector3f> points, Eigen::Vector3f position, Eigen::Quaternionf rotation) {
-        std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
-        std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
-        insert(reinterpret_cast<std::array<float, 3>*>(points.data()), points.size(), *pos_p, *rot_p);
-    }
-    #endif
 
     /**
      * @brief Main function to insert new points
      * 
-     * @param points_p array of 3D points
-     * @param points_count number of points
+     * @param points array of 3D points
+     * @param normals array of 3D normals
      * @param position scanner position
      * @param rotation scanner rotation
      */
-    void insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 4> rotation);
+    void insert(std::span<std::array<float, 3>> points, std::span<std::array<float, 3>> normals, std::array<float, 3> position, std::array<float, 4> rotation);
     /**
      * @brief Main function to insert new points
      * 
-     * @param points_p array of 3D points
-     * @param points_count number of points
+     * @param points array of 3D points
      * @param position scanner position
      * @param rotation scanner rotation
      */
     template<typename PosArr, typename RotArr>
-    void insert(std::vector<PosArr>& points, PosArr position, RotArr rotation) {
+    void insert(std::span<std::array<float, 3>> points, PosArr position, RotArr rotation) {
+        // interpret the position and rotation as 3/4 piece vectors
         std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
         std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
-        insert(reinterpret_cast<std::array<float, 3>*>(points.data()), points.size(), *pos_p, *rot_p);
+        // 
+        insert(points, {}, *pos_p, *rot_p);
+    }
+    template<typename PosArr, typename RotArr>
+    void insert(std::span<std::array<float, 3>> points, std::span<std::array<float, 3>> normals, PosArr position, RotArr rotation) {
+        // interpret the position and rotation as 3/4 piece vectors
+        std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+        std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+        // 
+        insert(points, normals, *pos_p, *rot_p);
     }
     /**
      * @brief Merge target subtree into the global map

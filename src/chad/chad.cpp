@@ -1,3 +1,4 @@
+#include <span>
 #include <array>
 #include <vector>
 #include <chrono>
@@ -107,7 +108,14 @@ auto insert_octree(
             for (int x = 0; x <= 1; x++, leaf_i++) {
                 // check leaf validity
                 Octree::Node* candidates = leaf_cluster->children[leaf_i];
+                // check if leaf exists
                 if (candidates == nullptr) {
+                    // assign invalid leaf value to signify no candidates
+                    cluster_sds[leaf_i] = LeafCluster::LEAF_NULL_F;
+                    continue;
+                }
+                // check if leaf has enough candidates
+                else if (candidates->leaf_accu.accu_count < CHAD_MIN_CANDIDATES) {
                     // assign invalid leaf value to signify no candidates
                     cluster_sds[leaf_i] = LeafCluster::LEAF_NULL_F;
                     continue;
@@ -296,7 +304,7 @@ void Chad::merge_subtree(uint_fast32_t root_addr) {
                     // if merged lc is not equal, insert as new cluster
                     else {
                         // check if merged lc already exists
-                        uint32_t lc_addr_new = _leaf_level_p->_raw_data.size();;
+                        uint32_t lc_addr_new = _leaf_level_p->_raw_data.size();
                         auto [iter, is_new] = _leaf_level_p->_lookup_map.emplace(merged._value, lc_addr_new);
                         if (is_new) {
                             _leaf_level_p->_unique_count++;
@@ -343,18 +351,25 @@ Chad::Chad(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level
     // write root child mask to always contain all 8 children
     (*_node_levels_p)[0]._raw_data[1] = 0xff;
 }
-void Chad::insert(std::array<float, 3>* points_p, std::size_t points_count, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
+void Chad::insert(std::span<std::array<float, 3>> points_span, std::span<std::array<float, 3>> normals_span, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
     auto beg = std::chrono::high_resolution_clock::now();
     // convert anonymous inputs to named inputs
     glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
     // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
-    std::vector<glm::vec3> points { points_count };
-    std::memcpy(points.data(), points_p, points_count * sizeof(glm::vec3));
 
-    // create morton codes to sort points and approx normals
-    auto morton_codes = MortonCode::calc(points);
-    MortonCode::sort(points, morton_codes);
-    auto normals = MortonCode::normals(morton_codes, points, position);
+    // convert input spans to vectors
+    std::vector<glm::vec3> points(points_span.size());
+    std::vector<glm::vec3> normals(points_span.size());
+    std::memcpy(points.data(), points_span.data(), points_span.size_bytes());
+    std::memcpy(normals.data(), normals_span.data(), normals_span.size_bytes());
+
+    // estimate normals manually if not provided
+    if (normals_span.size() == 0) {
+        auto morton_codes = MortonCode::calc(points);
+        MortonCode::sort(points, morton_codes);
+        normals = MortonCode::normals(morton_codes, points, position);
+    }
+
     // create octree from points and insert into DAG
     Octree octree = octree_build(points, normals);
     uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);

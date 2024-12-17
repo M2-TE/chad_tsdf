@@ -72,7 +72,7 @@ struct LeafCluster {
                 }
                 else {
                     // average the two signed distances
-                    float sd = (sd_a + sd_b) / 2.0f;
+                    float sd = (sd_a + sd_b) * 0.5f;
                     // scale signed distance to be 1.0 for each voxel unit of distance
                     sd = sd * (float)(1.0 / LEAF_RANGE_F);
                     // normalize signed distance to [-1, 1]
