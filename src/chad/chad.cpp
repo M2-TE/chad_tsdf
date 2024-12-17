@@ -114,21 +114,8 @@ auto insert_octree(
                 }
 
                 // average out the position of candidates and their normals
-                glm::vec3 avg_normal{ 0, 0, 0 };
-                glm::vec3 avg_pos{ 0, 0, 0 };
-                float avg_count = 0;
-                for (uint_fast32_t i = 0; i < candidates->leaf_candidates.size(); i++) {
-                    if (candidates->leaf_candidates[i] == nullptr) continue;
-                    // reverse engineer the index of the current candidate
-                    size_t index = candidates->leaf_candidates[i] - points.data();
-                    auto normal = normals[index];
-                    avg_normal += normal;
-                    avg_pos += *candidates->leaf_candidates[i];
-                    avg_count++;
-                }
-
-                avg_pos /= avg_count;
-                avg_normal /= avg_count;
+                glm::vec3 avg_pos = (glm::vec3)(candidates->leaf_accu.accu_pos / (double)candidates->leaf_accu.accu_count);
+                glm::vec3 avg_normal = (glm::vec3)(candidates->leaf_accu.accu_norm / (double)candidates->leaf_accu.accu_count);
 
                 // get leaf position
                 glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
@@ -369,7 +356,7 @@ void Chad::insert(std::array<float, 3>* points_p, std::size_t points_count, std:
     MortonCode::sort(points, morton_codes);
     auto normals = MortonCode::normals(morton_codes, points, position);
     // create octree from points and insert into DAG
-    Octree octree = octree_build(points);
+    Octree octree = octree_build(points, normals);
     uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
     // merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
     // store the root address of the subtree to keep track

@@ -17,7 +17,12 @@ struct Octree {
     typedef uint64_t Key; // only 63 bits valid
     typedef uint64_t Leaf;
     union Node {
-        std::array<const glm::vec3*, 8> leaf_candidates;
+        struct {
+            glm::dvec3 accu_pos;
+            glm::dvec3 accu_norm;
+            size_t accu_count;
+            // size_t padding;
+        } leaf_accu;
         std::array<Node*, 8> children;
     };
     struct MemoryBlock {
@@ -301,49 +306,10 @@ struct Octree {
                         continue;
                     }
 
-                    // count total leaf candidates in both leaves
-                    std::vector<const glm::vec3*> candidates;
-                    candidates.reserve(leaf_a->leaf_candidates.size() * 2);
-                    for (uint32_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
-                        if (leaf_a->leaf_candidates[i] != nullptr) {
-                            candidates.push_back(leaf_a->leaf_candidates[i]);
-                        }
-                        if (leaf_b->leaf_candidates[i] != nullptr) {
-                            candidates.push_back(leaf_b->leaf_candidates[i]);
-                        }
-                    }
-
-                    // simply copy into target if all candidates fit
-                    if (candidates.size() <= leaf_a->leaf_candidates.size()) {
-                        for (std::size_t i = 0; i < candidates.size(); i++) {
-                            leaf_a->leaf_candidates[i] = candidates[i];
-                        }
-                    }
-                    // merge only closest points if not
-                    else {
-                        // calc leaf position in world space
-                        glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
-                        glm::vec3 leaf_pos = (glm::vec3)leaf_chunk * (float)LEAF_RESOLUTION;
-
-                        // calc distances for each point to this leaf
-                        typedef std::pair<const glm::vec3*, float> PairedDist;
-                        std::vector<PairedDist> distances;
-                        distances.reserve(candidates.size());
-                        for (std::size_t i = 0; i < candidates.size(); i++) {
-                            glm::vec3 diff = *candidates[i] - leaf_pos;
-                            float dist_sqr = glm::dot(diff, diff);
-                            distances.emplace_back(candidates[i], dist_sqr);
-                        }
-                        // sort via distances
-                        std::sort(distances.begin(), distances.end(), [](PairedDist& a, PairedDist& b) {
-                            return a.second < b.second;
-                        });
-
-                        // insert the 8 closest points into a
-                        for (std::size_t i = 0; i < leaf_a->leaf_candidates.size(); i++) {
-                            leaf_a->leaf_candidates[i] = distances[i].first;
-                        }
-                    }
+                    // combine accumulated leaf candidates in both leaves
+                    leaf_a->leaf_accu.accu_pos += leaf_b->leaf_accu.accu_pos;
+                    leaf_a->leaf_accu.accu_norm += leaf_b->leaf_accu.accu_norm;
+                    leaf_a->leaf_accu.accu_count += leaf_b->leaf_accu.accu_count;
                 }}}
             }
             else {
@@ -360,57 +326,55 @@ struct Octree {
     std::vector<MemoryBlock> _mem_blocks;
 };
 
-// todo: needs a better name to distinguish between octree::insert and this
-void static octree_insert_point_new(Octree& octree, const glm::vec3* point_p) {
+// // todo: needs a better name to distinguish between octree::insert and this
+// void static octree_insert_point_new(Octree& octree, const glm::vec3* point_p) {
+//     // discretize position to leaf chunk
+//     glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
+//     glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
+//     glm::ivec3 chunk_base = chunk_center;
+//     // write to leaves in a 4x4x4 voxel radius around point (+2 since point is floored)
+//     for (int_fast32_t z = chunk_base.z - 1; z <= chunk_base.z + 2; z++) {
+//     for (int_fast32_t y = chunk_base.y - 1; y <= chunk_base.y + 2; y++) {
+//     for (int_fast32_t x = chunk_base.x - 1; x <= chunk_base.x + 2; x++) {
+//         // get leaf position in voxel space and insert into octree
+//         glm::ivec3 chunk_leaf = chunk_base + glm::ivec3(x, y, z);
+//         MortonCode mc { chunk_leaf };
+//         Octree::Node* leaf_p = octree.insert(mc._code);
+//         // add point_p if leaf candidate array has space left
+//         bool is_inserted = false;
+//         for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
+//             if (leaf_p->leaf_candidates[i] == nullptr) {
+//                 leaf_p->leaf_candidates[i] = point_p;
+//                 is_inserted = true;
+//                 break;
+//             }
+//         }
+//         if (is_inserted) continue;
+//         // get leaf position in world space to calc distance
+//         glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
+//         glm::vec3 diff = *point_p - pos_leaf;
+//         float dist_sqr = glm::dot(diff, diff);
+//         // try to replace furthest point with this one
+//         float dist_sqr_max = 0.0f;
+//         uint_fast8_t dist_sqr_max_i = 0;
+//         for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
+//             glm::vec3 diff = *leaf_p->leaf_candidates[i] - pos_leaf;
+//             float dist_sqr = glm::dot(diff, diff);
+//             if (dist_sqr > dist_sqr_max) {
+//                 dist_sqr_max = dist_sqr;
+//                 dist_sqr_max_i = i;
+//             }
+//         }
+//         // replace furthest point if closer
+//         if (dist_sqr < dist_sqr_max) {
+//             leaf_p->leaf_candidates[dist_sqr_max_i] = point_p;
+//         }
+//     }}}
+// }
+
+void inline octree_insert_point(Octree& octree, const glm::vec3 point, const glm::vec3 normal) {
     // discretize position to leaf chunk
-    glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
-    glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
-    glm::ivec3 chunk_base = chunk_center;
-
-    // write to leaves in a 4x4x4 voxel radius around point (+2 since point is floored)
-    for (int_fast32_t z = chunk_base.z - 1; z <= chunk_base.z + 2; z++) {
-    for (int_fast32_t y = chunk_base.y - 1; y <= chunk_base.y + 2; y++) {
-    for (int_fast32_t x = chunk_base.x - 1; x <= chunk_base.x + 2; x++) {
-        // get leaf position in voxel space and insert into octree
-        glm::ivec3 chunk_leaf = chunk_base + glm::ivec3(x, y, z);
-        MortonCode mc { chunk_leaf };
-        Octree::Node* leaf_p = octree.insert(mc._code);
-
-        // add point_p if leaf candidate array has space left
-        bool is_inserted = false;
-        for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
-            if (leaf_p->leaf_candidates[i] == nullptr) {
-                leaf_p->leaf_candidates[i] = point_p;
-                is_inserted = true;
-                break;
-            }
-        }
-        if (is_inserted) continue;
-
-        // get leaf position in world space to calc distance
-        glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
-        glm::vec3 diff = *point_p - pos_leaf;
-        float dist_sqr = glm::dot(diff, diff);
-        // try to replace furthest point with this one
-        float dist_sqr_max = 0.0f;
-        uint_fast8_t dist_sqr_max_i = 0;
-        for (uint_fast8_t i = 0; i < leaf_p->leaf_candidates.size(); i++) {
-            glm::vec3 diff = *leaf_p->leaf_candidates[i] - pos_leaf;
-            float dist_sqr = glm::dot(diff, diff);
-            if (dist_sqr > dist_sqr_max) {
-                dist_sqr_max = dist_sqr;
-                dist_sqr_max_i = i;
-            }
-        }
-        // replace furthest point if closer
-        if (dist_sqr < dist_sqr_max) {
-            leaf_p->leaf_candidates[dist_sqr_max_i] = point_p;
-        }
-    }}}
-}
-void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
-    // discretize position to leaf chunk
-    glm::vec3 chunk = *point_p * (float)(1.0 / LEAF_RESOLUTION);
+    glm::vec3 chunk = point * (float)(1.0 / LEAF_RESOLUTION);
     glm::ivec3 chunk_center = (glm::ivec3)glm::floor(chunk);
 
     // set constraints for which leaf clusters get created
@@ -454,51 +418,22 @@ void static octree_insert_point(Octree& octree, const glm::vec3* point_p) {
                 if (chunk_leaf.z < min.z || chunk_leaf.z > max.z) valid = false;
                 if (!valid) continue;
 
-                // if valid, calc real position of leaf
-                glm::vec3 pos_leaf = (glm::vec3)chunk_leaf * (float)LEAF_RESOLUTION;
-
-                // add to point to the leaf's closest points
-                Octree::Node* closestPoints = cluster->children[leaf_i];
-                // if not a single point landed on leaf yet, create new array for potential candidates
-                if (closestPoints == nullptr) {
-                    closestPoints = octree.allocate_node();
-                    closestPoints->leaf_candidates[0] = point_p;
-                    cluster->children[leaf_i] = closestPoints;
+                Octree::Node* accu_leaf_p = cluster->children[leaf_i];
+                // create new leaf if it doesnt exist yet
+                if (accu_leaf_p == nullptr) {
+                    accu_leaf_p = octree.allocate_node();
+                    cluster->children[leaf_i] = accu_leaf_p;
                 }
-                // add as a candidate for signed distance
-                else {
-                    glm::vec3 diff = *point_p - pos_leaf;
-                    float distSqr = glm::dot(diff, diff);
-                    // check to see if theres a free spot (8 points per leaf max)
-                    float furthest_distance = 0.0f;
-                    uint32_t furthest_distance_index = 0;
-                    uint32_t i = 0;
-                    for (; i < closestPoints->leaf_candidates.size(); i++) {
-                        if (closestPoints->leaf_candidates[i] == nullptr) break;
-                        // calc distance to find furthest point that can be replaced
-                        glm::vec3 diff = *closestPoints->leaf_candidates[i] - pos_leaf;
-                        float dist_sqr = glm::dot(diff, diff);
-                        if (dist_sqr > furthest_distance) {
-                            furthest_distance = dist_sqr;
-                            furthest_distance_index = i;
-                        }
-                    }
-                    // found an empty spot
-                    if (i < closestPoints->leaf_candidates.size()) {
-                        closestPoints->leaf_candidates[i] = point_p;
-                    }
-                    // replace spot with furthest point if its further than this point
-                    else if (distSqr < furthest_distance) {
-                        closestPoints->leaf_candidates[furthest_distance_index] = point_p;
-                    }
-                    // else discard point for this leaf
-                }
+                // accumulate the points contributing to this voxel
+                accu_leaf_p->leaf_accu.accu_pos += (glm::dvec3)point;
+                accu_leaf_p->leaf_accu.accu_norm += (glm::dvec3)normal;
+                accu_leaf_p->leaf_accu.accu_count++;
             }}}
         }}}
     }}}
 }
 
-auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
+auto inline octree_build(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals) -> Octree {
     auto beg = std::chrono::steady_clock::now();
 
     // round threads down to nearest power of two
@@ -513,14 +448,15 @@ auto static octree_build(std::vector<glm::vec3>& points) -> Octree {
     for (uint_fast32_t thread_i = 0; thread_i < thread_count; thread_i++) {
         uint_fast32_t point_count = points.size() / thread_count;
         if (thread_i == thread_count - 1) point_count = 0; // special value for final thread to read the rest
-        threads.emplace_back([&points, &octrees, progress, thread_i, point_count](){
+        threads.emplace_back([&points, &normals, &octrees, progress, thread_i, point_count](){
+            // set start/end iterators for this thread (points + normals)
+            auto norm_it = normals.cbegin() + progress;
             auto cur_it = points.cbegin() + progress;
             auto end_it = (point_count == 0) ? points.cend() : (cur_it + point_count);
             Octree& octree = octrees[thread_i];
             // Octree::PathCache cache(octree);
-            for (; cur_it != end_it; cur_it++) {
-                const glm::vec3* point_p = &*cur_it;
-                octree_insert_point(octree, point_p);
+            for (; cur_it != end_it; cur_it++, norm_it++) {
+                octree_insert_point(octree, *cur_it, *norm_it);
             }
         });
         progress += point_count;
