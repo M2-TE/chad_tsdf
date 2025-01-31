@@ -185,7 +185,7 @@ void Chad::insert(std::span<std::array<float, 3>> points_span, std::span<std::ar
     if (normals_span.size() == 0) {
         auto morton_codes = MortonCode::calc(points);
         MortonCode::sort(points, morton_codes);
-        normals = MortonCode::normals(morton_codes, points, position);
+        normals = MortonCode::normals_old(morton_codes, points, position);
     }
 
     // create octree from points and insert into DAG

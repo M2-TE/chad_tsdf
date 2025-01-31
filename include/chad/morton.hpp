@@ -111,7 +111,7 @@ struct MortonCode {
         // create neighbourhoods
         static constexpr size_t normal_est_point_count = 25;
         static constexpr size_t neigh_level_min = 1; // min index
-        static constexpr size_t neigh_level_max = 3; // max index
+        static constexpr size_t neigh_level_max = 8; // max index
         std::vector<NeighbourhoodMap> neigh_maps { neigh_level_max + 1 };
         for (std::size_t i = neigh_level_min - 1; i < neigh_maps.size(); i++) {
             neigh_maps[i] = neighbourhoods(morton_codes, i);
@@ -459,7 +459,7 @@ struct MortonCode {
         for (auto& thread: threads) thread.join();
 
         // remove rejected points from normals vector
-        fmt::println("rejected points: {}", rejected_points.size());
+        // fmt::println("rejected points: {}", rejected_points.size());
         std::vector<glm::vec3> normals_filtered;
         std::vector<glm::vec3> points_filtered;
         normals_filtered.reserve(normals.size() - rejected_points.size());
