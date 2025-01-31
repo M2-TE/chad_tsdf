@@ -10,6 +10,10 @@
     #include <glm/gtc/quaternion.hpp>
 #endif
 
+#if __has_include(<Eigen/Eigen>)
+    #include <Eigen/Eigen>
+#endif
+
 struct Chad {
     Chad();
 
@@ -63,6 +67,45 @@ struct Chad {
         * @param rotation scanner rotation
         */
         void insert(std::span<glm::vec3> points, glm::vec3 position, glm::quat rotation) {
+            // interpret the glm vectors as std::array
+            std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+            std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+            std::span<std::array<float, 3>> points_span {
+                reinterpret_cast<std::array<float, 3>*>(points.data()), points.size()
+            };
+            insert(points_span, {}, *pos_p, *rot_p);
+        }
+    #endif
+
+    #if __has_include(<Eigen/Eigen>)
+        /**
+        * @brief Main function to insert new points with normals
+        * 
+        * @param points array of 3D points
+        * @param position scanner position
+        * @param rotation scanner rotation
+        */
+        void insert(std::span<Eigen::Vector3f> points, std::span<Eigen::Vector3f> normals, Eigen::Vector3f position, Eigen::Quaternionf rotation) {
+            // interpret the glm vectors as std::array
+            std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+            std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+            std::span<std::array<float, 3>> points_span {
+                reinterpret_cast<std::array<float, 3>*>(points.data()), points.size()
+            };
+            std::span<std::array<float, 3>> normals_span {
+                reinterpret_cast<std::array<float, 3>*>(normals.data()), normals.size()
+            };
+            insert(points_span, normals_span, *pos_p, *rot_p);
+        }
+
+        /**
+        * @brief Main function to insert new points
+        * 
+        * @param points array of 3D points
+        * @param position scanner position
+        * @param rotation scanner rotation
+        */
+        void insert(std::span<Eigen::Vector3f> points, Eigen::Vector3f position, Eigen::Quaternionf rotation) {
             // interpret the glm vectors as std::array
             std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
             std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
