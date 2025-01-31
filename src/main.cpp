@@ -1,7 +1,6 @@
 #ifdef CHAD_MAIN
 #include <random>
 #include <fstream>
-#include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
@@ -39,7 +38,7 @@ void static do_sphere_thing() {
         { 10, 10, 10 },
     };
     // insert the same position again n times
-    for (size_t i = 0; i < 50; i++) {
+    for (size_t i = 0; i < 0; i++) {
         positions.push_back(positions[0]);
     }
     for (size_t i = 0; i < positions.size(); i++) {
@@ -55,12 +54,6 @@ void static do_sphere_thing() {
             point += positions[i];
         }
         chad.insert(points, positions[i], glm::identity<glm::quat>());
-        // dag.print_stats();
-        // auto beg = std::chrono::high_resolution_clock::now();
-        // uint32_t count = dag.debug_iterate_all_leaves_of_subtree(10);
-        // auto end = std::chrono::high_resolution_clock::now();
-        // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        // fmt::println("subtree iter dur: {}, leaf count: {}", dur, count);
     }
     // dag.merge_all_subtrees();
 }

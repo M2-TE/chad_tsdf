@@ -158,6 +158,47 @@ auto insert_octree(
     fmt::println("dag  ctor {:.2f}", dur);
     return root_addr;
 }
+
+Chad::Chad(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
+    // create the main root node (will be empty still)
+    for (auto i = 0; i < 9; i++) {
+        (*_node_levels_p)[0]._raw_data.push_back(0);
+    }
+    (*_node_levels_p)[0]._occupied_count += 9;
+    (*_node_levels_p)[0]._unique_count++;
+    // write root child mask to always contain all 8 children
+    (*_node_levels_p)[0]._raw_data[1] = 0xff;
+}
+void Chad::insert(std::span<std::array<float, 3>> points_span, std::span<std::array<float, 3>> normals_span, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
+    auto beg = std::chrono::high_resolution_clock::now();
+    // convert anonymous inputs to named inputs
+    glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
+    // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
+
+    // convert input spans to vectors
+    std::vector<glm::vec3> points(points_span.size());
+    std::vector<glm::vec3> normals(points_span.size());
+    std::memcpy(points.data(), points_span.data(), points_span.size_bytes());
+    std::memcpy(normals.data(), normals_span.data(), normals_span.size_bytes());
+
+    // estimate normals manually if not provided
+    if (normals_span.size() == 0) {
+        auto morton_codes = MortonCode::calc(points);
+        MortonCode::sort(points, morton_codes);
+        normals = MortonCode::normals(morton_codes, points, position);
+    }
+
+    // create octree from points and insert into DAG
+    Octree octree = octree_build(points, normals);
+    uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
+    // merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
+    // store the root address of the subtree to keep track
+    _subtrees.emplace_back(root_addr);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
+    fmt::println("full dur  {}", dur.count());
+}
 void Chad::merge_subtree(uint_fast32_t root_addr) {
     auto beg = std::chrono::steady_clock::now();
 
@@ -340,47 +381,6 @@ void Chad::merge_all_subtrees() {
         merge_subtree(subtree._root_addr);
     }
 }
-
-Chad::Chad(): _node_levels_p(new std::array<NodeLevel, 63/3 - 1>()), _leaf_level_p(new LeafLevel()) {
-    // create the main root node (will be empty still)
-    for (auto i = 0; i < 9; i++) {
-        (*_node_levels_p)[0]._raw_data.push_back(0);
-    }
-    (*_node_levels_p)[0]._occupied_count += 9;
-    (*_node_levels_p)[0]._unique_count++;
-    // write root child mask to always contain all 8 children
-    (*_node_levels_p)[0]._raw_data[1] = 0xff;
-}
-void Chad::insert(std::span<std::array<float, 3>> points_span, std::span<std::array<float, 3>> normals_span, std::array<float, 3> position_data, std::array<float, 4> rotation_data) {
-    auto beg = std::chrono::high_resolution_clock::now();
-    // convert anonymous inputs to named inputs
-    glm::vec3 position = { position_data[0], position_data[1], position_data[2] };
-    // glm::quat rotation = { rotation_data[0], rotation_data[1], rotation_data[2], rotation_data[3] };
-
-    // convert input spans to vectors
-    std::vector<glm::vec3> points(points_span.size());
-    std::vector<glm::vec3> normals(points_span.size());
-    std::memcpy(points.data(), points_span.data(), points_span.size_bytes());
-    std::memcpy(normals.data(), normals_span.data(), normals_span.size_bytes());
-
-    // estimate normals manually if not provided
-    if (normals_span.size() == 0) {
-        auto morton_codes = MortonCode::calc(points);
-        MortonCode::sort(points, morton_codes);
-        normals = MortonCode::normals(morton_codes, points, position);
-    }
-
-    // create octree from points and insert into DAG
-    Octree octree = octree_build(points, normals);
-    uint_fast32_t root_addr = insert_octree(octree, points, normals, *_node_levels_p, *_leaf_level_p);
-    // merge_primary(root_addr, *_node_levels_p, *_leaf_level_p);
-    // store the root address of the subtree to keep track
-    _subtrees.emplace_back(root_addr);
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
-    fmt::println("full dur  {}", dur.count());
-}
 void Chad::print_stats() {
     double total_hashing = 0.0;
     double total_vector = 0.0;
@@ -426,7 +426,7 @@ auto Chad::get_readonly_size() -> double {
     total_vector += mem_vector;
     return total_vector;
 }
-double Chad::get_hash_size() {
+auto Chad::get_hash_size() -> double {
     double total_hashing = 0.0;
     for (std::size_t i = 0; i < _node_levels_p->size(); i++) {
         auto hashset = (*_node_levels_p)[i]._lookup_set;
