@@ -5,14 +5,16 @@
 #include <span>
 #include "chad/subtree.hpp"
 
-// TODO doxygen comments
-// TODO retrieve subtree based on pos
+#if __has_include(<glm/glm.hpp>)
+    #include <glm/glm.hpp>
+    #include <glm/gtc/quaternion.hpp>
+#endif
 
 struct Chad {
     Chad();
 
     /**
-     * @brief Main function to insert new points
+     * @brief Main function to insert new points with normals
      * 
      * @param points array of 3D points
      * @param normals array of 3D normals
@@ -27,22 +29,51 @@ struct Chad {
      * @param position scanner position
      * @param rotation scanner rotation
      */
-    template<typename PosArr, typename RotArr>
-    void insert(std::span<std::array<float, 3>> points, PosArr position, RotArr rotation) {
-        // interpret the position and rotation as 3/4 piece vectors
-        std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
-        std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
-        // 
-        insert(points, {}, *pos_p, *rot_p);
+    void insert(std::span<std::array<float, 3>> points, std::array<float, 3> position, std::array<float, 4> rotation) {
+        insert(points, {}, position, rotation);
     }
-    template<typename PosArr, typename RotArr>
-    void insert(std::span<std::array<float, 3>> points, std::span<std::array<float, 3>> normals, PosArr position, RotArr rotation) {
-        // interpret the position and rotation as 3/4 piece vectors
-        std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
-        std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
-        // 
-        insert(points, normals, *pos_p, *rot_p);
-    }
+
+
+    #if __has_include(<glm/glm.hpp>)
+        /**
+        * @brief Main function to insert new points with normals
+        * 
+        * @param points array of 3D points
+        * @param position scanner position
+        * @param rotation scanner rotation
+        */
+        void insert(std::span<glm::vec3> points, std::span<glm::vec3> normals, glm::vec3 position, glm::quat rotation) {
+            // interpret the glm vectors as std::array
+            std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+            std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+            std::span<std::array<float, 3>> points_span {
+                reinterpret_cast<std::array<float, 3>*>(points.data()), points.size()
+            };
+            std::span<std::array<float, 3>> normals_span {
+                reinterpret_cast<std::array<float, 3>*>(normals.data()), normals.size()
+            };
+            insert(points_span, normals_span, *pos_p, *rot_p);
+        }
+
+        /**
+        * @brief Main function to insert new points
+        * 
+        * @param points array of 3D points
+        * @param position scanner position
+        * @param rotation scanner rotation
+        */
+        void insert(std::span<glm::vec3> points, glm::vec3 position, glm::quat rotation) {
+            // interpret the glm vectors as std::array
+            std::array<float, 3>* pos_p = reinterpret_cast<std::array<float, 3>*>(&position);
+            std::array<float, 4>* rot_p = reinterpret_cast<std::array<float, 4>*>(&rotation);
+            std::span<std::array<float, 3>> points_span {
+                reinterpret_cast<std::array<float, 3>*>(points.data()), points.size()
+            };
+            insert(points_span, {}, *pos_p, *rot_p);
+        }
+    #endif
+
+
     /**
      * @brief Merge target subtree into the global map
      * 

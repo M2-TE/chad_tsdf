@@ -11,7 +11,6 @@
 #include <glm/glm.hpp>
 #include <parallel_hashmap/phmap.h>
 #include "chad/morton.hpp"
-#include <bitset>
 
 struct Octree {
     typedef uint64_t Key; // only 63 bits valid
@@ -281,16 +280,6 @@ struct Octree {
             
             // if child nodes are leaf clusters, resolve collision between leaves
             if (depth == path_length - 3) { // todo: adjust actual path_length variable?
-                // reconstruct morton code from path
-                uint64_t code = start_key;
-                for (uint64_t k = 0; k < path_length - 2; k++) { // todo: adjust for new path length thing
-                    uint64_t part = path[k] - 1;
-                    uint64_t shift = path_length*3 - k*3 - 6;
-                    code |= part << shift;
-                }
-                // convert to actual cluster chunk position
-                glm::ivec3 cluster_chunk = MortonCode::decode(code);
-
                 uint8_t leaf_i = 0;
                 for (int32_t z = 0; z <= 1; z++) {
                 for (int32_t y = 0; y <= 1; y++) {
