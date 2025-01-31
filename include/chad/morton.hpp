@@ -111,7 +111,7 @@ struct MortonCode {
         // create neighbourhoods
         static constexpr size_t normal_est_point_count = 25;
         static constexpr size_t neigh_level_min = 1; // min index
-        static constexpr size_t neigh_level_max = 2; // max index
+        static constexpr size_t neigh_level_max = 3; // max index
         std::vector<NeighbourhoodMap> neigh_maps { neigh_level_max + 1 };
         for (std::size_t i = neigh_level_min - 1; i < neigh_maps.size(); i++) {
             neigh_maps[i] = neighbourhoods(morton_codes, i);
@@ -204,16 +204,22 @@ struct MortonCode {
                 // go over every point
                 std::vector<glm::aligned_vec4> nearest_points;
                 nearest_points.reserve(point_count);
+                for (auto& adj_point: adj_points) {
+                    // glm::vec3 diff = adj_point - it_point->second;
+                    // float dist_sqr = glm::dot(diff, diff);
+                    // if (dist_sqr > dist_max * dist_max) continue;
+                    nearest_points.emplace_back(adj_point.x, adj_point.y, adj_point.z, 0);
+                }
                 for (auto it_point = neigh.it_beg; it_point != neigh.it_end; it_point++) {
-                    const float dist_max = LEAF_RESOLUTION * static_cast<float>(1 << neigh_level) * 2;
+                    // const float dist_max = LEAF_RESOLUTION * static_cast<float>(1 << neigh_level) * 1.5f;
                     // get the N nearest points to the current point
-                    nearest_points.clear();
-                    for (auto& adj_point: adj_points) {
-                        glm::vec3 diff = adj_point - it_point->second;
-                        float dist_sqr = glm::dot(diff, diff);
-                        if (dist_sqr > dist_max * dist_max) continue;
-                        nearest_points.emplace_back(adj_point.x, adj_point.y, adj_point.z, 0);
-                    }
+                    // nearest_points.clear();
+                    // for (auto& adj_point: adj_points) {
+                    //     // glm::vec3 diff = adj_point - it_point->second;
+                    //     // float dist_sqr = glm::dot(diff, diff);
+                    //     // if (dist_sqr > dist_max * dist_max) continue;
+                    //     nearest_points.emplace_back(adj_point.x, adj_point.y, adj_point.z, 0);
+                    // }
 
                     // estimate normal for current point
                     glm::vec3 normal = approximate_normal(nearest_points);
