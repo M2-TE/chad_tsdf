@@ -200,7 +200,7 @@ void Chad::insert(std::span<std::array<float, 3>> points_span, std::span<std::ar
     fmt::println("full dur  {}", dur.count());
 }
 void Chad::merge_subtree(uint_fast32_t root_addr) {
-    auto beg = std::chrono::steady_clock::now();
+    // auto beg = std::chrono::steady_clock::now();
 
     // trackers that will be updated during traversal
     static constexpr std::size_t max_depth = 63/3 - 1;
@@ -372,9 +372,9 @@ void Chad::merge_subtree(uint_fast32_t root_addr) {
         }
     }
 
-    auto end = std::chrono::steady_clock::now();
-    auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    fmt::println("dag  merg {:.2f}", dur);
+    // auto end = std::chrono::steady_clock::now();
+    // auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+    // fmt::println("dag  merg {:.2f}", dur);
 }
 void Chad::merge_all_subtrees() {
     for (auto& subtree: _subtrees) {
