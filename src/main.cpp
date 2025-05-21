@@ -1,10 +1,9 @@
-#ifdef CHAD_MAIN
 #include <random>
 #include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
-#include "chad/chad.hpp"
+#include "chad/tsdf.hpp"
 
 void static read_pcl_file() {
     std::ifstream file;
@@ -19,11 +18,11 @@ void static read_pcl_file() {
     }
     fmt::println("Read {} points from file", point_count);
     // insert into CHAD TSDF and print stats
-    Chad chad;
-    auto rot = glm::identity<glm::quat>();
-    chad.insert(points, glm::vec3(0, 0, 0), rot);
-    chad.print_stats();
-    chad.merge_all_subtrees();
+    // Chad chad;
+    // auto rot = glm::identity<glm::quat>();
+    // chad.insert(points, glm::vec3(0, 0, 0), rot);
+    // chad.print_stats();
+    // chad.merge_all_subtrees();
 }
 void static do_sphere_thing() {
     // generate random point data
@@ -33,7 +32,7 @@ void static do_sphere_thing() {
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
 
     // insert into CHAD TSDF
-    Chad chad;
+    chad::TSDFMap map;
     std::vector<glm::vec3> positions {
         { 10, 10, 10 },
     };
@@ -53,7 +52,7 @@ void static do_sphere_thing() {
             point = (glm::vec3)pointd;
             point += positions[i];
         }
-        chad.insert(points, positions[i], glm::identity<glm::quat>());
+        map.insert(points, positions[i]);
     }
     // dag.merge_all_subtrees();
 }
@@ -61,4 +60,3 @@ int main() {
     if (false) read_pcl_file();
     else do_sphere_thing();
 }
-#endif // defined(CHAD_MAIN)
