@@ -1,6 +1,6 @@
 #pragma once
-#include <span>
 #include <array>
+#include <vector>
 #include <cstdint>
 #include <sys/mman.h>
 #include <glm/glm.hpp>
@@ -20,9 +20,9 @@ namespace chad {
         // Default constructor for ChadTSDF
         TSDFMap(float voxel_resolution = 0.05f);
         // Pointcloud insertion using Eigen::Vector3f points
-        void insert(const std::span<Eigen::Vector3f> points, const Eigen::Vector3f position);
+        void insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f position);
         // Pointcloud insertion using glm::vec3 points
-        void insert(const std::span<glm::vec3> points, const glm::vec3 position);
+        void insert(const std::vector<glm::vec3>& points, const glm::vec3 position);
 
     private:
         const float _voxel_resolution;
