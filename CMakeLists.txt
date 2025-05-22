@@ -10,7 +10,7 @@ include("cmake/options_global.cmake")
 include("cmake/options_compiler.cmake")
 
 # create chad tsdf library
-file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/*.cpp")
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
@@ -23,7 +23,7 @@ include("cmake/morton.cmake")
 
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)
-    add_executable(chad_executable "src/main.cpp")
+    add_executable(chad_executable "src/chad/main.cpp")
     target_link_libraries(chad_executable PRIVATE chad::tsdf)
     target_link_libraries(chad_executable PRIVATE glm::glm)
     target_compile_definitions(chad_executable PRIVATE

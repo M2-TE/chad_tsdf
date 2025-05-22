@@ -1,15 +1,17 @@
 #include <chrono>
 #include <cstdint>
 #include <fmt/base.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_aligned.hpp>
 #include <gtl/phmap.hpp>
 #include "chad/detail/morton_code.hpp"
 
 namespace {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
     template<typename T, glm::qualifier P>
-    auto inline estimate_normal(const std::vector<glm::vec<4, T, P>>& points) -> glm::vec3 {
+    auto inline estimate_normal(const std::vector<glm::vec<3, T, P>>& points) -> glm::vec3 {
         // calculate centroid by through coefficient average
-        glm::vec<4, T, P> centroid { 0, 0, 0, 0 };
+        glm::vec<3, T, P> centroid { 0, 0, 0 };
         for (const auto& point: points) {
             centroid += point;
         }
@@ -36,16 +38,15 @@ namespace {
         zz *= recip;
 
         // weighting linear regression based on square determinant
-        glm::vec<4, T, P> weighted_dir = { 0, 0, 0, 0 };
+        glm::vec<3, T, P> weighted_dir = { 0, 0, 0 };
 
         // determinant x
         {
             T det_x = yy*zz - yz*yz;
-            glm::vec<4, T, P> axis_dir = {
+            glm::vec<3, T, P> axis_dir = {
                 det_x,
                 xz*yz - xy*zz,
-                xy*yz - xz*yy,
-                0.0
+                xy*yz - xz*yy
             };
             T weight = det_x * det_x;
             if (glm::dot(weighted_dir, axis_dir) < 0.0) weight = -weight;
@@ -54,11 +55,10 @@ namespace {
         // determinant y
         {
             T det_y = xx*zz - xz*xz;
-            glm::vec<4, T, P> axis_dir = {
+            glm::vec<3, T, P> axis_dir = {
                 xz*yz - xy*zz,
                 det_y,
-                xy*xz - yz*xx,
-                0.0
+                xy*xz - yz*xx
             };
             T weight = det_y * det_y;
             if (glm::dot(weighted_dir, axis_dir) < 0.0) weight = -weight;
@@ -67,11 +67,10 @@ namespace {
         // determinant z
         {
             T det_z = xx*yy - xy*xy;
-            glm::vec<4, T, P> axis_dir = {
+            glm::vec<3, T, P> axis_dir = {
                 xy*yz - xz*yy,
                 xy*xz - yz*xx,
-                det_z,
-                0.0
+                det_z
             };
             T weight = det_z * det_z;
             if (glm::dot(weighted_dir, axis_dir) < 0.0) weight = -weight;
@@ -85,7 +84,7 @@ namespace {
 }
 
 namespace chad::detail {
-    struct MortonNeighbourhood { MortonVector::const_iterator neigh_beg, neigh_end; };
+    struct MortonNeighbourhood { MortonVector::const_iterator beg, end; };
     using MortonNeighbourhoodMap = gtl::parallel_flat_hash_map<MortonCode, MortonNeighbourhood>;
     auto inline build_neighbourhood_map(const MortonVector& points_mc, const uint32_t level) -> MortonNeighbourhoodMap {
         auto beg = std::chrono::high_resolution_clock::now();
@@ -112,22 +111,20 @@ namespace chad::detail {
         // iterate through all points to build neighbourhoods
         for (auto morton_it = points_mc.cbegin()+1; morton_it != points_mc.cend(); morton_it++) {
             // get morton codes from current point and current neighbourhood
-            MortonCode point_mc = morton_it->second;
-            MortonCode neigh_mc = neigh_it->second.neigh_beg->second;
-            point_mc._value &= neigh_mask;
-            neigh_mc._value &= neigh_mask;
+            MortonCode point_mc = morton_it->second._value & neigh_mask;
+            MortonCode neigh_mc = neigh_it->second.beg->second;
 
             // check if the current point doesnt fit the neighbourhood
             if (point_mc != neigh_mc) {
                 // set end() iterator for current neighbourhood
-                neigh_it->second.neigh_end = morton_it;
+                neigh_it->second.end = morton_it;
                 // count points and neighbourhoods
                 neigh_count++;
-                neigh_points += std::distance(neigh_it->second.neigh_beg, morton_it);
+                neigh_points += std::distance(neigh_it->second.beg, morton_it);
                 if (neigh_count >= neigh_threshhold_checkup) {
                     // ensure enough points were placed in the neighbourhoods
                     if (neigh_points < neigh_threshhold_abort) {
-                        fmt::println("neigh {}  (aborted)", level);
+                        fmt::println("nei   {}  (aborted)", level);
                         return {};
                     }
                 }
@@ -137,20 +134,21 @@ namespace chad::detail {
             }
         }
         // set end() iterator for final neighbourhood
-        neigh_it->second.neigh_end = points_mc.cend();
+        neigh_it->second.end = points_mc.cend();
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("neigh {}  {:.2f}", level, dur);
+        fmt::println("nei   {}  {:.2f}", level, dur);
         return neigh_map;
     }
     auto estimate_normals(const MortonVector& points_mc, const glm::vec3 position) -> std::vector<glm::vec3> {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // build morton code neighbourhood maps starting from the leaf level
+        uint32_t neigh_level = 0;
         MortonNeighbourhoodMap neigh_map;
-        for (uint32_t level_i = 0; level_i < 8; level_i++) {
-            neigh_map = build_neighbourhood_map(points_mc, level_i);
+        for (; neigh_level < 8; neigh_level++) {
+            neigh_map = build_neighbourhood_map(points_mc, neigh_level);
             if (!neigh_map.empty()) break;
         }
         // verify that it found a fitting neighbourhood map
@@ -162,7 +160,62 @@ namespace chad::detail {
         
         beg = std::chrono::high_resolution_clock::now();
         std::vector<glm::vec3> normals;
-        // TODO
+        normals.resize(points_mc.size());
+        
+        // iterate over all neighbourhoods
+        for (const auto& neigh_entry: neigh_map) {
+            MortonCode neigh_mc = neigh_entry.first;
+            glm::ivec3 neigh_pos = neigh_mc.decode();
+
+            // gather adjacent neighbourhoods
+            uint32_t point_count = 0;
+            std::vector<MortonNeighbourhood> neigh_adj;
+            for (int32_t z = -1; z <= +1; z++) {
+            for (int32_t y = -1; y <= +1; y++) {
+            for (int32_t x = -1; x <= +1; x++) {
+                // construct neighbourhood position with offset
+                glm::ivec3 offset { x, y, z };
+                offset *= 1 << neigh_level;
+                MortonCode mc_adj { neigh_pos + offset };
+                // attempt to find this neighbourhood in the map
+                auto neigh_adj_it = neigh_map.find(mc_adj._value);
+                if (neigh_adj_it != neigh_map.cend()) {
+                    MortonNeighbourhood neigh = neigh_adj_it->second;
+                    neigh_adj.push_back(neigh);
+                    // add point count from this neighbourhood
+                    point_count += std::distance(neigh.beg, neigh.end);
+                }
+            }}}
+
+            // gather points of all adjacent neighbourhoods
+            std::vector<glm::aligned_vec3> points_adj;
+            points_adj.reserve(point_count);
+            for (const auto& neigh: neigh_adj) {
+                for (auto it = neigh.beg; it != neigh.end; it++) {
+                    points_adj.push_back(it->first);
+                }
+            }
+            
+            // estimate normal of points
+            glm::vec3 normal;
+            if (points_adj.size() > 8) {
+                normal = estimate_normal(points_adj);
+            }
+            else {
+                fmt::println("TODO: assign fake normals when theres insufficient data");
+            }
+            // assign this normal to all center neighbourhood points
+            MortonNeighbourhood neigh = neigh_entry.second;
+            for (auto point_it = neigh.beg; point_it != neigh.end; point_it++) {
+                // flip normal if needed
+                float normal_dot = glm::dot(normal, glm::normalize(point_it->first - position));
+                if (normal_dot < 0.0f) normal = -normal;
+
+                // store normal
+                size_t point_index = std::distance(points_mc.cbegin(), point_it);
+                normals[point_index] = normal;
+            }
+        }
 
         end = std::chrono::high_resolution_clock::now();
         dur = std::chrono::duration<double, std::milli> (end - beg).count();
