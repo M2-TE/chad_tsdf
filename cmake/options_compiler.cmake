@@ -21,10 +21,10 @@ if (MSVC)
 elseif (UNIX)
     # global compile options
     add_compile_options(
-        "-march=native"
         "-Wall"
         "-Wextra"
         "-Wpedantic"
+        "-mbmi2"
         )
     if (CHAD_USE_FAST_MATH)
         add_compile_options("-ffast-math")
