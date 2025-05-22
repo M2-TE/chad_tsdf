@@ -2,9 +2,6 @@
 #include <array>
 #include <vector>
 #include <cstdint>
-#include <sys/mman.h>
-#include <glm/glm.hpp>
-#include <Eigen/Eigen>
 #include "chad/level.hpp"
 
 namespace chad {
@@ -19,10 +16,10 @@ namespace chad {
     struct TSDFMap {
         // Default constructor for ChadTSDF
         TSDFMap(float voxel_resolution = 0.05f);
-        // Pointcloud insertion using Eigen::Vector3f points
-        void insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f position);
-        // Pointcloud insertion using glm::vec3 points
-        void insert(const std::vector<glm::vec3>& points, const glm::vec3 position);
+
+        // insert point using std::array<float, 3>, glm::vec3 or Eigen::Vector3f
+        template<typename Point>
+        void insert(const std::vector<Point>& points, const Point position);
 
     private:
         const float _voxel_resolution;

@@ -1,7 +1,6 @@
 #include <random>
 #include <fstream>
 #include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <fmt/base.h>
 #include "chad/tsdf.hpp"
 
@@ -36,10 +35,10 @@ void static do_sphere_thing() {
     std::vector<glm::vec3> positions {
         { 10, 10, 10 },
     };
-    // insert the same position again n times
-    for (size_t i = 0; i < 0; i++) {
-        positions.push_back(positions[0]);
-    }
+    // // insert the same position again n times
+    // for (size_t i = 0; i < 0; i++) {
+    //     positions.push_back(positions[0]);
+    // }
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
             glm::dvec3 pointd = {

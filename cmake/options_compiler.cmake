@@ -25,7 +25,7 @@ elseif (UNIX)
         "-Wall"
         "-Wextra"
         "-Wpedantic"
-        "-fno-strict-aliasing")
+        )
     if (CHAD_USE_FAST_MATH)
         add_compile_options("-ffast-math")
     endif()

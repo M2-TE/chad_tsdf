@@ -1,12 +1,14 @@
 #include <chrono>
 #include <execution>
 #include <fmt/base.h>
+#include <glm/glm.hpp>
+#include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
 #include "chad/morton_code.hpp"
 #include "chad/normal_estimation.hpp"
 
-namespace {
-    auto calc_mc_from_points(const std::vector<glm::vec3>& points, float voxel_resolution) -> std::vector<std::pair<glm::vec3, chad::MortonCode>> {
+namespace chad::detail {
+    auto inline calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // calc reciprocal of voxel resolution for later
@@ -19,16 +21,15 @@ namespace {
             // convert to voxel coordinate and discretize with floor()
             glm::vec3 point_discretized = glm::floor(point * voxel_reciprocal);
             // create morton code from discretized integer position
-            chad::MortonCode mc { glm::ivec3(point_discretized) };
-            points_mc.push_back({ point, mc });
+            points_mc.emplace_back(point, glm::ivec3(point_discretized));
         }
 
         auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
-        fmt::println("mc calc  {}", dur.count());
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("mc calc  {:.2f}", dur);
         return points_mc;
     }
-    auto sort_points_by_mc(std::vector<std::pair<glm::vec3, chad::MortonCode>>& points_mc) -> std::vector<glm::vec3> {
+    auto inline sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3> {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // sort points using morton codes
@@ -45,8 +46,8 @@ namespace {
         }
 
         auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg);
-        fmt::println("mc sort  {}", dur.count());
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("mc sort  {:.2f}", dur);
         return points_sorted;
     }
 }
@@ -54,7 +55,27 @@ namespace {
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution): _voxel_resolution(voxel_resolution) {
     }
-    void TSDFMap::insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f position) {
+    template<> void TSDFMap::insert<glm::vec3>(const std::vector<glm::vec3>& points, const glm::vec3 position) {
+        auto beg = std::chrono::high_resolution_clock::now();
+        fmt::println("Inserting {} points", points.size());
+
+        // should always calculate normals for now
+        if (true) {
+            // sort points by their morton code, discretized to the voxel resolution
+            auto points_mc = detail::calc_mc_from_points(points, _voxel_resolution);
+            auto points_sorted = detail::sort_points_by_mc(points_mc);
+            // estimate the normal of every point
+            auto normals = detail::estimate_normals(points_mc, position);
+        }
+
+        // insert into current submap octree
+        // TODO: use 32-bit indexing, full 8-child nodes, insert signed distance and weight (double prec)
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("total    {:.2f}", dur);
+    }
+    template<> void TSDFMap::insert<Eigen::Vector3f>(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f position) {
         std::vector<glm::vec3> glm_points;
         glm_points.reserve(points.size());
         for (const auto& point: points) {
@@ -62,17 +83,12 @@ namespace chad {
         }
         insert(glm_points, glm::vec3{ position.x(), position.y(), position.z() });
     }
-    void TSDFMap::insert(const std::vector<glm::vec3>& points, const glm::vec3) {
-        fmt::println("Inserting {} points", points.size());
-
-        // sort points by their morton code, discretized to the voxel resolution
-        auto points_mc = calc_mc_from_points(points, _voxel_resolution);
-        auto points_sorted = sort_points_by_mc(points_mc);
-
-        // estimate the normal of every point
-        auto normals = estimate_normals(points_mc);
-
-        // insert into current submap octree
-        // TODO: use 32-bit indexing, full 8-child nodes, insert signed distance and weight (double prec)
+    template<> void TSDFMap::insert<std::array<float, 3>>(const std::vector<std::array<float, 3>>& points, const std::array<float, 3> position) {
+        std::vector<glm::vec3> glm_points;
+        glm_points.reserve(points.size());
+        for (const auto& point: points) {
+            glm_points.emplace_back(point[0], point[1], point[2]);
+        }
+        insert(glm_points, glm::vec3{ position[0], position[1], position[2] });
     }
 }

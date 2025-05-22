@@ -25,4 +25,8 @@ include("cmake/morton.cmake")
 if (PROJECT_IS_TOP_LEVEL)
     add_executable(chad_executable "src/main.cpp")
     target_link_libraries(chad_executable PRIVATE chad::tsdf)
+    target_link_libraries(chad_executable PRIVATE glm::glm)
+    target_compile_definitions(chad_executable PRIVATE
+        "GLM_FORCE_ALIGNED_GENTYPES"
+        "GLM_FORCE_INTRINSICS")
 endif()
