@@ -165,6 +165,7 @@ namespace chad::detail {
         // iterate over all neighbourhoods
         for (const auto& neigh_entry: neigh_map) {
             MortonCode neigh_mc = neigh_entry.first;
+            MortonNeighbourhood neigh = neigh_entry.second;
             glm::ivec3 neigh_pos = neigh_mc.decode();
 
             // gather adjacent neighbourhoods
@@ -187,33 +188,47 @@ namespace chad::detail {
                 }
             }}}
 
+            // supersample in case there are too many points
+            static constexpr uint32_t max_points = 64;
+            uint32_t step = point_count / max_points + 1;
+
             // gather points of all adjacent neighbourhoods
             std::vector<glm::aligned_vec3> points_adj;
-            points_adj.reserve(point_count);
+            points_adj.reserve(max_points);
+            uint32_t counter = 0;
             for (const auto& neigh: neigh_adj) {
                 for (auto it = neigh.beg; it != neigh.end; it++) {
-                    points_adj.push_back(it->first);
+                    if (counter++ >= step) {
+                        points_adj.push_back(it->first);
+                        counter = 0;
+                    }
                 }
             }
-            
-            // estimate normal of points
-            glm::vec3 normal;
+
             if (points_adj.size() > 8) {
-                normal = estimate_normal(points_adj);
+                // estimate normal of points when theres sufficient data
+                glm::vec3 normal = estimate_normal(points_adj);
+
+                // assign this normal to all center neighbourhood points
+                for (auto point_it = neigh.beg; point_it != neigh.end; point_it++) {
+                    // flip normal if needed
+                    float normal_dot = glm::dot(normal, glm::normalize(position - point_it->first));
+                    if (normal_dot < 0.0f) normal = -normal;
+
+                    // store normal
+                    size_t point_index = std::distance(points_mc.cbegin(), point_it);
+                    normals[point_index] = normal;
+                }
             }
             else {
-                fmt::println("TODO: assign fake normals when theres insufficient data");
-            }
-            // assign this normal to all center neighbourhood points
-            MortonNeighbourhood neigh = neigh_entry.second;
-            for (auto point_it = neigh.beg; point_it != neigh.end; point_it++) {
-                // flip normal if needed
-                float normal_dot = glm::dot(normal, glm::normalize(point_it->first - position));
-                if (normal_dot < 0.0f) normal = -normal;
+                // otherwise use normalized vector from point to position as normal
+                for (auto point_it = neigh.beg; point_it != neigh.end; point_it++) {
+                    glm::vec3 normal = glm::normalize(position - point_it->first);
 
-                // store normal
-                size_t point_index = std::distance(points_mc.cbegin(), point_it);
-                normals[point_index] = normal;
+                    // store normal
+                    size_t point_index = std::distance(points_mc.cbegin(), point_it);
+                    normals[point_index] = normal;
+                }
             }
         }
 

@@ -33,10 +33,10 @@ void static do_sphere_thing() {
     // insert into CHAD TSDF
     chad::TSDFMap map;
     std::vector<glm::vec3> positions {
-        { 10, 10, 10 },
+        { 0, 0, 0 },
     };
-    // // insert the same position again n times
-    // for (size_t i = 0; i < 0; i++) {
+    // insert the same position again n times
+    // for (size_t i = 0; i < 10; i++) {
     //     positions.push_back(positions[0]);
     // }
     for (size_t i = 0; i < positions.size(); i++) {
