@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdint>
 
-namespace chad {
+namespace chad::detail {
     template<typename T> struct VirtualArray {
         VirtualArray(size_t virtual_capacity = 0xffffffff);
         ~VirtualArray();

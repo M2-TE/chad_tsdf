@@ -1,12 +1,12 @@
 #pragma once
+#include <functional>
 #if !defined(__BMI2__)
 #   error "Requires BMI2 instruction set"
 #endif
-#include <libmorton/morton.h>
-#include <gtl/phmap.hpp>
 #include <glm/glm.hpp>
+#include <libmorton/morton.h>
 
-namespace chad {
+namespace chad::detail {
     struct MortonCode {
         MortonCode(uint64_t value): _value(value) {}
         MortonCode(glm::ivec3 vox_pos) noexcept {
@@ -32,11 +32,15 @@ namespace chad {
 
         uint64_t _value;
     };
+
+    using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
+    auto calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector;
+    auto sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3>;
 }
 
 namespace std {
-    template<> struct hash<chad::MortonCode> {
-        size_t inline operator()(const chad::MortonCode& mc) const noexcept {
+    template<> struct hash<chad::detail::MortonCode> {
+        size_t inline operator()(const chad::detail::MortonCode& mc) const noexcept {
             return mc._value;
         }
     };

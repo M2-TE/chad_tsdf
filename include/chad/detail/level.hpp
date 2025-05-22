@@ -1,10 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <gtl/phmap.hpp>
-#include "chad/leaf_cluster.hpp"
-#include "chad/virtual_array.hpp"
+#include "chad/detail/leaf_cluster.hpp"
+#include "chad/detail/virtual_array.hpp"
 
-namespace chad{
+namespace chad::detail {
     using NodeAddress = uint32_t;
     struct NodeLevel {
         struct FncHash {

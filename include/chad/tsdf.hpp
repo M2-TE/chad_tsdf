@@ -2,9 +2,9 @@
 #include <array>
 #include <vector>
 #include <cstdint>
-#include "chad/level.hpp"
+#include "chad/detail/level.hpp"
 
-namespace chad {
+namespace chad::detail {
     struct Submap {
         uint32_t _root_tsdfs;
         uint32_t _root_weights;
@@ -12,6 +12,8 @@ namespace chad {
         // glm::vec3 _bb_min;
         // glm::vec3 _bb_max;
     };
+}
+namespace chad {
 
     struct TSDFMap {
         // Default constructor for ChadTSDF
@@ -23,8 +25,8 @@ namespace chad {
 
     private:
         const float _voxel_resolution;
-        std::vector<Submap> _submaps;
-        std::array<NodeLevel, 20> _node_levels;
-        LeafClusterLevel _leafcluster_level;
+        std::vector<detail::Submap> _submaps;
+        std::array<detail::NodeLevel, 20> _node_levels;
+        detail::LeafClusterLevel _leafcluster_level;
     };
 }

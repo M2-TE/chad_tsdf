@@ -6,10 +6,10 @@
 #endif
 #include <cstdint>
 #include <iostream>
-#include "chad/virtual_array.hpp"
-#include "chad/leaf_cluster.hpp"
+#include "chad/detail/virtual_array.hpp"
+#include "chad/detail/leaf_cluster.hpp"
 
-namespace chad {
+namespace chad::detail {
     namespace {
         auto allocate_virt_mem(size_t virtual_capacity) -> void* {
             int prot = PROT_READ | PROT_WRITE;

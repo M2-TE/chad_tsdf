@@ -1,56 +1,10 @@
 #include <chrono>
-#include <execution>
 #include <fmt/base.h>
 #include <glm/glm.hpp>
 #include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
-#include "chad/morton_code.hpp"
-#include "chad/normal_estimation.hpp"
-
-namespace chad::detail {
-    auto inline calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector {
-        auto beg = std::chrono::high_resolution_clock::now();
-
-        // calc reciprocal of voxel resolution for later
-        const float voxel_reciprocal = float(1.0 / double(voxel_resolution));
-
-        // generate morton codes from discretized points
-        std::vector<std::pair<glm::vec3, chad::MortonCode>> points_mc;
-        points_mc.reserve(points.size());
-        for (const auto& point: points) {
-            // convert to voxel coordinate and discretize with floor()
-            glm::vec3 point_discretized = glm::floor(point * voxel_reciprocal);
-            // create morton code from discretized integer position
-            points_mc.emplace_back(point, glm::ivec3(point_discretized));
-        }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc calc  {:.2f}", dur);
-        return points_mc;
-    }
-    auto inline sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3> {
-        auto beg = std::chrono::high_resolution_clock::now();
-
-        // sort points using morton codes
-        auto mc_sorter = [](const auto& a, const auto& b){
-            return a.second._value > b.second._value;
-        };
-        std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
-        
-        // store isolated sorted points
-        std::vector<glm::vec3> points_sorted;
-        points_sorted.reserve(points_mc.size());
-        for (const auto& mc_point: points_mc) {
-            points_sorted.push_back(mc_point.first);
-        }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc sort  {:.2f}", dur);
-        return points_sorted;
-    }
-}
+#include "chad/detail/morton_code.hpp"
+#include "chad/detail/normal_estimation.hpp"
 
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution): _voxel_resolution(voxel_resolution) {

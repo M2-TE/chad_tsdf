@@ -2,7 +2,7 @@
 #include <limits>
 #include <cstdint>
 
-namespace chad {
+namespace chad::detail {
     struct LeafCluster {
         uint64_t _value;
         static constexpr float LEAF_NULL_F = 999.0f;
