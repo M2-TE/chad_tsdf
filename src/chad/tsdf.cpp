@@ -3,8 +3,25 @@
 #include <glm/glm.hpp>
 #include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
-#include "chad/detail/morton_code.hpp"
-#include "chad/detail/normal_estimation.hpp"
+#include "chad/detail/morton.hpp"
+#include "chad/detail/normals.hpp"
+
+namespace chad::detail {
+    void octree_stuff(Octree& octree, const MortonVector& points_mc) {
+        auto beg = std::chrono::high_resolution_clock::now();
+        for (const auto& point_mc: points_mc) {
+            Octree::Leaf& leaf_a = octree.insert(point_mc.second);
+            // leaf_a._weight = 69;
+            // Octree::Leaf& leaf_b = octree.insert(point_mc.second);
+            // fmt::println("{}", leaf_b._weight);
+
+            // break;
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("oct ins  {:.2f}", dur);
+    }
+}
 
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution): _voxel_resolution(voxel_resolution) {
@@ -13,17 +30,14 @@ namespace chad {
         auto beg = std::chrono::high_resolution_clock::now();
         fmt::println("Inserting {} points", points.size());
 
-        // should always calculate normals for now
-        if (true) {
-            // sort points by their morton code, discretized to the voxel resolution
-            auto points_mc = detail::calc_mc_from_points(points, _voxel_resolution);
-            auto points_sorted = detail::sort_points_by_mc(points_mc);
-            // estimate the normal of every point
-            auto normals = detail::estimate_normals(points_mc, position);
-        }
+        // sort points by their morton code, discretized to the voxel resolution
+        auto points_mc = detail::calc_mc_from_points(points, _voxel_resolution);
+        [[maybe_unused]] auto points_sorted = detail::sort_points_by_mc(points_mc);
+        // estimate the normal of every point
+        auto normals = detail::estimate_normals(points_mc, position);
 
         // insert into current submap octree
-        // TODO: use 32-bit indexing, full 8-child nodes, insert signed distance and weight (double prec)
+        detail::octree_stuff(_current_submap, points_mc);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();

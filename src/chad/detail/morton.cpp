@@ -1,7 +1,7 @@
 #include <chrono>
 #include <execution>
 #include <fmt/base.h>
-#include "chad/detail/morton_code.hpp"
+#include "chad/detail/morton.hpp"
 
 namespace chad::detail {
     auto calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector {

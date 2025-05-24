@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include "chad/detail/level.hpp"
+#include "chad/detail/octree.hpp"
 
 namespace chad::detail {
     struct Submap {
@@ -28,5 +29,6 @@ namespace chad {
         std::vector<detail::Submap> _submaps;
         std::array<detail::NodeLevel, 20> _node_levels;
         detail::LeafClusterLevel _leafcluster_level;
+        detail::Octree _current_submap;
     };
 }

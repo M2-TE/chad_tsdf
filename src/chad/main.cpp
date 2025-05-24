@@ -25,7 +25,7 @@ void static read_pcl_file() {
 }
 void static do_sphere_thing() {
     // generate random point data
-    std::vector<glm::vec3> points { 1'000'000 };
+    std::vector<glm::vec3> points { 100'000 };
     std::random_device rd;
     std::mt19937 gen(420);
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);

@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_aligned.hpp>
 #include <gtl/phmap.hpp>
-#include "chad/detail/morton_code.hpp"
+#include "chad/detail/morton.hpp"
 
 namespace {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html

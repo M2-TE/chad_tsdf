@@ -18,7 +18,5 @@ if (NOT glm_FOUND)
         SYSTEM)
     FetchContent_MakeAvailable(glm)
 endif()
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    "GLM_FORCE_ALIGNED_GENTYPES"
-    "GLM_FORCE_INTRINSICS")
+target_compile_definitions(${PROJECT_NAME} PRIVATE "GLM_FORCE_INTRINSICS")
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
