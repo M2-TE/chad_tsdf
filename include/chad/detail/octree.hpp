@@ -16,7 +16,7 @@ namespace chad::detail {
             _leaves.push_back({}); // dummy leaf node
         }
 
-        auto insert(const MortonCode mc) -> Leaf& {
+        auto insert(MortonCode mc) -> Leaf& {
             // see if node at given level has been created already
             static constexpr uint32_t lookup_depth = 18;
             static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
@@ -24,8 +24,11 @@ namespace chad::detail {
             auto [node_it, node_emplaced] = _node_lookup.try_emplace(mc._value & lookup_mask, nullptr);
             
             // start at lookup_depth + 1 when node was found, otherwise start from root
-            uint32_t depth = !node_emplaced ? lookup_depth + 1 : 0;
-            Node* node_p   = !node_emplaced ? node_it->second  : &_nodes[0];
+            uint32_t depth = 0;
+            Node* node_p = &_nodes[0];
+            if (!node_emplaced) depth = lookup_depth + 1;
+            if (!node_emplaced) node_p = node_it->second;
+            
             while (depth < 20) {
                 uint64_t shift_amount = (20 - depth) * 3; // 3 bits per depth, assuming 21 levels
                 uint64_t child_index = (mc._value >> shift_amount) & 0b111;
