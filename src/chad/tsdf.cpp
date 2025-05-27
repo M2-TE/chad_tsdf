@@ -7,6 +7,21 @@
 #include "chad/detail/morton.hpp"
 #include "chad/detail/normals.hpp"
 
+namespace chad::detail {
+    void print_vec(glm::vec3 vec) {
+        fmt::println("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
+    }
+    void print_vec(glm::aligned_vec3 vec) {
+        fmt::println("{:.4f} {:.4f} {:.4f}", vec.x, vec.y, vec.z);
+    }
+    void print_vec(glm::ivec3 vec) {
+        fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
+    }
+    void print_vec(glm::aligned_ivec3 vec) {
+        fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
+    }
+}
+
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution, float truncation_distance): _voxel_resolution(voxel_resolution), _truncation_distance(truncation_distance) {
     }
@@ -54,20 +69,33 @@ namespace chad {
             const detail::MortonCode mc = points_mc[i].second;
             // const glm::ivec3 point_voxel = mc.decode();
 
-            // get all voxels along ray within truncation distance via 3D version of bresenham's line algorithm
+            // get all voxels along ray within truncation distance via variant of DDA line algorithm (-> "A fast voxel traversal algorithm for ray tracing")
+            // as Bresehnham's line algorithm misses some voxels
             std::vector<glm::ivec3> traversed_voxels;
             {
-                // calc ray starting position
-                glm::aligned_vec3 direction = glm::normalize(point - glm::aligned_vec3(position));
-                glm::aligned_vec3 start = point - direction * _truncation_distance;
-                glm::aligned_vec3 stop  = point + direction * _truncation_distance;
-                glm::aligned_ivec3 start_voxel = glm::floor(start * voxel_reciprocal);
-                glm::aligned_ivec3 stop_voxel  = glm::floor(stop  * voxel_reciprocal);
+                // phase 1: initialization
+                const glm::aligned_vec3  direction = glm::normalize(point - glm::aligned_vec3(position));
+                const glm::aligned_vec3  direction_recip = 1.0f / direction;
+                const glm::aligned_vec3  start = point - direction * _truncation_distance;
+                const glm::aligned_vec3  final = point + direction * _truncation_distance;
+                const glm::aligned_ivec3 voxel_start = glm::floor(start * voxel_reciprocal);
+                const glm::aligned_ivec3 voxel_final = glm::floor(final * voxel_reciprocal); // this + final could be optimized away
+                // stepN: direction of increment for each dimension
+                const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
+                // tDeltaN: distance of "direction" needed to traverse an entire voxel width
+                const glm::aligned_vec3  voxel_step_delta = _voxel_resolution * direction_recip;
+                // tMaxN: distance of "direction" needed for each separate dimension to cross current voxel boundary
+                glm::aligned_vec3 voxel_step_max = (glm::aligned_vec3(voxel_start + voxel_step_direction) * _voxel_resolution - start) * direction_recip;
 
-
-
-                // fmt::println("{:.2f} {:.2f} {:.2f}", start.x, start.y, start.z);
-                // fmt::println("{:5} {:5} {:5}", start_voxel.x, start_voxel.y, start_voxel.z);
+                detail::print_vec(direction);
+                detail::print_vec(start);
+                detail::print_vec(final);
+                detail::print_vec(voxel_start);
+                detail::print_vec(voxel_final);
+                detail::print_vec(voxel_step_direction);
+                detail::print_vec(voxel_step_delta);
+                detail::print_vec(voxel_step_max);
+                exit(0);
             }
 
 
