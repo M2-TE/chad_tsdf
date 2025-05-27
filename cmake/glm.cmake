@@ -1,8 +1,8 @@
 # use either system or FetchContent package
 find_package(glm 1.0.1 QUIET)
 if (NOT glm_FOUND)
-    set(GLM_BUILD_LIBRARY ON)
     set(GLM_BUILD_TEST OFF)
+    set(GLM_BUILD_LIBRARY OFF)
     set(GLM_BUILD_INSTALL OFF)
     set(GLM_ENABLE_LANG_EXTENSIONS ${CMAKE_CXX_EXTENSIONS})
     set(GLM_DISABLE_AUTO_DETECTION OFF)
@@ -18,5 +18,8 @@ if (NOT glm_FOUND)
         SYSTEM)
     FetchContent_MakeAvailable(glm)
 endif()
-target_compile_definitions(${PROJECT_NAME} PRIVATE "GLM_FORCE_INTRINSICS")
-target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+    "GLM_FORCE_CXX20"
+    "GLM_FORCE_INLINE"
+    "GLM_FORCE_INTRINSICS")
+target_link_libraries(${PROJECT_NAME} PUBLIC glm::glm-header-only)

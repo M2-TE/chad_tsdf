@@ -63,46 +63,66 @@ namespace chad {
         auto beg = std::chrono::high_resolution_clock::now();
         const float voxel_reciprocal = float(1.0 / double(_voxel_resolution));
 
+        std::vector<glm::ivec3> traversed_voxels;
         for (size_t i = 0; i < points_mc.size(); i++) {
             const glm::aligned_vec3 normal = normals[i];
             const glm::aligned_vec3 point = points_mc[i].first;
-            const detail::MortonCode mc = points_mc[i].second;
-            // const glm::ivec3 point_voxel = mc.decode();
 
             // get all voxels along ray within truncation distance via variant of DDA line algorithm (-> "A fast voxel traversal algorithm for ray tracing")
             // as Bresehnham's line algorithm misses some voxels
-            std::vector<glm::ivec3> traversed_voxels;
-            {
-                // phase 1: initialization
-                const glm::aligned_vec3  direction = glm::normalize(point - glm::aligned_vec3(position));
-                const glm::aligned_vec3  direction_recip = 1.0f / direction;
-                const glm::aligned_vec3  start = point - direction * _truncation_distance;
-                const glm::aligned_vec3  final = point + direction * _truncation_distance;
-                const glm::aligned_ivec3 voxel_start = glm::floor(start * voxel_reciprocal);
-                const glm::aligned_ivec3 voxel_final = glm::floor(final * voxel_reciprocal); // this + final could be optimized away
-                // stepN: direction of increment for each dimension
-                const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
-                // tDeltaN: distance of "direction" needed to traverse an entire voxel width
-                const glm::aligned_vec3  voxel_step_delta = _voxel_resolution * direction_recip;
-                // tMaxN: distance of "direction" needed for each separate dimension to cross current voxel boundary
-                glm::aligned_vec3 voxel_step_max = (glm::aligned_vec3(voxel_start + voxel_step_direction) * _voxel_resolution - start) * direction_recip;
+            const glm::aligned_vec3 direction = glm::normalize(point - glm::aligned_vec3(position));
+            const glm::aligned_vec3 direction_recip = 1.0f / direction;
+            const glm::aligned_vec3 start = point - direction * _truncation_distance;
+            const glm::aligned_vec3 final = point + direction * _truncation_distance;
+            const glm::aligned_vec3 voxel_start = glm::floor(start * voxel_reciprocal);
+            const glm::aligned_vec3 voxel_final = glm::floor(final * voxel_reciprocal); // this + final could be optimized away
+            // stepN: direction of increment for each dimension
+            const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
+            // tDeltaN: distance of "direction" needed to traverse an entire voxel width
+            const glm::aligned_vec3 voxel_step_delta = _voxel_resolution * direction_recip;
+            // tMaxN: distance of "direction" needed for each separate dimension to cross current voxel boundary
+            glm::aligned_vec3 voxel_step_max = ((voxel_start + glm::aligned_vec3(voxel_step_direction)) * _voxel_resolution - start) * direction_recip;
+            
+            glm::aligned_ivec3 voxel_current = glm::ivec3(voxel_start);
+            glm::aligned_ivec3 voxel_goal = glm::aligned_ivec3(voxel_final) + voxel_step_direction;
 
-                detail::print_vec(direction);
-                detail::print_vec(start);
-                detail::print_vec(final);
-                detail::print_vec(voxel_start);
-                detail::print_vec(voxel_final);
-                detail::print_vec(voxel_step_direction);
-                detail::print_vec(voxel_step_delta);
-                detail::print_vec(voxel_step_max);
-                exit(0);
+            // traverse ray within truncation distance
+            traversed_voxels.push_back(voxel_current);
+            while (true) {
+                if (voxel_step_max.x < voxel_step_max.y) {
+                    if (voxel_step_max.x < voxel_step_max.z) {
+                        voxel_current.x += voxel_step_direction.x; // step in x direction
+                        voxel_step_max.x += voxel_step_delta.x; // update for next voxel boundary
+                        if (voxel_current.x == voxel_goal.x) break;
+                    }
+                    else {
+                        voxel_current.z += voxel_step_direction.z; // step in z direction
+                        voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
+                        if (voxel_current.z == voxel_goal.z) break;
+                    }
+                }
+                else {
+                    if (voxel_step_max.y < voxel_step_max.z) {
+
+                        voxel_current.y += voxel_step_direction.y; // step in y direction
+                        voxel_step_max.y += voxel_step_delta.y; // update for next voxel boundary
+                        if (voxel_current.y == voxel_goal.y) break;
+                    }
+                    else {
+                        voxel_current.z += voxel_step_direction.z; // step in z direction
+                        voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
+                        if (voxel_current.z == voxel_goal.z) break;
+                    }
+                }
+                traversed_voxels.push_back(voxel_current);
             }
 
-
-            // TODO
-
-            // insert leaf into octree, simply retrieve if it already exists
-            // detail::Octree::Leaf& leaf = _active_submap.insert(mc);
+            for (const auto& voxel: traversed_voxels) {
+                _active_submap.insert(detail::MortonCode(voxel));
+                // detail::print_vec(voxel);
+            }
+            // exit(0);
+            traversed_voxels.clear();
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
