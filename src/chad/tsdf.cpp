@@ -84,7 +84,7 @@ namespace chad {
             glm::aligned_vec3 voxel_step_max = ((voxel_start + glm::aligned_vec3(voxel_step_direction)) * _voxel_resolution - start) * direction_recip;
             
             glm::aligned_ivec3 voxel_current = glm::ivec3(voxel_start);
-            glm::aligned_ivec3 voxel_goal = glm::aligned_ivec3(voxel_final) + voxel_step_direction;
+            glm::aligned_ivec3 voxel_end = glm::aligned_ivec3(voxel_final) + voxel_step_direction;
 
             // traverse ray within truncation distance
             traversed_voxels.push_back(voxel_current);
@@ -93,12 +93,12 @@ namespace chad {
                     if (voxel_step_max.x < voxel_step_max.z) {
                         voxel_current.x += voxel_step_direction.x; // step in x direction
                         voxel_step_max.x += voxel_step_delta.x; // update for next voxel boundary
-                        if (voxel_current.x == voxel_goal.x) break;
+                        if (voxel_current.x == voxel_end.x) break;
                     }
                     else {
                         voxel_current.z += voxel_step_direction.z; // step in z direction
                         voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                        if (voxel_current.z == voxel_goal.z) break;
+                        if (voxel_current.z == voxel_end.z) break;
                     }
                 }
                 else {
@@ -106,19 +106,27 @@ namespace chad {
 
                         voxel_current.y += voxel_step_direction.y; // step in y direction
                         voxel_step_max.y += voxel_step_delta.y; // update for next voxel boundary
-                        if (voxel_current.y == voxel_goal.y) break;
+                        if (voxel_current.y == voxel_end.y) break;
                     }
                     else {
                         voxel_current.z += voxel_step_direction.z; // step in z direction
                         voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                        if (voxel_current.z == voxel_goal.z) break;
+                        if (voxel_current.z == voxel_end.z) break;
                     }
                 }
                 traversed_voxels.push_back(voxel_current);
             }
 
-            for (const auto& voxel: traversed_voxels) {
-                _active_submap.insert(detail::MortonCode(voxel));
+            for (const glm::ivec3& voxel: traversed_voxels) {
+                auto& leaf = _active_submap.insert(detail::MortonCode(voxel));
+
+                // compute signed distance
+                glm::aligned_vec3 diff = glm::aligned_vec3(voxel) - point;
+                float signed_distance = glm::dot(normal, diff);
+                // weighted average with incremented weight
+                leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
+                leaf._weight++;
+                leaf._signed_distance = leaf._signed_distance / leaf._weight;
             }
             traversed_voxels.clear();
         }
