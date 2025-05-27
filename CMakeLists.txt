@@ -10,7 +10,11 @@ include("cmake/options_global.cmake")
 include("cmake/options_compiler.cmake")
 
 # create chad tsdf library
-file(GLOB_RECURSE CPP_SOURCE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/*.cpp")
+set(CPP_SOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/morton.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/normals.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/virtual_array.cpp")
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)

@@ -119,9 +119,7 @@ namespace chad {
 
             for (const auto& voxel: traversed_voxels) {
                 _active_submap.insert(detail::MortonCode(voxel));
-                // detail::print_vec(voxel);
             }
-            // exit(0);
             traversed_voxels.clear();
         }
         auto end = std::chrono::high_resolution_clock::now();
