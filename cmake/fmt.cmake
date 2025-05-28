@@ -1,5 +1,5 @@
 # use either system or FetchContent package
-find_package(fmt QUIET)
+find_package(fmt 11.2.0 QUIET)
 if (NOT fmt_FOUND)
     set(FMT_PEDANTIC OFF)
     set(FMT_WERROR OFF)
