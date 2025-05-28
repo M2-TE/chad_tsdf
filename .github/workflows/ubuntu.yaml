@@ -24,7 +24,7 @@ jobs:
         submodules: recursive
 
     - name: Install libraries
-      run: sudo apt update && sudo apt install libeigen3-dev libglm-dev libfmt-dev
+      run: sudo apt update && sudo apt install libtbb-dev libeigen3-dev libglm-dev libfmt-dev
 
     - name: Install Ninja
       uses: ashutoshvarma/setup-ninja@master
