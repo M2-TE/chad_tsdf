@@ -32,7 +32,8 @@ namespace chad::detail {
         auto mc_sorter = [](const auto& a, const auto& b){
             return a.second._value > b.second._value;
         };
-        std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
+        // std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
+        std::sort(std::execution::unseq, points_mc.begin(), points_mc.end(), mc_sorter);
         
         // store isolated sorted points
         std::vector<glm::vec3> points_sorted;

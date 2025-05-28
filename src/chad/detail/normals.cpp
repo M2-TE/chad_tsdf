@@ -86,7 +86,8 @@ namespace {
 namespace chad::detail {
     struct MortonNeighbourhood { MortonVector::const_iterator beg, end; };
     using MortonNeighbourhoodMap = gtl::parallel_flat_hash_map<MortonCode, MortonNeighbourhood>;
-    auto inline build_neighbourhood_map(const MortonVector& points_mc, const uint32_t level) -> MortonNeighbourhoodMap {
+    
+    auto build_neighbourhood_map(const MortonVector& points_mc, const uint32_t level) -> MortonNeighbourhoodMap {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // create mask to group morton codes up to a certain level
