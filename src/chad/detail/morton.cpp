@@ -1,5 +1,4 @@
 #include <chrono>
-#include <execution>
 #include <fmt/base.h>
 #include "chad/detail/morton.hpp"
 
@@ -33,7 +32,7 @@ namespace chad::detail {
             return a.second._value > b.second._value;
         };
         // std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
-        std::sort(std::execution::unseq, points_mc.begin(), points_mc.end(), mc_sorter);
+        std::sort(points_mc.begin(), points_mc.end(), mc_sorter);
         
         // store isolated sorted points
         std::vector<glm::vec3> points_sorted;
