@@ -4,7 +4,6 @@
 #include <cstdint>
 #include "chad/detail/level.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/morton.hpp"
 
 namespace chad::detail {
     struct Submap {
@@ -26,7 +25,10 @@ namespace chad {
         void insert(const std::vector<Point>& points, const Point position);
         
     private:
-        void update_active_submap(const detail::MortonVector& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
+        void update_active_submap(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
+        void finalize_submap() {
+
+        }
 
     private:
         const float _voxel_resolution;
