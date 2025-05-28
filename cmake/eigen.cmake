@@ -7,8 +7,7 @@ if (NOT Eigen3_FOUND)
         GIT_TAG "3.4.0"
         GIT_SHALLOW ON
         OVERRIDE_FIND_PACKAGE
-        EXCLUDE_FROM_ALL
-        SYSTEM)
+        EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(eigen)
 endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE Eigen3::Eigen)

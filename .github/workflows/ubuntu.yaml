@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{matrix.os}}
 
     defaults:
       run:
@@ -15,23 +15,21 @@ jobs:
 
     strategy:
       matrix:
-        compiler: [clang++-15, g++-12]
+        os: [ ubuntu-22.04 ]
+        compiler: [clang++-14, g++-11]
         build_type: [Debug, Release]
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Install libraries
-      run: sudo apt update && sudo apt install libtbb-dev libeigen3-dev libglm-dev libfmt-dev
+      run: sudo apt update && sudo apt install -y ninja-build cmake libtbb-dev libeigen3-dev libglm-dev libfmt-dev
 
-    - name: Install Ninja
-      uses: ashutoshvarma/setup-ninja@master
-      with:
-        version: 1.11.0
+    - name: Clone
+      uses: actions/checkout@v4
 
     - name: Build
       run: |
-        cmake -B build/ -GNinja
+        cmake -B build/ -GNinja \
+          -DCMAKE_CXX_COMPILER=${{matrix.compiler}} \
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
         cmake --build build/ --parallel

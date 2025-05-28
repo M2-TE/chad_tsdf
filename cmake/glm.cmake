@@ -14,8 +14,7 @@ if (NOT glm_FOUND)
         GIT_TAG "1.0.1"
         GIT_SHALLOW ON
         OVERRIDE_FIND_PACKAGE
-        EXCLUDE_FROM_ALL
-        SYSTEM)
+        EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(glm)
 endif()
 target_compile_definitions(${PROJECT_NAME} PUBLIC

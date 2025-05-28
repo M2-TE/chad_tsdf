@@ -19,8 +19,7 @@ if (NOT fmt_FOUND)
         GIT_TAG "11.2.0"
         GIT_SHALLOW ON
         OVERRIDE_FIND_PACKAGE
-        EXCLUDE_FROM_ALL
-        SYSTEM)
+        EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(fmt)
 endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC fmt::fmt)
