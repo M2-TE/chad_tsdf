@@ -15,9 +15,9 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-22.04 ]
-        compiler: [clang++-14, g++-11]
-        build_type: [Debug, Release]
+        os: [ ubuntu-22.04, ubuntu-24.04 ]
+        compiler: [ clang++, g++ ]
+        build_type: [ Debug, Release ]
     
     steps:
 
@@ -29,7 +29,7 @@ jobs:
 
     - name: Build
       run: |
-        cmake -B build/ -GNinja \
+        cmake -B build -GNinja                      \
           -DCMAKE_CXX_COMPILER=${{matrix.compiler}} \
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
-        cmake --build build/ --parallel
+        cmake --build build --parallel
