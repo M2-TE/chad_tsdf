@@ -36,7 +36,10 @@ namespace chad {
         auto normals = detail::estimate_normals(points_mc, position);
 
         // octree shenanigans
-        update_active_submap(points_sorted, normals, position);
+        update_submap(points_sorted, normals, position);
+
+        // DEBUG
+        finalize_submap();
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
@@ -59,7 +62,7 @@ namespace chad {
         insert(glm_points, glm::vec3{ position[0], position[1], position[2] });
     }
 
-    void TSDFMap::update_active_submap(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position) {
+    void TSDFMap::update_submap(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position) {
         auto beg = std::chrono::high_resolution_clock::now();
         const float voxel_reciprocal = float(1.0 / double(_voxel_resolution));
         const glm::aligned_vec3 position_aligned = position;
@@ -136,6 +139,70 @@ namespace chad {
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("oct ins  {:.2f}", dur);
+        fmt::println("sub upd  {:.2f}", dur);
+    }
+    void TSDFMap::finalize_submap() {
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // trackers for the traversed path and nodes
+        std::array<uint8_t, MAX_DEPTH> path;
+        std::array<uint32_t, MAX_DEPTH> nodes_oct;
+        std::array<std::array<uint32_t, 8>, MAX_DEPTH> nodes_dag;
+        path.fill(0);
+        nodes_oct.fill(0);
+        nodes_dag.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
+        nodes_oct[0] = _active_submap.get_root();
+        const float truncation_distance_recip = 1.0f / _truncation_distance;
+
+        int32_t depth = 0;
+        while (depth >= 0) {
+            uint8_t child_i = path[depth]++;
+            // fmt::println("depth {:2} child {:1}", depth, child_i);
+
+            // when all children at this depth were iterated
+            if (child_i >= 8) {
+                // TODO
+                depth--;
+            }
+            // node contains node children
+            else if (depth < int32_t(MAX_DEPTH - 1)) {
+                // retrieve child address
+                uint32_t child_addr = _active_submap.get_child(nodes_oct[depth], child_i);
+                if (child_addr == 0) continue;
+
+                // walk deeper
+                depth++;
+                path[depth] = 0;
+                nodes_oct[depth] = child_addr;
+            }
+            // node contains leaf children
+            else {
+                // retrieve node
+                const detail::Octree::Node& node = _active_submap.get_node(nodes_oct[depth]);
+                
+                // create leaf cluster from all 8 leaves
+                LeafCluster leaf_cluster;
+                for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
+                    uint32_t leaf_addr = node[leaf_i];
+                    if (leaf_addr == 0) leaf_cluster.set_leaf_empty(leaf_i);
+                    else                {
+                        float signed_distance = _active_submap.get_leaf(leaf_addr)._signed_distance;
+                        leaf_cluster.set_leaf_sd(leaf_i, signed_distance, truncation_distance_recip);
+                    }
+                }
+
+                // TODO: lc insert
+
+                // fmt::println("leaf cluster");
+            }
+        }
+
+
+        // TODO
+        // detail::Submap& submap = _submaps.emplace_back();
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("sub fin  {:.2f}", dur);
     }
 }

@@ -65,6 +65,19 @@ namespace chad::detail {
             return _leaves[leaf_addr];
         }
 
+        auto static constexpr get_root() -> uint32_t {
+            return 1;
+        }
+        auto inline get_node(uint32_t node_addr) const -> const Node& {
+            return _nodes[node_addr];
+        }
+        auto inline get_leaf(uint32_t leaf_addr) const -> const Leaf& {
+            return _leaves[leaf_addr];
+        }
+        auto inline get_child(uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
+            return _nodes[parent_addr][child_i];
+        }
+
         VirtualArray<Node> _nodes;
         VirtualArray<Leaf> _leaves;
         gtl::flat_hash_map<MortonCode, Node*> _node_lookup; // depth 18

@@ -1,6 +1,7 @@
 # use either system or FetchContent package
 find_package(Eigen3 QUIET)
 if (NOT Eigen3_FOUND)
+
     include(FetchContent)
     FetchContent_Declare(eigen
         GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"

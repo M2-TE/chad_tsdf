@@ -25,17 +25,18 @@ namespace chad {
         void insert(const std::vector<Point>& points, const Point position);
         
     private:
-        void update_active_submap(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
-        void finalize_submap() {
-
-        }
+        // insert new points into current active submap
+        void update_submap(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
+        // store current active submap as DAG and reset it
+        void finalize_submap();
 
     private:
+        static constexpr size_t MAX_DEPTH = 21;
         const float _voxel_resolution;
         const float _truncation_distance;
-        std::vector<detail::Submap> _submaps;
-        std::array<detail::NodeLevel, 20> _node_levels;
-        detail::LeafClusterLevel _leafcluster_level;
         detail::Octree _active_submap;
+        std::vector<detail::Submap> _submaps;
+        std::array<detail::NodeLevel, MAX_DEPTH-1> _node_levels;
+        detail::LeafClusterLevel _leafcluster_level;
     };
 }

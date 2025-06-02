@@ -53,7 +53,6 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
     }
-    // dag.merge_all_subtrees();
 }
 int main() {
     if (false) read_pcl_file();

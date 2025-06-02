@@ -17,6 +17,7 @@ namespace chad::detail {
         ~VirtualArray() {
             deallocate_virtual(_virt_mem_p, _capacity);
         }
+
         auto operator[](const uint32_t index) -> T& {
             return _virt_mem_p[index];
         }
@@ -31,11 +32,15 @@ namespace chad::detail {
             _virt_mem_p[_size] = std::move(value);
             return _virt_mem_p[_size++];
         }
+
         auto inline front() const -> const T& {
             return _virt_mem_p[0];
         }
         auto inline back() const -> const T& {
             return _virt_mem_p[_size - 1];
+        }
+        auto inline data() const -> const T* {
+            return _virt_mem_p;
         }
 
         auto inline size() const noexcept -> size_t {
