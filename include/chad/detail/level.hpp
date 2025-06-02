@@ -5,12 +5,11 @@
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
-    using NodeAddress = uint32_t;
     struct NodeLevel {
         struct FncHash {
             FncHash(const VirtualArray<uint32_t>& node_data): _node_data(node_data) {
             }
-            auto inline operator()(const NodeAddress addr) const noexcept -> uint64_t {
+            auto inline operator()(const uint32_t addr) const noexcept -> uint64_t {
                 // count children
                 uint8_t child_count = std::popcount(uint8_t(_node_data[addr]));
                 // hash entire node
@@ -25,7 +24,7 @@ namespace chad::detail {
         struct FncEq {
             FncEq(const VirtualArray<uint32_t>& node_data): _node_data(node_data) {
             }
-            bool inline operator()(const NodeAddress addr_a, const NodeAddress addr_b) const noexcept {
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const noexcept {
                 // compare child masks
                 uint8_t child_mask_a = uint8_t(_node_data[addr_a]);
                 uint8_t child_mask_b = uint8_t(_node_data[addr_b]);
@@ -40,7 +39,7 @@ namespace chad::detail {
                 int cmp = std::memcmp(
                     &_node_data[addr_a + 1],
                     &_node_data[addr_b + 1],
-                    child_count_a * sizeof(NodeAddress));
+                    child_count_a * sizeof(uint32_t));
                 return cmp == 0;
             }
             const VirtualArray<uint32_t>& _node_data;
@@ -54,15 +53,14 @@ namespace chad::detail {
         }
 
         VirtualArray<uint32_t> _raw_data; // raw unaligned node data
-        uint32_t _count_uniques;
-        uint32_t _count_dupes;
-        gtl::parallel_flat_hash_set<NodeAddress, FncHash, FncEq> _addr_set; // set of addresses
+        uint32_t _count_uniques, _count_dupes;
+        gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
     struct LeafClusterLevel {
         struct FncHash {
             FncHash(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
             }
-            auto inline operator()(const NodeAddress addr) const noexcept -> uint64_t {
+            auto inline operator()(const uint32_t addr) const noexcept -> uint64_t {
                 // use the 64-bit value of the leaf cluster as the hash
                 return _lc_data[addr]._value;
             }
@@ -71,7 +69,7 @@ namespace chad::detail {
         struct FncEq {
             FncEq(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
             }
-            bool inline operator()(const NodeAddress addr_a, const NodeAddress addr_b) const noexcept {
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const noexcept {
                 // compare leaf clusters values directly
                 return _lc_data[addr_a]._value == _lc_data[addr_b]._value;
             }
@@ -86,8 +84,7 @@ namespace chad::detail {
         }
 
         VirtualArray<LeafCluster> _raw_data; // leaf cluster data
-        uint32_t _count_uniques;
-        uint32_t _count_dupes;
-        gtl::parallel_flat_hash_set<NodeAddress, FncHash, FncEq> _addr_set; // set of addresses
+        uint32_t _count_uniques, _count_dupes;
+        gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
 }
