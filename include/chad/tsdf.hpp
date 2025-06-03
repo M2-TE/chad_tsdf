@@ -36,7 +36,9 @@ namespace chad {
         const float _truncation_distance;
         detail::Octree _active_submap;
         std::vector<detail::Submap> _submaps;
+        // 20 levels of standard nodes
         std::array<detail::NodeLevel, MAX_DEPTH-1> _node_levels;
-        detail::LeafClusterLevel _leafcluster_level;
+        // 1 level of leaf clusters
+        detail::LeafClusterLevel _lc_level;
     };
 }

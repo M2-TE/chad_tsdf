@@ -1,11 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <gtl/phmap.hpp>
-#include "chad/detail/leaf_cluster.hpp"
+#include "chad/detail/cluster.hpp"
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
-    struct NodeLevel {
+    class NodeLevel {
         struct FncHash {
             FncHash(const VirtualArray<uint32_t>& node_data): _node_data(node_data) {
             }
@@ -45,18 +45,19 @@ namespace chad::detail {
             const VirtualArray<uint32_t>& _node_data;
         };
 
+    public:
         NodeLevel():
-                _raw_data(), _count_uniques(0), _count_dupes(0),
+                _uniques_n(0), _dupes_n(0), _raw_data(),
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
             _raw_data.push_back(0);
         }
 
+        uint32_t _uniques_n, _dupes_n;
         VirtualArray<uint32_t> _raw_data; // raw unaligned node data
-        uint32_t _count_uniques, _count_dupes;
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
-    struct LeafClusterLevel {
+    class LeafClusterLevel {
         struct FncHash {
             FncHash(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
             }
@@ -76,15 +77,37 @@ namespace chad::detail {
             const VirtualArray<LeafCluster>& _lc_data;
         };
 
+    public:
         LeafClusterLevel():
-                _raw_data(), _count_uniques(0), _count_dupes(0),
+                _uniques_n(0), _dupes_n(0), _raw_data(),
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
             _raw_data.push_back(LeafCluster{});
         }
+        auto add_leaf_cluster(LeafCluster lc) -> uint32_t {
+            // append a placeholder node
+            uint32_t new_addr = _uniques_n;
+            if (_raw_data.size() <= new_addr + 1) {
+                _raw_data.push_back(lc);
+            }
+            else {
+                _raw_data.back() = lc;
+            }
 
+            // emplace placeholder node if it is a new one
+            auto [old_addr_it, is_new] = _addr_set.emplace(new_addr);
+            if (is_new) {
+                _uniques_n++;
+                return new_addr;
+            }
+            else {
+                _dupes_n++;
+                return *old_addr_it;
+            }
+        }
+
+        uint32_t _uniques_n, _dupes_n;
         VirtualArray<LeafCluster> _raw_data; // leaf cluster data
-        uint32_t _count_uniques, _count_dupes;
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
 }
