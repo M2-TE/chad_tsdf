@@ -47,13 +47,49 @@ namespace chad::detail {
 
     public:
         NodeLevel():
-                _uniques_n(0), _dupes_n(0), _raw_data(),
+                _uniques_n(0), _dupes_n(0), _occupied_n(0), _raw_data(),
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
             _raw_data.push_back(0);
+            _occupied_n = _raw_data.size();
+        }
+        // add a single node with the given children and return its address
+        auto add(const std::array<uint32_t, 8>& children) -> uint32_t {
+
+            // check if theres enough space for a placeholder node
+            if (_occupied_n + 9 < _raw_data.size()) {
+                _raw_data.resize(_raw_data.size() + 9);
+            }
+
+            // write placerholder node into raw data vector
+            uint32_t* node_p = _raw_data.data() + _occupied_n;
+            node_p[0] = 0;// first element is child mask
+
+            // gather only valid children
+            uint8_t children_n = 0;
+            for (uint8_t i = 0; i < 8; i++) {
+                if (children[i] == 0) continue;
+                node_p[children_n + 1] = children[i];
+                node_p[0] |= 1 << i; // set child mask bit
+                children_n++;
+            }
+            
+            // emplace placeholder node if it's a new one
+            uint32_t new_addr = _occupied_n;
+            auto [old_addr_it, new_addr_b] = _addr_set.emplace(new_addr);
+            if (new_addr_b) {
+                _uniques_n++;
+                _occupied_n += children_n + 1;
+                return new_addr;
+            }
+            else {
+                _dupes_n++;
+                return *old_addr_it;
+            }
         }
 
         uint32_t _uniques_n, _dupes_n;
+        uint32_t _occupied_n; // number of occupied 32-bit values in _raw_data vector
         VirtualArray<uint32_t> _raw_data; // raw unaligned node data
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
@@ -84,19 +120,16 @@ namespace chad::detail {
             // reserve first index
             _raw_data.push_back(LeafCluster{});
         }
+        // add a leaf cluster with the given contents and return its address
         auto add(LeafCluster lc) -> uint32_t {
             // append a placeholder node
-            uint32_t new_addr = _uniques_n;
-            if (_raw_data.size() <= new_addr + 1) {
-                _raw_data.push_back(lc);
-            }
-            else {
-                _raw_data.back() = lc;
-            }
+            uint32_t new_addr = _uniques_n + 1;
+            if (_raw_data.size() <= new_addr) _raw_data.push_back(lc);
+            else                              _raw_data.back() = lc;
 
-            // emplace placeholder node if it is a new one
-            auto [old_addr_it, is_new] = _addr_set.emplace(new_addr);
-            if (is_new) {
+            // emplace placeholder node if it's a new one
+            auto [old_addr_it, new_addr_b] = _addr_set.emplace(new_addr);
+            if (new_addr_b) {
                 _uniques_n++;
                 return new_addr;
             }
@@ -115,8 +148,8 @@ namespace chad::detail {
         // 21 levels total
         static constexpr uint64_t MAX_DEPTH = 20;
         // 20 levels of standard nodes
-        std::array<detail::NodeLevel, MAX_DEPTH> _nodes;
+        std::array<NodeLevel, MAX_DEPTH> _nodes;
         // 1 level of leaf clusters
-        detail::LeafClusterLevel _leaf_clusters;
+        LeafClusterLevel _leaf_clusters;
     };
 }

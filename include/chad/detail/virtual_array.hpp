@@ -87,6 +87,10 @@ namespace chad::detail {
         auto inline capacity() const noexcept -> size_t {
             return _capacity;
         }
+        void inline resize(size_t new_size) noexcept {
+            // no need to worry about de-/reallocation
+            _size = new_size;
+        }
         
     private:
         T* _virt_mem_p;
