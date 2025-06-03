@@ -5,6 +5,7 @@
 #include <glm/gtc/type_aligned.hpp>
 #include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
+#include "chad/detail/levels.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/normals.hpp"
 
@@ -25,6 +26,10 @@ namespace chad::detail {
 
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution, float truncation_distance): _voxel_resolution(voxel_resolution), _truncation_distance(truncation_distance) {
+
+    }
+    TSDFMap::~TSDFMap() {
+
     }
     template<> void TSDFMap::insert<glm::vec3>(const std::vector<glm::vec3>& points, const glm::vec3 position) {
         auto beg = std::chrono::high_resolution_clock::now();
@@ -143,13 +148,15 @@ namespace chad {
         fmt::println("sub upd  {:.2f}", dur);
     }
     void TSDFMap::finalize_submap() {
+        using namespace detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
+
         // trackers for the traversed path and nodes
-        std::array<uint8_t, MAX_DEPTH> path;
-        std::array<uint32_t, MAX_DEPTH> nodes_oct;
-        std::array<std::array<uint32_t, 8>, MAX_DEPTH> nodes_tsdf;
-        std::array<std::array<uint32_t, 8>, MAX_DEPTH> nodes_weight;
+        std::array<uint8_t,  NodeLevels::MAX_DEPTH> path;
+        std::array<uint32_t, NodeLevels::MAX_DEPTH> nodes_oct;
+        std::array<std::array<uint32_t, 8>, NodeLevels::MAX_DEPTH> nodes_tsdf;
+        std::array<std::array<uint32_t, 8>, NodeLevels::MAX_DEPTH> nodes_weight;
         path.fill(0);
         nodes_oct.fill(0);
         nodes_oct[0] = _active_submap.get_root();
@@ -165,15 +172,13 @@ namespace chad {
             // when all children at this depth were iterated
             if (child_i >= 8) {
                 // TODO
-                
-
                 if (depth == 0) break;
                 else depth--;
             }
             // node contains node children
-            else if (depth < int32_t(MAX_DEPTH - 1)) {
+            else if (depth < NodeLevels::MAX_DEPTH - 1) {
                 // retrieve child address
-                uint32_t child_addr = _active_submap.get_child(nodes_oct[depth], child_i);
+                uint32_t child_addr = _active_submap.get_child_addr(nodes_oct[depth], child_i);
                 if (child_addr == 0) continue;
 
                 // walk deeper
@@ -184,7 +189,7 @@ namespace chad {
             // node contains leaf children
             else {
                 // retrieve node
-                const detail::Octree::Node& node = _active_submap.get_node(nodes_oct[depth]);
+                const Octree::Node& node = _active_submap.get_node(nodes_oct[depth]);
                 
                 // create leaf cluster from all 8 leaves
                 LeafCluster lc_tsdf, lc_weights;
@@ -200,14 +205,14 @@ namespace chad {
                         lc_weights.set_leaf_weight(leaf_i, uint8_t(truncated_weight));
                     }
                 }
-                nodes_tsdf  [depth][child_i] = _lc_level.add_leaf_cluster(lc_tsdf);
-                nodes_weight[depth][child_i] = _lc_level.add_leaf_cluster(lc_weights);
+                nodes_tsdf  [depth][child_i] = _node_levels_p->_leaf_clusters.add(lc_tsdf);
+                nodes_weight[depth][child_i] = _node_levels_p->_leaf_clusters.add(lc_weights);
             }
         }
 
 
         // TODO
-        // detail::Submap& submap = _submaps.emplace_back();
+        // Submap& submap = _submaps.emplace_back();
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();

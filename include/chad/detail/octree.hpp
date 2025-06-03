@@ -74,7 +74,7 @@ namespace chad::detail {
         auto inline get_leaf(uint32_t leaf_addr) const -> const Leaf& {
             return _leaves[leaf_addr];
         }
-        auto inline get_child(uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
+        auto inline get_child_addr(uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
             return _nodes[parent_addr][child_i];
         }
 

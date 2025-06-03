@@ -84,7 +84,7 @@ namespace chad::detail {
             // reserve first index
             _raw_data.push_back(LeafCluster{});
         }
-        auto add_leaf_cluster(LeafCluster lc) -> uint32_t {
+        auto add(LeafCluster lc) -> uint32_t {
             // append a placeholder node
             uint32_t new_addr = _uniques_n;
             if (_raw_data.size() <= new_addr + 1) {
@@ -109,5 +109,14 @@ namespace chad::detail {
         uint32_t _uniques_n, _dupes_n;
         VirtualArray<LeafCluster> _raw_data; // leaf cluster data
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
+    };
+
+    struct NodeLevels {
+        // 21 levels total
+        static constexpr uint64_t MAX_DEPTH = 20;
+        // 20 levels of standard nodes
+        std::array<detail::NodeLevel, MAX_DEPTH> _nodes;
+        // 1 level of leaf clusters
+        detail::LeafClusterLevel _leaf_clusters;
     };
 }
