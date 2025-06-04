@@ -34,11 +34,11 @@ void static do_sphere_thing() {
     chad::TSDFMap map;
     std::vector<glm::vec3> positions {
         { 0, 0, 0 },
+        // { 2, 2, 2 },
+        // { 4, 4, 4 },
+        // { 6, 6, 6 },
+        // { 8, 8, 8 },
     };
-    // insert the same position again n times
-    // for (size_t i = 0; i < 10; i++) {
-    //     positions.push_back(positions[0]);
-    // }
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
             glm::dvec3 pointd = {
@@ -53,6 +53,7 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
     }
+    map.save();
 }
 int main() {
     if (false) read_pcl_file();

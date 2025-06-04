@@ -6,7 +6,11 @@
 #include "chad/tsdf.hpp"
 #include "chad/detail/levels.hpp"
 #include "chad/detail/morton.hpp"
+#include "chad/detail/octree.hpp"
 #include "chad/detail/normals.hpp"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/norm.hpp>
 
 namespace chad::detail {
     void print_vec(glm::vec3 vec) {
@@ -21,30 +25,59 @@ namespace chad::detail {
     void print_vec(glm::aligned_ivec3 vec) {
         fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
     }
+
+    // TODO: move to proper header
+    struct Submap {
+        uint32_t root_addr_tsdf;
+        uint32_t root_addr_weight;
+        std::vector<glm::vec3> positions;
+    };
 }
 
 namespace chad {
     TSDFMap::TSDFMap(float voxel_resolution, float truncation_distance): _voxel_resolution(voxel_resolution), _truncation_distance(truncation_distance) {
+        _active_octree_p = new detail::Octree();
+        _active_submap_p = new detail::Submap();
         _node_levels_p = new detail::NodeLevels();
     }
     TSDFMap::~TSDFMap() {
         delete _node_levels_p;
+        delete _active_submap_p;
+        delete _active_octree_p;
+        for (detail::Submap* submap_p: _submaps) {
+            delete submap_p;
+        }
     }
     template<> void TSDFMap::insert<glm::vec3>(const std::vector<glm::vec3>& points, const glm::vec3 position) {
+        using namespace detail;
         auto beg = std::chrono::high_resolution_clock::now();
-        fmt::println("Inserting {} points", points.size());
+
+        // submapping stuff (TODO)
+        auto& positions = _active_submap_p->positions;
+        if (positions.empty()) positions.push_back(position);
+        else {
+            // finalize active submap once traversed far enough
+            glm::vec3 start = positions.front();
+            float dist_sqr = 5.0f * 5.0f;
+            if (glm::distance2(position, start) > dist_sqr) {
+                finalize_submap();
+                _submaps.push_back(_active_submap_p);
+                _active_submap_p = new Submap();
+                _active_submap_p->positions.push_back(position);
+                _active_octree_p->clear();
+            }
+            // else just update active submap
+            else positions.push_back(position);
+        }
 
         // sort points by their morton code, discretized to the voxel resolution
-        auto points_mc = detail::calc_mc_from_points(points, _voxel_resolution);
-        auto points_sorted = detail::sort_points_by_mc(points_mc); // TODO: eval if ret is needed
+        auto points_mc = calc_mc_from_points(points, _voxel_resolution);
+        auto points_sorted = sort_points_by_mc(points_mc); // TODO: eval if ret is needed
         // estimate the normal of every point
-        auto normals = detail::estimate_normals(points_mc, position);
+        auto normals = estimate_normals(points_mc, position);
 
         // octree shenanigans
-        update_submap(points_sorted, normals, position);
-
-        // DEBUG
-        finalize_submap();
+        update_octree(points_sorted, normals, position);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
@@ -66,8 +99,11 @@ namespace chad {
         }
         insert(glm_points, glm::vec3{ position[0], position[1], position[2] });
     }
+    void TSDFMap::save() {
+        if (!_active_submap_p->positions.empty()) finalize_submap();
+    }
 
-    void TSDFMap::update_submap(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position) {
+    void TSDFMap::update_octree(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position) {
         auto beg = std::chrono::high_resolution_clock::now();
         const float voxel_reciprocal = float(1.0 / double(_voxel_resolution));
         const glm::aligned_vec3 position_aligned = position;
@@ -130,7 +166,7 @@ namespace chad {
             }
             
             for (const glm::aligned_vec3& voxel: traversed_voxels) {
-                auto& leaf = _active_submap.insert(detail::MortonCode(voxel));
+                auto& leaf = _active_octree_p->insert(detail::MortonCode(voxel));
 
                 // compute signed distance
                 glm::aligned_vec3 diff = voxel * _voxel_resolution - point;
@@ -144,7 +180,7 @@ namespace chad {
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("sub upd  {:.2f}", dur);
+        fmt::println("sub  upd {:.2f}", dur);
     }
     void TSDFMap::finalize_submap() {
         using namespace detail;
@@ -157,11 +193,10 @@ namespace chad {
         std::array<std::array<uint32_t, 8>, NodeLevels::MAX_DEPTH> nodes_weight;
         path.fill(0);
         nodes_oct.fill(0);
-        nodes_oct[0] = _active_submap.get_root();
+        nodes_oct[0] = _active_octree_p->get_root();
         nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
         nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
         const float truncation_distance_recip = 1.0f / _truncation_distance;
-        uint32_t root_addr_tsdf = 0, root_addr_weight = 0;
 
         uint32_t depth = 0;
         while (depth >= 0) {
@@ -170,17 +205,18 @@ namespace chad {
             // when all children at this depth were iterated
             if (child_i >= 8) {
                 // create/get nodes from current node level
-                uint32_t addr_tsdf   = _node_levels_p->_nodes[depth].add(nodes_tsdf  [depth]);
-                uint32_t addr_weight = _node_levels_p->_nodes[depth].add(nodes_weight[depth]);
+                auto& node_level = _node_levels_p->_nodes[depth];
+                uint32_t addr_tsdf   = node_level.add(nodes_tsdf  [depth]);
+                uint32_t addr_weight = node_level.add(nodes_weight[depth]);
 
                 // reset node tracker for handled nodes
                 nodes_tsdf  [depth].fill(0);
                 nodes_weight[depth].fill(0);
 
+                // check if it's the root node
                 if (depth == 0) {
-                    // set the newly created nodes as root nodes
-                    root_addr_tsdf   = addr_tsdf;
-                    root_addr_weight = addr_weight;
+                    _active_submap_p->root_addr_tsdf = addr_tsdf;
+                    _active_submap_p->root_addr_weight = addr_weight;
                     break;
                 }
                 else {
@@ -195,7 +231,7 @@ namespace chad {
             // node contains node children
             else if (depth < NodeLevels::MAX_DEPTH - 1) {
                 // retrieve child address
-                uint32_t child_addr = _active_submap.get_child_addr(nodes_oct[depth], child_i);
+                uint32_t child_addr = _active_octree_p->get_child_addr(nodes_oct[depth], child_i);
                 if (child_addr == 0) continue;
 
                 // walk deeper
@@ -206,7 +242,7 @@ namespace chad {
             // node contains leaf children
             else {
                 // retrieve node
-                const Octree::Node& node = _active_submap.get_node(nodes_oct[depth]);
+                const Octree::Node& node = _active_octree_p->get_node(nodes_oct[depth]);
                 
                 // create leaf cluster from all 8 leaves
                 LeafCluster lc_tsdf, lc_weight;
@@ -214,7 +250,7 @@ namespace chad {
                     uint32_t leaf_addr = node[leaf_i];
                     if (leaf_addr == 0) lc_tsdf.set_leaf_sd_empty(leaf_i);
                     else {
-                        const auto& leaf = _active_submap.get_leaf(leaf_addr);
+                        const auto& leaf = _active_octree_p->get_leaf(leaf_addr);
                         lc_tsdf.set_leaf_sd(leaf_i, leaf._signed_distance, truncation_distance_recip);
                         lc_weight.set_leaf_weight(leaf_i, leaf._weight);
                     }

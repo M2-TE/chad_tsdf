@@ -15,8 +15,15 @@ namespace chad::detail {
             _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
             _leaves.push_back({}); // dummy leaf node
         }
+        void clear() {
+            _node_lookup.clear();
+            _nodes.clear();
+            _leaves.clear();
 
-        auto insert(MortonCode mc) -> Leaf& {
+            _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
+            _leaves.push_back({}); // dummy leaf node
+        }
+        auto inline insert(MortonCode mc) -> Leaf& {
             // see if node at given level has been created already
             static constexpr uint32_t lookup_depth = 18;
             static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
@@ -65,7 +72,7 @@ namespace chad::detail {
             return _leaves[leaf_addr];
         }
 
-        auto static constexpr get_root() -> uint32_t {
+        auto static get_root() -> uint32_t {
             return 1;
         }
         auto inline get_node(uint32_t node_addr) const -> const Node& {

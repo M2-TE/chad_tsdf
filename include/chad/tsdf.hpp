@@ -3,11 +3,11 @@
 
 // TODO: hide these includes
 #include <glm/vec3.hpp>
-#include "chad/detail/octree.hpp"
 
 
 namespace chad::detail {
     struct Submap;
+    struct Octree;
     struct NodeLevels;
 }
 namespace chad {
@@ -19,10 +19,12 @@ namespace chad {
         // insert point using std::array<float, 3>, glm::vec3 or Eigen::Vector3f
         template<typename Point>
         void insert(const std::vector<Point>& points, const Point position);
+        // TODO
+        void save();
         
     private:
-        // insert new points into current active submap (TODO: move outside of TSDFMap class)
-        void update_submap(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
+        // insert new points into current active submap
+        void update_octree(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
         // store current active submap as DAG and reset it
         void finalize_submap();
 
@@ -31,8 +33,9 @@ namespace chad {
         const float _truncation_distance;
         
     private:
-        detail::Octree _active_submap; // TODO: make this a submap object
-        std::vector<detail::Submap*> _submaps;
+        detail::Octree* _active_octree_p;
+        detail::Submap* _active_submap_p;
         detail::NodeLevels* _node_levels_p;
+        std::vector<detail::Submap*> _submaps;
     };
 }

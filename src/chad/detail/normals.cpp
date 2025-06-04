@@ -125,7 +125,7 @@ namespace chad::detail {
                 if (neigh_count >= neigh_threshhold_checkup) {
                     // ensure enough points were placed in the neighbourhoods
                     if (neigh_points < neigh_threshhold_abort) {
-                        fmt::println("nei   {}  (aborted)", level);
+                        fmt::println("nei    {} (aborted)", level);
                         return {};
                     }
                 }
@@ -139,7 +139,7 @@ namespace chad::detail {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("nei   {}  {:.2f}", level, dur);
+        fmt::println("nei    {} {:.2f}", level, dur);
         return neigh_map;
     }
     auto estimate_normals(const MortonVector& points_mc, const glm::vec3 position) -> std::vector<glm::vec3> {

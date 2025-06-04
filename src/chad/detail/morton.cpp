@@ -21,7 +21,7 @@ namespace chad::detail {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc calc  {:.2f}", dur);
+        fmt::println("mc  calc {:.2f}", dur);
         return points_mc;
     }
     auto sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3> {
@@ -43,7 +43,7 @@ namespace chad::detail {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc sort  {:.2f}", dur);
+        fmt::println("mc  sort {:.2f}", dur);
         return points_sorted;
     }
 }

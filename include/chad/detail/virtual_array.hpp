@@ -13,9 +13,10 @@ namespace chad::detail {
         using const_iterator = const T*;
         using iterator = T*;
 
-        VirtualArray(size_t virtual_capacity = 0xffffffff): 
-            _virt_mem_p(reinterpret_cast<T*>(allocate_virtual(virtual_capacity))),   
-            _size(0), _capacity(virtual_capacity) {
+        VirtualArray(size_t virtual_capacity = 0xffffffff) {
+            _virt_mem_p = reinterpret_cast<T*>(allocate_virtual(virtual_capacity));
+            _size = 0;
+            _capacity = virtual_capacity;
         }
         ~VirtualArray() {
             deallocate_virtual(_virt_mem_p, _capacity);
@@ -90,6 +91,10 @@ namespace chad::detail {
         void inline resize(size_t new_size) noexcept {
             // no need to worry about de-/reallocation
             _size = new_size;
+        }
+        void inline clear() {
+            // do not deallocate or wipe data
+            _size = 0;
         }
         
     private:
