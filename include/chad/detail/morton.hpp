@@ -34,7 +34,7 @@ namespace chad::detail {
     };
 
     using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
-    auto calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector;
+    auto calc_mc_from_points(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector;
     auto sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3>;
 }
 

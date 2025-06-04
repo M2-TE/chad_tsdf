@@ -213,56 +213,43 @@ namespace chad {
             delete submap_p;
         }
     }
-    template<> void TSDFMap::insert<glm::vec3>(const std::vector<glm::vec3>& points, const glm::vec3 position) {
+    void TSDFMap::insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
         using namespace detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
+        // turn float array into usable vector
+        const glm::vec3 position_vec { position[0], position[1], position[2] };
+
         // submapping stuff (TODO)
         auto& positions = _active_submap_p->positions;
-        if (positions.empty()) positions.push_back(position);
+        if (positions.empty()) positions.push_back(position_vec);
         else {
             // finalize active submap once traversed far enough
             glm::vec3 start = positions.front();
             float dist_sqr = 5.0f * 5.0f;
-            if (glm::distance2(position, start) > dist_sqr) {
+            if (glm::distance2(position_vec, start) > dist_sqr) {
                 finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
                 _submaps.push_back(_active_submap_p);
                 _active_submap_p = new Submap();
-                _active_submap_p->positions.push_back(position);
+                _active_submap_p->positions.push_back(position_vec);
                 _active_octree_p->clear();
             }
             // else just update active submap
-            else positions.push_back(position);
+            else positions.push_back(position_vec);
         }
 
         // sort points by their morton code, discretized to the voxel resolution
         auto points_mc = calc_mc_from_points(points, _voxel_resolution);
         auto points_sorted = sort_points_by_mc(points_mc); // TODO: eval if ret is needed
         // estimate the normal of every point
-        auto normals = estimate_normals(points_mc, position);
+        auto normals = estimate_normals(points_mc, position_vec);
 
         // octree shenanigans
-        update_octree(*_active_octree_p, points_sorted, normals, position, _voxel_resolution, _truncation_distance);
+        update_octree(*_active_octree_p, points_sorted, normals, position_vec, _voxel_resolution, _truncation_distance);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("total    {:.2f}", dur);
-    }
-    template<> void TSDFMap::insert<Eigen::Vector3f>(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f position) {
-        std::vector<glm::vec3> glm_points;
-        glm_points.reserve(points.size());
-        for (const auto& point: points) {
-            glm_points.emplace_back(point.x(), point.y(), point.z());
-        }
-        insert(glm_points, glm::vec3{ position.x(), position.y(), position.z() });
-    }
-    template<> void TSDFMap::insert<std::array<float, 3>>(const std::vector<std::array<float, 3>>& points, const std::array<float, 3> position) {
-        std::vector<glm::vec3> glm_points;
-        glm_points.reserve(points.size());
-        for (const auto& point: points) {
-            glm_points.emplace_back(point[0], point[1], point[2]);
-        }
-        insert(glm_points, glm::vec3{ position[0], position[1], position[2] });
     }
     void TSDFMap::save() {
         if (!_active_submap_p->positions.empty()) {

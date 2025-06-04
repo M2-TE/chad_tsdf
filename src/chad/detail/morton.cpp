@@ -1,9 +1,10 @@
 #include <chrono>
 #include <fmt/base.h>
+#include <glm/glm.hpp>
 #include "chad/detail/morton.hpp"
 
 namespace chad::detail {
-    auto calc_mc_from_points(const std::vector<glm::vec3>& points, const float voxel_resolution) -> MortonVector {
+    auto calc_mc_from_points(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // calc reciprocal of voxel resolution for later
@@ -12,7 +13,8 @@ namespace chad::detail {
         // generate morton codes from discretized points
         MortonVector points_mc;
         points_mc.reserve(points.size());
-        for (const auto& point: points) {
+        for (const auto& point_arr: points) {
+            glm::vec3 point { point_arr[0], point_arr[1], point_arr[2] };
             // convert to voxel coordinate and discretize with floor()
             glm::vec3 point_discretized = glm::floor(point * voxel_reciprocal);
             // create morton code from discretized integer position

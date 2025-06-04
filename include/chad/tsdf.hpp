@@ -1,5 +1,8 @@
 #pragma once
+#include <array>
 #include <vector>
+
+#include <glm/glm.hpp>
 
 // forward declare implementation details
 namespace chad::detail {
@@ -13,10 +16,17 @@ namespace chad {
         TSDFMap(float voxel_resolution = 0.05f, float _truncation_distance = 0.1f);
         ~TSDFMap();
 
-        // insert point using std::array<float, 3>, glm::vec3 or Eigen::Vector3f
-        template<typename Point>
-        void insert(const std::vector<Point>& points, const Point position);
-        // void insert(const std::vector<std::array<float, 3>> points, std::array<float, 3> position);
+        // TODO
+        void insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
+        // TODO
+        void insert(const std::vector<glm::vec3>& points, const glm::vec3& position) {
+            std::vector<std::array<float, 3>> points_vec;
+            points_vec.reserve(points.size());
+            for (const auto& point: points) {
+                points_vec.push_back({ point.x, point.y, point.z });
+            }
+            insert(points_vec, { position.x, position.y, position.z });
+        }
         // TODO
         void save();
 
