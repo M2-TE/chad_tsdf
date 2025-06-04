@@ -1,10 +1,7 @@
 #pragma once
 #include <vector>
 
-// TODO: hide these includes
-#include <glm/vec3.hpp>
-
-
+// forward declare implementation details
 namespace chad::detail {
     struct Submap;
     struct Octree;
@@ -19,14 +16,9 @@ namespace chad {
         // insert point using std::array<float, 3>, glm::vec3 or Eigen::Vector3f
         template<typename Point>
         void insert(const std::vector<Point>& points, const Point position);
+        // void insert(const std::vector<std::array<float, 3>> points, std::array<float, 3> position);
         // TODO
         void save();
-        
-    private:
-        // insert new points into current active submap
-        void update_octree(const std::vector<glm::vec3>& points_mc, const std::vector<glm::vec3>& normals, glm::vec3 position);
-        // store current active submap as DAG and reset it
-        void finalize_submap();
 
     public:
         const float _voxel_resolution;
