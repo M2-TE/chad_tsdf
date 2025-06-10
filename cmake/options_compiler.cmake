@@ -46,5 +46,7 @@ endif()
 if (MSVC)
     add_link_options("/SUBSYSTEM:CONSOLE")
 elseif (UNIX)
-    add_link_options("-pthread")
+    add_link_options(
+        "-pthread"
+        "-fopenmp") # required by lvr2
 endif()

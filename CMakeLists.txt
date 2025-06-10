@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 project(chad_tsdf LANGUAGES CXX)
 
 # settings
-option(CHAD_PREFER_MOLD   "Prefer to use mold linker (Linux only)" ON)
+option(CHAD_PREFER_MOLD "Prefer to use mold linker (Linux only)" ON)
 option(CHAD_PREFER_CCACHE "Prefer to use ccache (Linux only)" ON)
 option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
 option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)

@@ -53,7 +53,7 @@ namespace chad {
         #endif // __has_include(<Eigen/Eigen>)
 
         // TODO
-        void save(std::string_view filename);
+        void save(const std::string& filename);
 
     public:
         const float _voxel_resolution;

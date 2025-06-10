@@ -1,5 +1,6 @@
 # use either system or FetchContent package
-find_package(LVR2 25.1.0 QUIET)
+set(LVR2_USE_STATIC_LIBS ON)
+find_package(LVR2 25.1.0 CONFIG QUIET)
 if (NOT LVR2_FOUND)
     set(WITH_CUDA OFF)
 
@@ -13,5 +14,9 @@ if (NOT LVR2_FOUND)
     FetchContent_MakeAvailable(lvr2)
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ${LVR2_LIBRARIES})
+add_definitions(${LVR2_DEFINITIONS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LVR2_LIBRARIES}
+    "/usr/local/lib/liblvr2rply_static.a" # evil act #1
+    "/usr/local/lib/liblvr2las_static.a"  # evil act #2
+    )
 target_include_directories(${PROJECT_NAME} PRIVATE ${LVR2_INCLUDE_DIRS})

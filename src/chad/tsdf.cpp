@@ -253,7 +253,7 @@ namespace chad {
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("total    {:.2f}", dur);
     }
-    void TSDFMap::save(std::string_view filename) {
+    void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
         if (!_active_submap_p->positions.empty()) {
             finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);

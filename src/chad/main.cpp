@@ -33,7 +33,7 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
     }
-    map.save("testthing");
+    map.save("testthing.ply");
 }
 int main() {
     do_sphere_thing();
