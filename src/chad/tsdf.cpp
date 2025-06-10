@@ -9,6 +9,8 @@
 #include "chad/detail/octree.hpp"
 #include "chad/detail/normals.hpp"
 
+#include "chad/detail/lvr2.hpp"
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 
@@ -220,7 +222,7 @@ namespace chad {
         // turn float array into usable vector
         const glm::vec3 position_vec { position[0], position[1], position[2] };
 
-        // submapping stuff (TODO)
+        // either update submap or create a new one
         auto& positions = _active_submap_p->positions;
         if (positions.empty()) positions.push_back(position_vec);
         else {
@@ -239,10 +241,10 @@ namespace chad {
         }
 
         // sort points by their morton code, discretized to the voxel resolution
-        auto points_mc = calc_mc_from_points(points, _voxel_resolution);
-        auto points_sorted = sort_points_by_mc(points_mc); // TODO: eval if ret is needed
+        MortonVector points_mc = calc_morton_vector(points, _voxel_resolution);
+        std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
         // estimate the normal of every point
-        auto normals = estimate_normals(points_mc, position_vec);
+        std::vector<glm::vec3> normals = estimate_normals(points_mc, position_vec);
 
         // octree shenanigans
         update_octree(*_active_octree_p, points_sorted, normals, position_vec, _voxel_resolution, _truncation_distance);
@@ -251,9 +253,13 @@ namespace chad {
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("total    {:.2f}", dur);
     }
-    void TSDFMap::save() {
+    void TSDFMap::save(std::string_view filename) {
+        // finalize current active submap
         if (!_active_submap_p->positions.empty()) {
             finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
         }
+
+        // reconstruct 3D mesh using LVR2
+        detail::reconstruct(filename);
     }
 }

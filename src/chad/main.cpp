@@ -1,28 +1,8 @@
 #include <random>
-#include <fstream>
-#include <glm/glm.hpp>
 #include <fmt/base.h>
+#include <glm/glm.hpp>
 #include "chad/tsdf.hpp"
 
-void static read_pcl_file() {
-    std::ifstream file;
-    file.open("debugpoints.bin", std::ofstream::binary);
-    // read number of points present in file
-    size_t point_count;
-    file.read(reinterpret_cast<char*>(&point_count), sizeof(size_t));
-    // read out all points into vector
-    std::vector<glm::vec3> points { point_count };
-    for (auto& point: points) {
-        file.read(reinterpret_cast<char*>(&point), sizeof(glm::vec3));
-    }
-    fmt::println("Read {} points from file", point_count);
-    // insert into CHAD TSDF and print stats
-    // Chad chad;
-    // auto rot = glm::identity<glm::quat>();
-    // chad.insert(points, glm::vec3(0, 0, 0), rot);
-    // chad.print_stats();
-    // chad.merge_all_subtrees();
-}
 void static do_sphere_thing() {
     // generate random point data
     std::vector<glm::vec3> points { 100'000 };
@@ -53,9 +33,8 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
     }
-    map.save();
+    map.save("testthing");
 }
 int main() {
-    if (false) read_pcl_file();
-    else do_sphere_thing();
+    do_sphere_thing();
 }

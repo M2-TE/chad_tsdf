@@ -1,10 +1,10 @@
+#include <iostream>
 #if defined(linux)
 #   include <sys/mman.h>
 #   include <errno.h>
 #elif defined(_WIN32) || defined(_WIN64)
 #   error "not yet implemented for windows"
 #endif
-#include <iostream>
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {

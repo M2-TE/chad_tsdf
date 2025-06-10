@@ -1,8 +1,15 @@
 #pragma once
 #include <array>
 #include <vector>
+#include <string_view>
 
-#include <glm/glm.hpp>
+#if __has_include(<glm/vec3.hpp>)
+#   include <glm/vec3.hpp>
+#endif
+
+#if __has_include(<Eigen/Eigen>)
+#   include <Eigen/Eigen>
+#endif
 
 // forward declare implementation details
 namespace chad::detail {
@@ -16,9 +23,11 @@ namespace chad {
         TSDFMap(float voxel_resolution = 0.05f, float _truncation_distance = 0.1f);
         ~TSDFMap();
 
-        // TODO
+        // insert pointcloud alongside scanner position
         void insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
-        // TODO
+
+        #if __has_include(<glm/vec3.hpp>)
+        // insert pointcloud alongside scanner position
         void insert(const std::vector<glm::vec3>& points, const glm::vec3& position) {
             std::vector<std::array<float, 3>> points_vec;
             points_vec.reserve(points.size());
@@ -27,8 +36,22 @@ namespace chad {
             }
             insert(points_vec, { position.x, position.y, position.z });
         }
+        #endif // __has_include(<glm/vec3.hpp>)
+
+        #if __has_include(<Eigen/Eigen>)
+        // insert pointcloud alongside scanner position
+        void insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position) {
+            std::vector<std::array<float, 3>> points_vec;
+            points_vec.reserve(points.size());
+            for (const auto& point: points) {
+                points_vec.push_back({ point.x(), point.y(), point.z() });
+            }
+            insert(points_vec, { position.x(), position.y(), position.z() });
+        }
+        #endif // __has_include(<Eigen/Eigen>)
+
         // TODO
-        void save();
+        void save(std::string_view filename);
 
     public:
         const float _voxel_resolution;

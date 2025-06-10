@@ -4,7 +4,7 @@
 #include "chad/detail/morton.hpp"
 
 namespace chad::detail {
-    auto calc_mc_from_points(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector {
+    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // calc reciprocal of voxel resolution for later
@@ -26,7 +26,7 @@ namespace chad::detail {
         fmt::println("mc  calc {:.2f}", dur);
         return points_mc;
     }
-    auto sort_points_by_mc(MortonVector& points_mc) -> std::vector<glm::vec3> {
+    auto sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3> {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // sort points using morton codes

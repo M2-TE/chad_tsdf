@@ -17,8 +17,8 @@ if (NOT glm_FOUND)
         EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(glm)
 endif()
-target_compile_definitions(${PROJECT_NAME} PUBLIC
+target_compile_definitions(${PROJECT_NAME} PRIVATE
     "GLM_FORCE_CXX20"
     "GLM_FORCE_INLINE"
     "GLM_FORCE_INTRINSICS")
-target_link_libraries(${PROJECT_NAME} PUBLIC glm::glm-header-only)
+target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm-header-only)
