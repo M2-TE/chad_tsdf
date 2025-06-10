@@ -6,140 +6,149 @@
 #include <lvr2/reconstruction/FastReconstruction.hpp>
 #include <lvr2/algorithm/NormalAlgorithms.hpp>
 #include "chad/detail/lvr2.hpp"
+#include "chad/detail/levels.hpp"
 
 namespace chad::detail {
     template<typename BaseVecT, typename BoxT>
     struct ChadGrid: public lvr2::GridBase {
-        // ChadGrid(std::array<std::vector<uint32_t>*, 63/3 - 1> node_levels, std::vector<LeafCluster::ClusterValue>& leaf_level, uint32_t root_addr, double voxel_res): lvr2::GridBase(false) {
-        //     m_globalIndex = 0;
-        //     m_coordinateScales.x = 1.0;
-        //     m_coordinateScales.y = 1.0;
-        //     m_coordinateScales.z = 1.0;
-        //     m_voxelsize = voxel_res;
-        //     BoxT::m_voxelsize = voxel_res;
+        ChadGrid(detail::NodeLevels& node_levels, uint32_t root_addr, float voxel_res): lvr2::GridBase(false) {
+            m_globalIndex = 0;
+            m_coordinateScales.x = 1.0;
+            m_coordinateScales.y = 1.0;
+            m_coordinateScales.z = 1.0;
+            m_voxelsize = voxel_res;
+            BoxT::m_voxelsize = voxel_res;
 
-        //     // trackers that will be updated during traversal
-        //     static constexpr std::size_t max_depth = 63/3 - 1;
-        //     std::array<uint8_t, max_depth> path;
-        //     std::array<Node*, max_depth> nodes;
-        //     path.fill(0);
-        //     nodes.fill(nullptr);
-        //     // initialize
-        //     nodes[0] = Node::from_addr(*node_levels[0], root_addr);
+            // trackers for the traversed path and nodes
+            std::array<uint8_t,  NodeLevels::MAX_DEPTH> path;
+            std::array<uint32_t, NodeLevels::MAX_DEPTH> nodes;
+            path.fill(0);
+            nodes.fill(root_addr);
 
-        //     uint_fast32_t depth = 0;
-        //     while(true) {
-        //         auto child_i = path[depth]++;
-        //         if (child_i == 8) {
-        //             if (depth > 0) depth--;
-        //             else break; // exit main loop
-        //         }
+            // // trackers that will be updated during traversal
+            // static constexpr std::size_t max_depth = 63/3 - 1;
+            // std::array<uint8_t, max_depth> path;
+            // std::array<Node*, max_depth> nodes;
+            // path.fill(0);
+            // nodes.fill(nullptr);
+            // // initialize
+            // nodes[0] = Node::from_addr(*node_levels[0], root_addr);
 
-        //         // normal node
-        //         else if (depth < max_depth - 1) {
-        //             // read current parent node
-        //             auto* node_p = nodes[depth];
-        //             if (node_p->contains_child(child_i)) {
-        //                 uint32_t child_addr = node_p->get_child_addr(child_i);
-        //                 depth++;
-        //                 path[depth] = 0;
-        //                 nodes[depth] = Node::from_addr(*node_levels[depth], child_addr);
-        //             }
-        //         }
-        //         // leaf cluster node
-        //         else {
-        //             // skip if child does not exist
-        //             auto* node_p = nodes[depth];
-        //             if (!node_p->contains_child(child_i)) continue;
-        //             uint32_t child_addr = node_p->get_child_addr(child_i);
-        //             // construct helper class for leaf cluster data
-        //             LeafCluster leaf_cluster{ leaf_level[child_addr] };
+            uint_fast32_t depth = 0;
+            while(true) {
+                auto child_i = path[depth]++;
 
-        //             // reconstruct morton code from path
-        //             uint64_t code = 0;
-        //             for (uint64_t k = 0; k < 63/3 - 1; k++) {
-        //                 uint64_t part = path[k] - 1;
-        //                 code |= part << (60 - k*3);
-        //             }
-        //             // convert into chunk position of leaf cluster
-        //             Eigen::Vector3i cluster_chunk;
-        //             std::tie(cluster_chunk.x(), cluster_chunk.y(), cluster_chunk.z()) = mortonnd::MortonNDBmi_3D_64::Decode(code);
-        //             // convert from 21-bit inverted to 32-bit integer
-        //             cluster_chunk = cluster_chunk.unaryExpr([](auto i){ return i - (1 << 20); });
+                // when all children at this depth were iterated
+                if (child_i == 8) {
+                    if (depth > 0) depth--;
+                    else break; // exit main loop
+                }
+
+                // node contains node children
+                else if (depth < NodeLevels::MAX_DEPTH - 1) {
+                    // // read current parent node
+                    // auto* node_p = nodes[depth];
+                    // if (node_p->contains_child(child_i)) {
+                    //     uint32_t child_addr = node_p->get_child_addr(child_i);
+                    //     depth++;
+                    //     path[depth] = 0;
+                    //     nodes[depth] = Node::from_addr(*node_levels[depth], child_addr);
+                    // }
+                }
+                // node contains leaf children
+                else {
+                    // // skip if child does not exist
+                    // auto* node_p = nodes[depth];
+                    // if (!node_p->contains_child(child_i)) continue;
+                    // uint32_t child_addr = node_p->get_child_addr(child_i);
+                    // // construct helper class for leaf cluster data
+                    // LeafCluster leaf_cluster{ leaf_level[child_addr] };
+
+                    // // reconstruct morton code from path
+                    // uint64_t code = 0;
+                    // for (uint64_t k = 0; k < 63/3 - 1; k++) {
+                    //     uint64_t part = path[k] - 1;
+                    //     code |= part << (60 - k*3);
+                    // }
+                    // // convert into chunk position of leaf cluster
+                    // Eigen::Vector3i cluster_chunk;
+                    // std::tie(cluster_chunk.x(), cluster_chunk.y(), cluster_chunk.z()) = mortonnd::MortonNDBmi_3D_64::Decode(code);
+                    // // convert from 21-bit inverted to 32-bit integer
+                    // cluster_chunk = cluster_chunk.unaryExpr([](auto i){ return i - (1 << 20); });
                     
-        //             uint32_t leaf_i = 0;
-        //             for (int32_t z = 0; z <= 1; z++) {
-        //             for (int32_t y = 0; y <= 1; y++) {
-        //             for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-        //                 // leaf position
-        //                 Eigen::Vector3i leaf_chunk = cluster_chunk + Eigen::Vector3i(x, y, z);
-        //                 Eigen::Vector3f leaf_pos = leaf_chunk.cast<float>() * m_voxelsize;
+                    // uint32_t leaf_i = 0;
+                    // for (int32_t z = 0; z <= 1; z++) {
+                    // for (int32_t y = 0; y <= 1; y++) {
+                    // for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                    //     // leaf position
+                    //     Eigen::Vector3i leaf_chunk = cluster_chunk + Eigen::Vector3i(x, y, z);
+                    //     Eigen::Vector3f leaf_pos = leaf_chunk.cast<float>() * m_voxelsize;
                         
-        //                 auto sd_opt = leaf_cluster.get_leaf(leaf_i);
-        //                 if (!sd_opt) continue; // skip invalid leaves
-        //                 // signed distance for this leaf
-        //                 float sd = sd_opt.value();
-        //                 // float sd_perfect = leaf_pos.cast<double>().norm() - 5.0;
-        //                 // sd_perfect = std::clamp(sd_perfect, -m_voxelsize, +m_voxelsize);
-        //                 // sd = sd_perfect;
-        //                 // std::cout << "perfect: " << sd_perfect << " actual: " << sd_opt.value() << '\n';
+                    //     auto sd_opt = leaf_cluster.get_leaf(leaf_i);
+                    //     if (!sd_opt) continue; // skip invalid leaves
+                    //     // signed distance for this leaf
+                    //     float sd = sd_opt.value();
+                    //     // float sd_perfect = leaf_pos.cast<double>().norm() - 5.0;
+                    //     // sd_perfect = std::clamp(sd_perfect, -m_voxelsize, +m_voxelsize);
+                    //     // sd = sd_perfect;
+                    //     // std::cout << "perfect: " << sd_perfect << " actual: " << sd_opt.value() << '\n';
                         
-        //                 // create query point
-        //                 size_t querypoint_i = m_queryPoints.size();
-        //                 m_queryPoints.emplace_back(BaseVecT(leaf_pos.x(), leaf_pos.y(), leaf_pos.z()), sd);
+                    //     // create query point
+                    //     size_t querypoint_i = m_queryPoints.size();
+                    //     m_queryPoints.emplace_back(BaseVecT(leaf_pos.x(), leaf_pos.y(), leaf_pos.z()), sd);
                         
-        //                 // 8 cells around the query point
-        //                 std::array<Eigen::Vector3f, 8> cell_offsets = {
-        //                     Eigen::Vector3f(+0.5, +0.5, +0.5),
-        //                     Eigen::Vector3f(-0.5, +0.5, +0.5),
-        //                     Eigen::Vector3f(-0.5, -0.5, +0.5),
-        //                     Eigen::Vector3f(+0.5, -0.5, +0.5),
-        //                     Eigen::Vector3f(+0.5, +0.5, -0.5),
-        //                     Eigen::Vector3f(-0.5, +0.5, -0.5),
-        //                     Eigen::Vector3f(-0.5, -0.5, -0.5),
-        //                     Eigen::Vector3f(+0.5, -0.5, -0.5),
-        //                 };
-        //                 for (size_t i = 0; i < 8; i++) {
-        //                     // create cell
-        //                     Eigen::Vector3f cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
-        //                     // create morton code of cell
-        //                     const float recip = 1.0 / m_voxelsize;
-        //                     // convert position back to chunk index
-        //                     Eigen::Vector3f cell_pos = cell_center * recip;
-        //                     cell_pos = cell_pos.unaryExpr([](float f){ return std::floor(f); });
-        //                     Eigen::Vector3i cell_chunk = cell_pos.cast<int32_t>();
-        //                     // convert to 21-bit ints
-        //                     cell_chunk = cell_chunk.unaryExpr([](auto i){ return i + (1 << 20); });
-        //                     uint64_t mc = mortonnd::MortonNDBmi_3D_64::Encode(cell_chunk.x(), cell_chunk.y(), cell_chunk.z());
-        //                     // emplace cell into map, check if it already existed
-        //                     auto [box_it, emplaced] = m_cells.emplace(mc, nullptr);
-        //                     if (emplaced) {
-        //                         box_it->second = new BoxT(BaseVecT(cell_center.x(), cell_center.y(), cell_center.z()));
-        //                     }
-        //                     // place query point at the correct cell index
-        //                     box_it->second->setVertex(i, querypoint_i);
-        //                 }
-        //             }}}
-        //         }
-        //     }
+                    //     // 8 cells around the query point
+                    //     std::array<Eigen::Vector3f, 8> cell_offsets = {
+                    //         Eigen::Vector3f(+0.5, +0.5, +0.5),
+                    //         Eigen::Vector3f(-0.5, +0.5, +0.5),
+                    //         Eigen::Vector3f(-0.5, -0.5, +0.5),
+                    //         Eigen::Vector3f(+0.5, -0.5, +0.5),
+                    //         Eigen::Vector3f(+0.5, +0.5, -0.5),
+                    //         Eigen::Vector3f(-0.5, +0.5, -0.5),
+                    //         Eigen::Vector3f(-0.5, -0.5, -0.5),
+                    //         Eigen::Vector3f(+0.5, -0.5, -0.5),
+                    //     };
+                    //     for (size_t i = 0; i < 8; i++) {
+                    //         // create cell
+                    //         Eigen::Vector3f cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
+                    //         // create morton code of cell
+                    //         const float recip = 1.0 / m_voxelsize;
+                    //         // convert position back to chunk index
+                    //         Eigen::Vector3f cell_pos = cell_center * recip;
+                    //         cell_pos = cell_pos.unaryExpr([](float f){ return std::floor(f); });
+                    //         Eigen::Vector3i cell_chunk = cell_pos.cast<int32_t>();
+                    //         // convert to 21-bit ints
+                    //         cell_chunk = cell_chunk.unaryExpr([](auto i){ return i + (1 << 20); });
+                    //         uint64_t mc = mortonnd::MortonNDBmi_3D_64::Encode(cell_chunk.x(), cell_chunk.y(), cell_chunk.z());
+                    //         // emplace cell into map, check if it already existed
+                    //         auto [box_it, emplaced] = m_cells.emplace(mc, nullptr);
+                    //         if (emplaced) {
+                    //             box_it->second = new BoxT(BaseVecT(cell_center.x(), cell_center.y(), cell_center.z()));
+                    //         }
+                    //         // place query point at the correct cell index
+                    //         box_it->second->setVertex(i, querypoint_i);
+                    //     }
+                    // }}}
+                }
+            }
 
-        //     // cull incomplete cells
-        //     std::vector<uint64_t> incomplete_cells;
-        //     for (auto it = m_cells.cbegin(); it != m_cells.cend(); it++) {
-        //         bool incomplete = false;
-        //         for (auto i = 0; i < 8; i++) {
-        //             auto vertIndex = it->second->getVertex(i);
-        //             if (vertIndex == BoxT::INVALID_INDEX) incomplete = true;
-        //         }
-        //         if (incomplete) incomplete_cells.push_back(it->first);
-        //     }
-        //     for (auto it = incomplete_cells.cbegin(); it != incomplete_cells.cend(); it++) {
-        //         auto cell = m_cells.find(*it);
-        //         delete cell->second;
-        //         m_cells.erase(cell);
-        //     }
-        //     std::cout << "ChadGrid created" << std::endl;
-        // }
+            // cull incomplete cells
+            std::vector<uint64_t> incomplete_cells;
+            for (auto it = m_cells.cbegin(); it != m_cells.cend(); it++) {
+                bool incomplete = false;
+                for (auto i = 0; i < 8; i++) {
+                    auto vertIndex = it->second->getVertex(i);
+                    if (vertIndex == BoxT::INVALID_INDEX) incomplete = true;
+                }
+                if (incomplete) incomplete_cells.push_back(it->first);
+            }
+            for (auto it = incomplete_cells.cbegin(); it != incomplete_cells.cend(); it++) {
+                auto cell = m_cells.find(*it);
+                delete cell->second;
+                m_cells.erase(cell);
+            }
+            std::cout << "ChadGrid created" << std::endl;
+        }
         ~ChadGrid() {
             lvr2::GridBase::~GridBase();
         }

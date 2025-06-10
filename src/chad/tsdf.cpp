@@ -130,7 +130,7 @@ namespace chad::detail {
         const float truncation_distance_recip = 1.0f / truncation_distance;
 
         uint32_t depth = 0;
-        while (depth >= 0) {
+        while (true) {
             uint8_t child_i = path[depth]++;
 
             // when all children at this depth were iterated
