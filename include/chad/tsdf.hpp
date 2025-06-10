@@ -12,10 +12,12 @@
 #endif
 
 // forward declare implementation details
-namespace chad::detail {
-    struct Submap;
-    struct Octree;
-    struct NodeLevels;
+namespace chad {
+    namespace detail {
+        struct Submap;
+        struct Octree;
+        struct NodeLevels;
+    }
 }
 namespace chad {
     class TSDFMap {
