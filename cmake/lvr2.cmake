@@ -1,6 +1,6 @@
 # use either system or FetchContent package
 set(LVR2_USE_STATIC_LIBS ON)
-find_package(LVR2 25.1.0 CONFIG QUIET)
+find_package(LVR2 25.1.0 QUIET)
 if (NOT LVR2_FOUND)
     set(WITH_CUDA OFF)
 

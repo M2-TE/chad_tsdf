@@ -145,6 +145,44 @@ namespace chad::detail {
     };
 
     struct NodeLevels {
+        auto try_get_child_addr(uint32_t depth, uint32_t parent_addr, uint8_t child_i) const -> std::pair<uint32_t, bool> {
+            uint32_t child_mask = _nodes[depth]._raw_data[parent_addr];
+            uint32_t child_bit = 1 << child_i;
+
+            // check if the child exists
+            if (child_mask & child_bit) {
+                return { 0, false };
+            }
+            // if it does, return its address
+            else {
+                // count the number of children that are stored before this one
+                uint8_t masked = uint8_t(child_mask & (child_bit - 1));
+                uint8_t child_count = std::popcount(masked);
+                // child count will correspond to the requested child's index
+                uint32_t child_addr = _nodes[depth]._raw_data[parent_addr + uint32_t(child_count)];
+                return { child_addr, true };
+            }
+        }
+
+        auto try_get_leaf_cluster(uint32_t parent_addr, uint8_t child_i) const -> std::pair<LeafCluster, bool> {
+            uint32_t child_mask = _nodes.back()._raw_data[parent_addr];
+            uint32_t child_bit = 1 << child_i;
+
+            // check if the leaf cluster exists
+            if (child_mask & child_bit) {
+                return { {}, false };
+            }
+            // if it does, return it
+            else {
+                // count the number of children that are stored before this one
+                uint8_t masked = uint8_t(child_mask & (child_bit - 1));
+                uint8_t child_count = std::popcount(masked);
+                // child count will correspond to the requested child's index
+                uint32_t child_addr = _nodes.back()._raw_data[parent_addr + uint32_t(child_count)];
+                return { _leaf_clusters._raw_data[child_addr], true };
+            }
+        }
+
         // 21 levels total
         static constexpr uint64_t MAX_DEPTH = 20;
         // 20 levels of standard nodes

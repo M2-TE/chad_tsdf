@@ -1,7 +1,6 @@
 #pragma once
 #include <array>
 #include <vector>
-#include <string_view>
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -38,7 +37,7 @@ namespace chad {
             }
             insert(points_vec, { position.x, position.y, position.z });
         }
-        #endif // __has_include(<glm/vec3.hpp>)
+        #endif
 
         #if __has_include(<Eigen/Eigen>)
         // insert pointcloud alongside scanner position
@@ -50,7 +49,7 @@ namespace chad {
             }
             insert(points_vec, { position.x(), position.y(), position.z() });
         }
-        #endif // __has_include(<Eigen/Eigen>)
+        #endif
 
         // TODO
         void save(const std::string& filename);

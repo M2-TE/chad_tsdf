@@ -4,12 +4,12 @@
 #include <glm/gtc/type_aligned.hpp>
 #include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
+#include "chad/detail/lvr2.hpp"
 #include "chad/detail/levels.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
+#include "chad/detail/submap.hpp"
 #include "chad/detail/normals.hpp"
-
-#include "chad/detail/lvr2.hpp"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
@@ -29,11 +29,6 @@ namespace chad::detail {
     }
 
     // TODO: move these to proper headers
-    struct Submap {
-        uint32_t root_addr_tsdf;
-        uint32_t root_addr_weight;
-        std::vector<glm::vec3> positions;
-    };
     void update_octree(Octree& octree, const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float voxel_resolution, float truncation_distance) {
         auto beg = std::chrono::high_resolution_clock::now();
         const float voxel_reciprocal = float(1.0 / double(voxel_resolution));
@@ -170,7 +165,7 @@ namespace chad::detail {
                 path[depth] = 0;
                 nodes_oct[depth] = child_addr;
             }
-            // node contains leaf children
+            // node contains leaf cluster children
             else {
                 // retrieve node
                 const Octree::Node& node = octree.get_node(nodes_oct[depth]);
@@ -259,7 +254,7 @@ namespace chad {
             finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
         }
 
-        // reconstruct 3D mesh using LVR2
-        detail::reconstruct(filename);
+        // reconstruct 3D mesh using LVR2 (DEBUG: currently only reconstructs the first submap)
+        detail::reconstruct(*_submaps.front(), *_node_levels_p, _voxel_resolution, _truncation_distance, filename);
     }
 }

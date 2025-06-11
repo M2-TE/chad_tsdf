@@ -6,12 +6,12 @@
 #include <lvr2/reconstruction/FastReconstruction.hpp>
 #include <lvr2/algorithm/NormalAlgorithms.hpp>
 #include "chad/detail/lvr2.hpp"
-#include "chad/detail/levels.hpp"
+#include "chad/detail/morton.hpp"
 
 namespace chad::detail {
     template<typename BaseVecT, typename BoxT>
     struct ChadGrid: public lvr2::GridBase {
-        ChadGrid(detail::NodeLevels& node_levels, uint32_t root_addr, float voxel_res): lvr2::GridBase(false) {
+        ChadGrid(const detail::NodeLevels& node_levels, uint32_t root_addr, float voxel_res, float trunc_dist): lvr2::GridBase(false) {
             m_globalIndex = 0;
             m_coordinateScales.x = 1.0;
             m_coordinateScales.y = 1.0;
@@ -25,16 +25,7 @@ namespace chad::detail {
             path.fill(0);
             nodes.fill(root_addr);
 
-            // // trackers that will be updated during traversal
-            // static constexpr std::size_t max_depth = 63/3 - 1;
-            // std::array<uint8_t, max_depth> path;
-            // std::array<Node*, max_depth> nodes;
-            // path.fill(0);
-            // nodes.fill(nullptr);
-            // // initialize
-            // nodes[0] = Node::from_addr(*node_levels[0], root_addr);
-
-            uint_fast32_t depth = 0;
+            uint32_t depth = 0;
             while(true) {
                 auto child_i = path[depth]++;
 
@@ -46,89 +37,77 @@ namespace chad::detail {
 
                 // node contains node children
                 else if (depth < NodeLevels::MAX_DEPTH - 1) {
-                    // // read current parent node
-                    // auto* node_p = nodes[depth];
-                    // if (node_p->contains_child(child_i)) {
-                    //     uint32_t child_addr = node_p->get_child_addr(child_i);
-                    //     depth++;
-                    //     path[depth] = 0;
-                    //     nodes[depth] = Node::from_addr(*node_levels[depth], child_addr);
-                    // }
+                    // try to find the child in current node
+                    uint32_t parent_addr = nodes[depth];
+                    auto [child_addr, child_exists] = node_levels.try_get_child_addr(depth, parent_addr, child_i);
+                    if (child_exists) {
+                        depth++;
+                        path[depth] = 0;
+                        nodes[depth] = child_addr;
+                    }
                 }
-                // node contains leaf children
+                // node contains leaf cluster children
                 else {
-                    // // skip if child does not exist
-                    // auto* node_p = nodes[depth];
-                    // if (!node_p->contains_child(child_i)) continue;
-                    // uint32_t child_addr = node_p->get_child_addr(child_i);
-                    // // construct helper class for leaf cluster data
-                    // LeafCluster leaf_cluster{ leaf_level[child_addr] };
+                    // try to get the leaf cluster, skip if it doesn't exist
+                    uint32_t parent_addr = nodes[depth];
+                    auto [leaf_cluster, child_exists] = node_levels.try_get_leaf_cluster(parent_addr, child_i);
+                    if (!child_exists) continue;
 
-                    // // reconstruct morton code from path
-                    // uint64_t code = 0;
-                    // for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                    //     uint64_t part = path[k] - 1;
-                    //     code |= part << (60 - k*3);
-                    // }
-                    // // convert into chunk position of leaf cluster
-                    // Eigen::Vector3i cluster_chunk;
-                    // std::tie(cluster_chunk.x(), cluster_chunk.y(), cluster_chunk.z()) = mortonnd::MortonNDBmi_3D_64::Decode(code);
-                    // // convert from 21-bit inverted to 32-bit integer
-                    // cluster_chunk = cluster_chunk.unaryExpr([](auto i){ return i - (1 << 20); });
+                    // reconstruct morton code from path
+                    uint64_t code = 0;
+                    for (uint64_t k = 0; k < 63/3 - 1; k++) {
+                        uint64_t part = path[k] - 1;
+                        code |= part << (60 - k*3);
+                    }
+                    MortonCode mc { code };
+                    glm::ivec3 cluster_chunk = mc.decode();
                     
-                    // uint32_t leaf_i = 0;
-                    // for (int32_t z = 0; z <= 1; z++) {
-                    // for (int32_t y = 0; y <= 1; y++) {
-                    // for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-                    //     // leaf position
-                    //     Eigen::Vector3i leaf_chunk = cluster_chunk + Eigen::Vector3i(x, y, z);
-                    //     Eigen::Vector3f leaf_pos = leaf_chunk.cast<float>() * m_voxelsize;
+                    uint32_t leaf_i = 0;
+                    for (int32_t z = 0; z <= 1; z++) {
+                    for (int32_t y = 0; y <= 1; y++) {
+                    for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                        // signed distance within leaf
+                        auto [signed_distance, leaf_exists] = leaf_cluster.try_get_leaf_sd(leaf_i, trunc_dist);
+                        if (!leaf_exists) continue;
+
+                        // leaf position
+                        glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
+                        glm::vec3 leaf_pos = glm::vec3(leaf_chunk) * m_voxelsize;
                         
-                    //     auto sd_opt = leaf_cluster.get_leaf(leaf_i);
-                    //     if (!sd_opt) continue; // skip invalid leaves
-                    //     // signed distance for this leaf
-                    //     float sd = sd_opt.value();
-                    //     // float sd_perfect = leaf_pos.cast<double>().norm() - 5.0;
-                    //     // sd_perfect = std::clamp(sd_perfect, -m_voxelsize, +m_voxelsize);
-                    //     // sd = sd_perfect;
-                    //     // std::cout << "perfect: " << sd_perfect << " actual: " << sd_opt.value() << '\n';
+                        // create query point
+                        size_t querypoint_i = m_queryPoints.size();
+                        m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
                         
-                    //     // create query point
-                    //     size_t querypoint_i = m_queryPoints.size();
-                    //     m_queryPoints.emplace_back(BaseVecT(leaf_pos.x(), leaf_pos.y(), leaf_pos.z()), sd);
-                        
-                    //     // 8 cells around the query point
-                    //     std::array<Eigen::Vector3f, 8> cell_offsets = {
-                    //         Eigen::Vector3f(+0.5, +0.5, +0.5),
-                    //         Eigen::Vector3f(-0.5, +0.5, +0.5),
-                    //         Eigen::Vector3f(-0.5, -0.5, +0.5),
-                    //         Eigen::Vector3f(+0.5, -0.5, +0.5),
-                    //         Eigen::Vector3f(+0.5, +0.5, -0.5),
-                    //         Eigen::Vector3f(-0.5, +0.5, -0.5),
-                    //         Eigen::Vector3f(-0.5, -0.5, -0.5),
-                    //         Eigen::Vector3f(+0.5, -0.5, -0.5),
-                    //     };
-                    //     for (size_t i = 0; i < 8; i++) {
-                    //         // create cell
-                    //         Eigen::Vector3f cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
-                    //         // create morton code of cell
-                    //         const float recip = 1.0 / m_voxelsize;
-                    //         // convert position back to chunk index
-                    //         Eigen::Vector3f cell_pos = cell_center * recip;
-                    //         cell_pos = cell_pos.unaryExpr([](float f){ return std::floor(f); });
-                    //         Eigen::Vector3i cell_chunk = cell_pos.cast<int32_t>();
-                    //         // convert to 21-bit ints
-                    //         cell_chunk = cell_chunk.unaryExpr([](auto i){ return i + (1 << 20); });
-                    //         uint64_t mc = mortonnd::MortonNDBmi_3D_64::Encode(cell_chunk.x(), cell_chunk.y(), cell_chunk.z());
-                    //         // emplace cell into map, check if it already existed
-                    //         auto [box_it, emplaced] = m_cells.emplace(mc, nullptr);
-                    //         if (emplaced) {
-                    //             box_it->second = new BoxT(BaseVecT(cell_center.x(), cell_center.y(), cell_center.z()));
-                    //         }
-                    //         // place query point at the correct cell index
-                    //         box_it->second->setVertex(i, querypoint_i);
-                    //     }
-                    // }}}
+                        // 8 cells around the query point
+                        std::array<glm::vec3, 8> cell_offsets = {
+                            glm::vec3(+0.5, +0.5, +0.5),
+                            glm::vec3(-0.5, +0.5, +0.5),
+                            glm::vec3(-0.5, -0.5, +0.5),
+                            glm::vec3(+0.5, -0.5, +0.5),
+                            glm::vec3(+0.5, +0.5, -0.5),
+                            glm::vec3(-0.5, +0.5, -0.5),
+                            glm::vec3(-0.5, -0.5, -0.5),
+                            glm::vec3(+0.5, -0.5, -0.5),
+                        };
+                        for (size_t i = 0; i < 8; i++) {
+                            // create cell
+                            glm::vec3 cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
+                            // create morton code of cell
+                            const float recip = 1.0 / m_voxelsize;
+                            // convert position back to chunk index
+                            glm::vec3 cell_pos = glm::floor(cell_center * recip);
+                            glm::ivec3 cell_chunk = glm::ivec3(cell_pos);
+                            // convert to morton code
+                            MortonCode mc { cell_chunk };
+                            // emplace cell into map, check if it already existed
+                            auto [box_it, emplaced] = m_cells.emplace(mc._value, nullptr);
+                            if (emplaced) {
+                                box_it->second = new BoxT(BaseVecT(cell_center.x, cell_center.y, cell_center.z));
+                            }
+                            // place query point at the correct cell index
+                            box_it->second->setVertex(i, querypoint_i);
+                        }
+                    }}}
                 }
             }
 
@@ -151,6 +130,67 @@ namespace chad::detail {
         }
         ~ChadGrid() {
             lvr2::GridBase::~GridBase();
+        }
+        
+        auto getNumberOfCells() -> std::size_t { 
+            return m_cells.size();
+        }
+        auto firstCell() -> typename std::unordered_map<size_t, BoxT*>::iterator { 
+            return m_cells.begin(); 
+        }
+        auto lastCell() -> typename unordered_map<size_t, BoxT*>::iterator {
+            return m_cells.end();
+        }
+        auto firstQueryPoint() -> typename std::vector<lvr2::QueryPoint<BaseVecT>>::iterator {
+            return m_queryPoints.begin();
+        }
+        auto lastQueryPoint() -> typename std::vector<lvr2::QueryPoint<BaseVecT>>::iterator {
+            return m_queryPoints.end();
+        }
+        auto getQueryPoints() -> vector<lvr2::QueryPoint<BaseVecT>>& {
+            return m_queryPoints;
+        }
+        auto getCells() -> unordered_map<size_t, BoxT*>& {
+            return m_cells;
+        }
+
+        // implement pure virtual functions
+        void addLatticePoint(int i, int j, int k, float distance = 0.0) override {
+            (void)i;
+            (void)j;
+            (void)k;
+            (void)distance;
+        }
+        void saveGrid(std::string file) override {
+            (void)file;
+            // // store all the points into .grid file
+            // std::ofstream output;
+            // output.open(file, std::ofstream::trunc | std::ofstream::binary);
+            // // store header data
+            // float voxel_res = LEAF_RESOLUTION;
+            // output.write(reinterpret_cast<char*>(&voxel_res), sizeof(float));
+            // size_t query_points_n = getQueryPoints().size();
+            // output.write(reinterpret_cast<char*>(&query_points_n), sizeof(size_t));
+            // size_t cells_n = getNumberOfCells();
+            // output.write(reinterpret_cast<char*>(&cells_n), sizeof(size_t));
+            // // store query points (vec3 + float)
+            // auto& query_points = getQueryPoints();
+            // for (auto cur = query_points.cbegin(); cur != query_points.cend(); cur++) {
+            //     Eigen::Vector3f pos { cur->m_position.x, cur->m_position.y, cur->m_position.z };
+            //     float signed_distance = cur->m_distance;
+            //     output.write(reinterpret_cast<const char*>(&pos), sizeof(Eigen::Vector3f));
+            //     output.write(reinterpret_cast<const char*>(&signed_distance), sizeof(float));
+            // }
+            // // store cells (8x uint32_t)
+            // for (auto cur = firstCell(); cur != lastCell(); cur++) {
+            //     auto* cell = cur->second;
+            //     for (size_t i = 0; i < 8; i++) {
+            //         uint32_t i_query_point = cell->getVertex(i);
+            //         output.write(reinterpret_cast<const char*>(&i_query_point), sizeof(uint32_t));
+            //     }
+            // }
+            // output.close();
+            // std::cout << "Saved grid as " << file << '\n';
         }
 
     private:
@@ -178,11 +218,11 @@ namespace chad::detail {
         }
         virtual ~ChadReconstruction() {
         }
-        void getMesh(
-            [[maybe_unused]] lvr2::BaseMesh<BaseVecT>& mesh,
-            [[maybe_unused]] lvr2::BoundingBox<BaseVecT>& bb,
-            [[maybe_unused]] vector<unsigned int>& duplicates,
-            [[maybe_unused]] float comparePrecision) override {
+        void getMesh(lvr2::BaseMesh<BaseVecT>& mesh, lvr2::BoundingBox<BaseVecT>& bb, vector<unsigned int>& duplicates, float comparePrecision) override {
+            (void)mesh;
+            (void)bb;
+            (void)duplicates;
+            (void)comparePrecision;
         }
         void getMesh(lvr2::BaseMesh<BaseVecT> &mesh) override {
             // Status message for mesh generation
@@ -317,11 +357,10 @@ namespace chad::detail {
         shared_ptr<ChadGrid<BaseVecT, BoxT>> m_grid;
     };
 
-    void reconstruct(std::string_view filename) {
-
+    void reconstruct(const detail::Submap& submap, const NodeLevels& node_levels, float voxel_res, float trunc_dist, std::string_view filename) {
         // begin 3D mesh reconstruction using LVR2
-        [[maybe_unused]] typedef lvr2::BaseVector<float> VecT;
-        [[maybe_unused]] typedef lvr2::BilinearFastBox<VecT> BoxT;
+        typedef lvr2::BaseVector<float> VecT;
+        typedef lvr2::BilinearFastBox<VecT> BoxT;
         
         // create hash grid from entire tree
         // generate mesh from hash grid
@@ -332,12 +371,11 @@ namespace chad::detail {
         else if (decomp_type == "PMC") {
             // auto node_levels = chad.get_node_levels();
             // auto leaf_level = chad.get_leaf_level();
-            // auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(node_levels, leaf_level, root_addr, LEAF_RESOLUTION);
+            auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(node_levels, submap.root_addr_tsdf, voxel_res, trunc_dist);
             // if (save_grid) grid_p->saveGrid("hashgrid.grid");
             
-            // ChadReconstruction<VecT, BoxT> reconstruction { grid_p };
-            // reconstruction.getMesh(mesh);
-            
+            ChadReconstruction<VecT, BoxT> reconstruction { grid_p };
+            reconstruction.getMesh(mesh);
         }
         
         // generate mesh buffer from reconstructed mesh
