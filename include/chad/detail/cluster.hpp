@@ -12,7 +12,7 @@ namespace chad {
         LeafCluster(): _value(0) {}
         void set_leaf_sd_empty(uint64_t leaf_i) {
             // bits 0xff for signed distance signify an empty leaf
-            _value |= 0xff << (8 * leaf_i);
+            _value |= uint64_t(0xff) << uint64_t(8 * leaf_i);
         }
         void set_leaf_sd(uint8_t leaf_i, float signed_distance, float truncation_distance_recip) {
             // absolute value range for signed distances stored as integers

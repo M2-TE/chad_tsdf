@@ -51,6 +51,7 @@ namespace chad::detail {
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
             _raw_data.push_back(0);
+            _raw_data.push_back(0);
             _occupied_n = _raw_data.size();
         }
         // add a single node with the given children and return its address
@@ -145,35 +146,28 @@ namespace chad::detail {
     };
 
     struct NodeLevels {
-        auto try_get_child_addr(uint32_t depth, uint32_t parent_addr, uint8_t child_i) const -> std::pair<uint32_t, bool> {
+        auto get_child_addr(uint32_t depth, uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
             uint32_t child_mask = _nodes[depth]._raw_data[parent_addr];
             uint32_t child_bit = 1 << child_i;
 
             // check if the child exists
             if (child_mask & child_bit) {
-                return { 0, false };
-            }
-            // if it does, return its address
-            else {
                 // count the number of children that are stored before this one
                 uint8_t masked = uint8_t(child_mask & (child_bit - 1));
                 uint8_t child_count = std::popcount(masked);
-                // child count will correspond to the requested child's index
-                uint32_t child_addr = _nodes[depth]._raw_data[parent_addr + uint32_t(child_count)];
-                return { child_addr, true };
+                // child count will correspond to the requested child's index + 1 (accounting for child mask index)
+                uint32_t child_addr = _nodes[depth]._raw_data[parent_addr + uint32_t(child_count + 1)];
+                return child_addr;
             }
+            else return 0;
         }
 
         auto try_get_leaf_cluster(uint32_t parent_addr, uint8_t child_i) const -> std::pair<LeafCluster, bool> {
-            uint32_t child_mask = _nodes.back()._raw_data[parent_addr];
+            uint32_t child_mask = _nodes[MAX_DEPTH - 1]._raw_data[parent_addr];
             uint32_t child_bit = 1 << child_i;
 
             // check if the leaf cluster exists
             if (child_mask & child_bit) {
-                return { {}, false };
-            }
-            // if it does, return it
-            else {
                 // count the number of children that are stored before this one
                 uint8_t masked = uint8_t(child_mask & (child_bit - 1));
                 uint8_t child_count = std::popcount(masked);
@@ -181,6 +175,7 @@ namespace chad::detail {
                 uint32_t child_addr = _nodes.back()._raw_data[parent_addr + uint32_t(child_count)];
                 return { _leaf_clusters._raw_data[child_addr], true };
             }
+            else return { {}, false };
         }
 
         // 21 levels total

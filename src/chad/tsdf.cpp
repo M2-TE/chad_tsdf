@@ -14,6 +14,12 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 
+
+
+
+
+#include <bitset>
+
 namespace chad::detail {
     void print_vec(glm::vec3 vec) {
         fmt::println("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
@@ -146,12 +152,18 @@ namespace chad::detail {
                     break;
                 }
                 else {
+                    
                     // continue at parent depth
                     depth--;
                     // created nodes are standard tree nodes
                     uint32_t index_in_parent = path[depth] - 1;
                     nodes_tsdf  [depth][index_in_parent] = addr_tsdf;
                     nodes_weight[depth][index_in_parent] = addr_weight;
+
+
+                    // fmt::println("depth {}: index in parent: {} addr: {}", depth + 1, index_in_parent, addr_tsdf);
+                    // static int COUNTER = 0;
+                    // if (COUNTER++ >= 20) exit(0);
                 }
             }
             // node contains node children
@@ -167,8 +179,12 @@ namespace chad::detail {
             }
             // node contains leaf cluster children
             else {
+                // retrieve child address
+                uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
+                if (child_addr == 0) continue;
+
                 // retrieve node
-                const Octree::Node& node = octree.get_node(nodes_oct[depth]);
+                const Octree::Node& node = octree.get_node(child_addr);
                 
                 // create leaf cluster from all 8 leaves
                 LeafCluster lc_tsdf, lc_weight;
@@ -185,10 +201,6 @@ namespace chad::detail {
                 nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weight);
             }
         }
-
-        // TODO
-        // Submap& submap = _submaps.emplace_back();
-        fmt::println("{}", node_levels._leaf_clusters._uniques_n);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
@@ -252,6 +264,7 @@ namespace chad {
         // finalize current active submap
         if (!_active_submap_p->positions.empty()) {
             finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
+            _submaps.push_back(_active_submap_p);
         }
 
         // reconstruct 3D mesh using LVR2 (DEBUG: currently only reconstructs the first submap)

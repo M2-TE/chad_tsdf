@@ -1,3 +1,4 @@
+#include <fmt/base.h>
 #include <lvr2/geometry/PMPMesh.hpp>
 #include <lvr2/geometry/BoundingBox.hpp>
 #include <lvr2/reconstruction/HashGrid.hpp>
@@ -7,6 +8,9 @@
 #include <lvr2/algorithm/NormalAlgorithms.hpp>
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/morton.hpp"
+
+
+#include <bitset>
 
 namespace chad::detail {
     template<typename BaseVecT, typename BoxT>
@@ -18,16 +22,19 @@ namespace chad::detail {
             m_coordinateScales.z = 1.0;
             m_voxelsize = voxel_res;
             BoxT::m_voxelsize = voxel_res;
+            const float recip = 1.0 / m_voxelsize;
 
             // trackers for the traversed path and nodes
-            std::array<uint8_t,  NodeLevels::MAX_DEPTH> path;
-            std::array<uint32_t, NodeLevels::MAX_DEPTH> nodes;
-            path.fill(0);
-            nodes.fill(root_addr);
+            std::array<uint8_t,  NodeLevels::MAX_DEPTH> path_child;
+            std::array<uint32_t, NodeLevels::MAX_DEPTH> path_addr;
+            path_child.fill(0);
+            path_addr.fill(0);
+            path_addr[0] = root_addr;
 
             uint32_t depth = 0;
             while(true) {
-                auto child_i = path[depth]++;
+                auto child_i = path_child[depth]++;
+                // fmt::println("depth: {:2}, child: {:1}", depth, child_i);
 
                 // when all children at this depth were iterated
                 if (child_i == 8) {
@@ -38,25 +45,25 @@ namespace chad::detail {
                 // node contains node children
                 else if (depth < NodeLevels::MAX_DEPTH - 1) {
                     // try to find the child in current node
-                    uint32_t parent_addr = nodes[depth];
-                    auto [child_addr, child_exists] = node_levels.try_get_child_addr(depth, parent_addr, child_i);
-                    if (child_exists) {
+                    uint32_t parent_addr = path_addr[depth];
+                    uint32_t child_addr = node_levels.get_child_addr(depth, parent_addr, child_i);
+                    // check if child address is valid
+                    if (child_addr > 0) {
                         depth++;
-                        path[depth] = 0;
-                        nodes[depth] = child_addr;
+                        path_child[depth] = 0; // reset child index for new depth
+                        path_addr[depth] = child_addr;
                     }
                 }
                 // node contains leaf cluster children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    uint32_t parent_addr = nodes[depth];
-                    auto [leaf_cluster, child_exists] = node_levels.try_get_leaf_cluster(parent_addr, child_i);
-                    if (!child_exists) continue;
+                    auto [leaf_cluster, leaf_exists] = node_levels.try_get_leaf_cluster(path_addr[depth], child_i);
+                    if (!leaf_exists) continue;
 
                     // reconstruct morton code from path
                     uint64_t code = 0;
                     for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                        uint64_t part = path[k] - 1;
+                        uint64_t part = path_child[k] - 1;
                         code |= part << (60 - k*3);
                     }
                     MortonCode mc { code };
@@ -93,7 +100,6 @@ namespace chad::detail {
                             // create cell
                             glm::vec3 cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
                             // create morton code of cell
-                            const float recip = 1.0 / m_voxelsize;
                             // convert position back to chunk index
                             glm::vec3 cell_pos = glm::floor(cell_center * recip);
                             glm::ivec3 cell_chunk = glm::ivec3(cell_pos);
