@@ -9,9 +9,6 @@
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/morton.hpp"
 
-
-#include <bitset>
-
 namespace chad::detail {
     template<typename BaseVecT, typename BoxT>
     struct ChadGrid: public lvr2::GridBase {

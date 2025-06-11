@@ -73,7 +73,7 @@ namespace chad::detail {
         }
 
         auto static get_root() -> uint32_t {
-            return 1;
+            return 0;
         }
         auto inline get_node(uint32_t node_addr) const -> const Node& {
             return _nodes[node_addr];

@@ -14,12 +14,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 
-
-
-
-
-#include <bitset>
-
 namespace chad::detail {
     void print_vec(glm::vec3 vec) {
         fmt::println("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
@@ -98,7 +92,8 @@ namespace chad::detail {
             }
             
             for (const glm::aligned_vec3& voxel: traversed_voxels) {
-                auto& leaf = octree.insert(detail::MortonCode(voxel));
+                MortonCode mc { glm::ivec3(voxel) };
+                auto& leaf = octree.insert(mc);
 
                 // compute signed distance
                 glm::aligned_vec3 diff = voxel * voxel_resolution - point;
