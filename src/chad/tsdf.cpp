@@ -58,7 +58,7 @@ namespace chad::detail {
             // current voxel during traversal
             glm::aligned_vec3 voxel_current = voxel_start;
             // past-the-end voxel with slight bias to account for floating point inaccuracies
-            const glm::aligned_vec3 voxel_end = voxel_final + 0.9f*voxel_step_direction;
+            const glm::aligned_vec3 voxel_end = voxel_final + 0.1f*voxel_step_direction;
 
             // traverse ray within truncation distance
             traversed_voxels.push_back(voxel_current);
@@ -90,14 +90,22 @@ namespace chad::detail {
                 }
                 traversed_voxels.push_back(voxel_current);
             }
+
+            // DEBUG
+            // traversed_voxels.clear();
+            // for (int x = -1; x <= 1; x++) 
+            // for (int y = -1; y <= 1; y++) 
+            // for (int z = -1; z <= 1; z++) {{{
+            //     traversed_voxels.push_back(glm::floor(point * voxel_reciprocal) + glm::aligned_vec3(x, y, z));
+            // }}}
             
             for (const glm::aligned_vec3& voxel: traversed_voxels) {
-                MortonCode mc { glm::ivec3(voxel) };
+                MortonCode mc { glm::ivec3(glm::floor(voxel)) };
                 auto& leaf = octree.insert(mc);
 
                 // compute signed distance
-                glm::aligned_vec3 diff = voxel * voxel_resolution - point;
-                float signed_distance = glm::dot(normal, diff);
+                glm::aligned_vec3 point_to_voxel = voxel * voxel_resolution - point;
+                float signed_distance = glm::dot(normal, point_to_voxel);
                 // weighted average with incremented weight
                 leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
                 leaf._weight++;
@@ -262,7 +270,8 @@ namespace chad {
             _submaps.push_back(_active_submap_p);
         }
 
-        // reconstruct 3D mesh using LVR2 (DEBUG: currently only reconstructs the first submap)
+        // reconstruct 3D mesh using LVR2
+        fmt::println("reconstructing the first submap");
         detail::reconstruct(*_submaps.front(), *_node_levels_p, _voxel_resolution, _truncation_distance, filename);
     }
 }

@@ -214,7 +214,7 @@ namespace chad::detail {
                 for (auto point_it = neigh.beg; point_it != neigh.end; point_it++) {
                     // flip normal if needed
                     float normal_dot = glm::dot(normal, glm::normalize(position - point_it->first));
-                    if (normal_dot < 0.0f) normal = -normal;
+                    if (normal_dot > 0.0f) normal = -normal;
 
                     // store normal
                     size_t point_index = std::distance(points_mc.cbegin(), point_it);

@@ -164,7 +164,7 @@ namespace chad::detail {
 
         auto try_get_leaf_cluster(uint32_t parent_addr, uint8_t child_i) const -> std::pair<LeafCluster, bool> {
             uint32_t child_mask = _nodes[MAX_DEPTH - 1]._raw_data[parent_addr];
-            uint32_t child_bit = 1 << child_i;
+            uint32_t child_bit = uint32_t(1) << child_i;
 
             // check if the leaf cluster exists
             if (child_mask & child_bit) {
@@ -172,7 +172,7 @@ namespace chad::detail {
                 uint8_t masked = uint8_t(child_mask & (child_bit - 1));
                 uint8_t child_count = std::popcount(masked);
                 // child count will correspond to the requested child's index
-                uint32_t child_addr = _nodes.back()._raw_data[parent_addr + uint32_t(child_count)];
+                uint32_t child_addr = _nodes.back()._raw_data[parent_addr + uint32_t(child_count + 1)];
                 return { _leaf_clusters._raw_data[child_addr], true };
             }
             else return { {}, false };

@@ -54,8 +54,8 @@ namespace chad::detail {
                 // node contains leaf cluster children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    auto [leaf_cluster, leaf_exists] = node_levels.try_get_leaf_cluster(path_addr[depth], child_i);
-                    if (!leaf_exists) continue;
+                    auto [cluster, cluster_exists] = node_levels.try_get_leaf_cluster(path_addr[depth], child_i);
+                    if (!cluster_exists) continue;
 
                     // reconstruct morton code from path
                     uint64_t code = 0;
@@ -71,12 +71,15 @@ namespace chad::detail {
                     for (int32_t y = 0; y <= 1; y++) {
                     for (int32_t x = 0; x <= 1; x++, leaf_i++) {
                         // signed distance within leaf
-                        auto [signed_distance, leaf_exists] = leaf_cluster.try_get_leaf_sd(leaf_i, trunc_dist);
+                        auto [signed_distance, leaf_exists] = cluster.try_get_leaf_sd(leaf_i, trunc_dist);
                         if (!leaf_exists) continue;
 
                         // leaf position
                         glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
                         glm::vec3 leaf_pos = glm::vec3(leaf_chunk) * m_voxelsize;
+
+                        // signed_distance = glm::length(leaf_pos) - 5.0f;
+                        // fmt::println("sd {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
                         
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
