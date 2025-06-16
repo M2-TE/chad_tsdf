@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <vector>
+#include <string>
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>

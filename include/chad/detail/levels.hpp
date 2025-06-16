@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <gtl/phmap.hpp>
-#include "chad/detail/cluster.hpp"
+#include "chad/cluster.hpp"
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {

@@ -78,6 +78,7 @@ namespace chad::detail {
                         glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
                         glm::vec3 leaf_pos = glm::vec3(leaf_chunk) * m_voxelsize;
 
+                        // DEBUG
                         // signed_distance = glm::length(leaf_pos) - 5.0f;
                         // fmt::println("sd {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
                         

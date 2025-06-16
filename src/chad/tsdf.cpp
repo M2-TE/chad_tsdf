@@ -4,6 +4,7 @@
 #include <glm/gtc/type_aligned.hpp>
 #include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
+#include "chad/cluster.hpp"
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/levels.hpp"
 #include "chad/detail/morton.hpp"
