@@ -22,7 +22,7 @@ namespace chad {
 namespace chad {
     class TSDFMap {
     public:
-        TSDFMap(float voxel_resolution = 0.05f, float _truncation_distance = 0.1f);
+        TSDFMap(float voxel_resolution = 0.05f, float truncation_distance = 0.1f);
         ~TSDFMap();
 
         // insert pointcloud alongside scanner position

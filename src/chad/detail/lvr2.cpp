@@ -87,7 +87,7 @@ namespace chad::detail {
                         m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
                         
                         // 8 cells around the query point
-                        std::array<glm::vec3, 8> cell_offsets = {
+                        const std::array<glm::vec3, 8> cell_offsets = {
                             glm::vec3(+0.5, +0.5, +0.5),
                             glm::vec3(-0.5, +0.5, +0.5),
                             glm::vec3(-0.5, -0.5, +0.5),
