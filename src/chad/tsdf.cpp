@@ -34,7 +34,7 @@ namespace chad::detail {
         const float voxel_reciprocal = float(1.0 / double(voxel_resolution));
         const glm::aligned_vec3 position_aligned = position;
 
-        std::vector<glm::aligned_vec3> traversed_voxels;
+        std::vector<glm::ivec3> traversed_voxels;
         for (size_t i = 0; i < points.size(); i++) {
             const glm::aligned_vec3 point = points[i];
             const glm::aligned_vec3 normal = normals[i];
@@ -45,34 +45,50 @@ namespace chad::detail {
             const glm::aligned_vec3 direction_recip = 1.0f / direction;
             const glm::aligned_vec3 start = point - direction * truncation_distance;
             const glm::aligned_vec3 final = point + direction * truncation_distance;
-            const glm::aligned_vec3 voxel_start = glm::floor(start * voxel_reciprocal);
-            const glm::aligned_vec3 voxel_final = glm::floor(final * voxel_reciprocal);
+            const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * voxel_reciprocal));
+            const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * voxel_reciprocal));
 
             // stepN: direction of increment for each dimension
-            const glm::aligned_vec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
-            // tDeltaN: distance of "direction" needed to traverse an entire voxel width
-            const glm::aligned_vec3 voxel_step_delta = voxel_resolution * direction_recip;
-            // tMaxN: distance of "direction" needed for each separate dimension to cross current voxel boundary
-            glm::aligned_vec3 voxel_step_max = ((voxel_start + voxel_step_direction) * voxel_resolution - start) * direction_recip;
+            const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
+            // tDeltaN: distance of "direction" needed to traverse full voxel
+            const glm::aligned_vec3 voxel_step_delta = glm::abs(voxel_resolution * direction_recip);
+            // tMaxN: distance of "direction" needed to traverse current voxel
+            glm::aligned_vec3 voxel_step_max = glm::abs((glm::aligned_vec3(voxel_start + voxel_step_direction) * voxel_resolution - start) * direction_recip);
             
             // current voxel during traversal
-            glm::aligned_vec3 voxel_current = voxel_start;
-            // past-the-end voxel with slight bias to account for floating point inaccuracies
-            const glm::aligned_vec3 voxel_end = voxel_final + 0.1f*voxel_step_direction;
+            glm::ivec3 voxel_current = voxel_start;
 
             // traverse ray within truncation distance
             traversed_voxels.push_back(voxel_current);
+            // fmt::print("voxel_start: ");
+            // print_vec(voxel_start);
+            // fmt::print("voxel_final: ");
+            // print_vec(voxel_final);
+            // fmt::print("voxel_step_direction: ");
+            // print_vec(voxel_step_direction);
+            // fmt::print("voxel_step_delta: ");
+            // print_vec(voxel_step_delta);
+            // fmt::print("voxel_step_max: ");
+            // print_vec(voxel_step_max);
+            // print_vec(voxel_current);
+
             while (true) {
                 if (voxel_step_max.x < voxel_step_max.y) {
                     if (voxel_step_max.x < voxel_step_max.z) {
                         voxel_current.x += voxel_step_direction.x; // step in x direction
                         voxel_step_max.x += voxel_step_delta.x; // update for next voxel boundary
-                        if (voxel_current.x >= voxel_end.x) break;
+                        if (voxel_current.x == voxel_final.x + voxel_step_direction.x) {
+                            // fmt::println("x");
+                            break;
+                        }
                     }
                     else {
                         voxel_current.z += voxel_step_direction.z; // step in z direction
                         voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                        if (voxel_current.z >= voxel_end.z) break;
+                        if (voxel_current.z == voxel_final.z + voxel_step_direction.z) {
+                            // fmt::println("z");
+                            break;
+                        }
                     }
                 }
                 else {
@@ -80,15 +96,22 @@ namespace chad::detail {
 
                         voxel_current.y += voxel_step_direction.y; // step in y direction
                         voxel_step_max.y += voxel_step_delta.y; // update for next voxel boundary
-                        if (voxel_current.y >= voxel_end.y) break;
+                        if (voxel_current.y == voxel_final.y + voxel_step_direction.y) {
+                            // fmt::println("y");
+                            break;
+                        }
                     }
                     else {
                         voxel_current.z += voxel_step_direction.z; // step in z direction
                         voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                        if (voxel_current.z >= voxel_end.z) break;
+                        if (voxel_current.z == voxel_final.z + voxel_step_direction.z) {
+                            // fmt::println("z");
+                            break;
+                        }
                     }
                 }
                 traversed_voxels.push_back(voxel_current);
+                // print_vec(voxel_current);
             }
 
             // DEBUG
@@ -99,12 +122,12 @@ namespace chad::detail {
             //     traversed_voxels.push_back(glm::floor(point * voxel_reciprocal) + glm::aligned_vec3(x, y, z));
             // }}}
             
-            for (const glm::aligned_vec3& voxel: traversed_voxels) {
-                MortonCode mc { glm::ivec3(glm::floor(voxel)) };
+            for (const glm::ivec3& voxel: traversed_voxels) {
+                MortonCode mc { voxel };
                 auto& leaf = octree.insert(mc);
 
                 // compute signed distance
-                glm::aligned_vec3 point_to_voxel = voxel * voxel_resolution - point;
+                glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel) * voxel_resolution - point;
                 float signed_distance = glm::dot(normal, point_to_voxel);
                 // weighted average with incremented weight
                 leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
@@ -219,7 +242,6 @@ namespace chad {
     }
     TSDFMap::~TSDFMap() {
         delete _node_levels_p;
-        delete _active_submap_p;
         delete _active_octree_p;
         for (detail::Submap* submap_p: _submaps) {
             delete submap_p;
