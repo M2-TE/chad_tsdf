@@ -184,9 +184,9 @@ namespace chad::detail {
                 path[depth] = 0;
                 nodes_oct[depth] = child_addr;
             }
-            // node contains leaf cluster children
+            // node contains leaf children
             else {
-                // retrieve child address
+                // retrieve address of current child node
                 uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
                 if (child_addr == 0) continue;
 
@@ -194,18 +194,21 @@ namespace chad::detail {
                 const Octree::Node& node = octree.get_node(child_addr);
                 
                 // create leaf cluster from all 8 leaves
-                LeafCluster lc_tsdf, lc_weight;
+                LeafCluster lc_tsdfs, lc_weigh;
                 for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
                     uint32_t leaf_addr = node[leaf_i];
-                    if (leaf_addr == 0) lc_tsdf.set_leaf_sd_empty(leaf_i);
+                    if (leaf_addr == 0) {
+                        lc_tsdfs._tsdfs.set_empty(leaf_i);
+                        lc_weigh._weigh.set_empty(leaf_i);
+                    }
                     else {
                         const auto& leaf = octree.get_leaf(leaf_addr);
-                        lc_tsdf.set_leaf_sd(leaf_i, leaf._signed_distance, truncation_distance_recip);
-                        lc_weight.set_leaf_weight(leaf_i, leaf._weight);
+                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, truncation_distance_recip);
+                        lc_weigh._weigh.set(leaf_i, uint8_t(leaf._weight));
                     }
                 }
-                nodes_tsdf  [depth][child_i] = node_levels._leaf_clusters.add(lc_tsdf);
-                nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weight);
+                nodes_tsdf  [depth][child_i] = node_levels._leaf_clusters.add(lc_tsdfs);
+                nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weigh);
             }
         }
 

@@ -29,7 +29,7 @@ namespace chad::detail {
             static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
             static constexpr uint64_t lookup_mask = ((0xffffffffffffffff - 1) >> lookup_shift) << lookup_shift;
             auto [node_it, node_emplaced] = _node_lookup.try_emplace(mc._value & lookup_mask, nullptr);
-            
+
             // start at lookup_depth + 1 when node was found, otherwise start from root
             uint32_t depth = 0;
             Node* node_p = &_nodes[0];

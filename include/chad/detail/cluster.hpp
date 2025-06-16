@@ -7,14 +7,10 @@
 // TODO: move header out of detail namespace
 
 namespace chad {
-    // cluster of 8 separate 8-bit leaves
-    struct LeafCluster {
-        LeafCluster(): _value(0) {}
-        void set_leaf_sd_empty(uint64_t leaf_i) {
-            // bits 0xff for signed distance signify an empty leaf
-            _value |= uint64_t(0xff) << uint64_t(8 * leaf_i);
-        }
-        void set_leaf_sd(uint8_t leaf_i, float signed_distance, float truncation_distance_recip) {
+    // wrapper for signed distance cluster
+    struct SignedDistance {
+        // set 8 bits to represent signed distance, normalized within truncation distance
+        void set(uint8_t leaf_i, float signed_distance, float truncation_distance_recip) noexcept {
             // absolute value range for signed distances stored as integers
             static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
             
@@ -24,10 +20,18 @@ namespace chad {
             // scale up to fit 8-bit integer, add offset to fit within unsigned
             sd = sd * float(sd_range_abs) + float(sd_range_abs); // range should be [-127, 128]
 
+            // TODO: verify that sd is never 0xff
+
             // shove the bits into leaf cluster
-            _value |= uint64_t(sd) << uint64_t(8 * leaf_i);
+            _value |= uint64_t(sd) << uint64_t(leaf_i * 8);
         }
-        auto try_get_leaf_sd(uint8_t leaf_i, float truncation_distance) -> std::pair<float, bool> {
+        // set 8 bits to represent an empty leaf
+        void set_empty(uint8_t leaf_i) noexcept {
+            // bits 0xff for signed distance signify an empty leaf
+            _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
+        }
+        // retrieve signed distance from single leaf if it is not empty
+        auto try_get(uint8_t leaf_i, float truncation_distance) const -> std::pair<float, bool> {
             // absolute value range for signed distances stored as integers
             static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
 
@@ -46,19 +50,36 @@ namespace chad {
             signed_distance *= truncation_distance;
             return { signed_distance, true };
         }
-
-        void set_leaf_weight(uint8_t leaf_i, uint32_t weight) {
-            uint32_t truncated_weight = std::min<uint32_t>(weight, std::numeric_limits<uint32_t>::max());
-            _value |= uint64_t(truncated_weight) << uint64_t(8 * leaf_i);
+        uint64_t _value;
+    };
+    // wrapper for weight cluster
+    struct Weight {
+        // set 8 bits to represent a single weight
+        void set(uint8_t leaf_i, uint8_t weight) noexcept {
+            uint8_t truncated_weight = std::min<uint8_t>(weight, std::numeric_limits<uint8_t>::max());
+            _value |= uint64_t(truncated_weight) << uint64_t(leaf_i * 8);
         }
-        // auto try_get_leaf_weight(uint8_t leaf_i) -> std::pair<float, bool> {
-
+        void set_empty(uint8_t leaf_i) noexcept {
+            // bits 0xff for signed distance signify an empty leaf
+            _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
+        }
+        // auto try_get(uint8_t leaf_i) const -> std::pair<float, bool> {
         // }
+        uint64_t _value;
+    };
+
+    // cluster of 8 separate 8-bit leaves
+    struct LeafCluster {
+        LeafCluster(): _value(0) {}
         
         bool is_empty() {
             return _value == std::numeric_limits<uint64_t>::max();
         }
 
-        uint64_t _value;
+        union {
+            uint64_t       _value;
+            SignedDistance _tsdfs;
+            Weight         _weigh;
+        };
     };
 }

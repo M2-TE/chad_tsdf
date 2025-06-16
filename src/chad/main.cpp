@@ -2,6 +2,7 @@
 #include <fmt/base.h>
 #include <glm/glm.hpp>
 #include "chad/tsdf.hpp"
+// #include <fstream>
 
 void static do_sphere_thing() {
     // generate random point data
@@ -32,6 +33,11 @@ void static do_sphere_thing() {
             point += positions[i];
         }
         map.insert(points, positions[i]);
+
+        // std::ofstream ofs("points.asc");
+        // for (const auto& point: points) {
+        //     ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
+        // }
     }
     map.save("testthing.ply");
 }

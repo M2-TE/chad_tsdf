@@ -71,7 +71,7 @@ namespace chad::detail {
                     for (int32_t y = 0; y <= 1; y++) {
                     for (int32_t x = 0; x <= 1; x++, leaf_i++) {
                         // signed distance within leaf
-                        auto [signed_distance, leaf_exists] = cluster.try_get_leaf_sd(leaf_i, trunc_dist);
+                        auto [signed_distance, leaf_exists] = cluster._tsdfs.try_get(leaf_i, trunc_dist);
                         if (!leaf_exists) continue;
 
                         // leaf position
