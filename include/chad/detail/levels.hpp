@@ -47,10 +47,9 @@ namespace chad::detail {
 
     public:
         NodeLevel():
-                _uniques_n(0), _dupes_n(0), _occupied_n(0), _raw_data(),
+                _uniques_n(0), _dupes_n(0), _occupied_n(0), _raw_data(0xffffffff * sizeof(uint32_t)),
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
-            _raw_data.push_back(0);
             _raw_data.push_back(0);
             _occupied_n = _raw_data.size();
         }
@@ -116,10 +115,10 @@ namespace chad::detail {
 
     public:
         LeafClusterLevel():
-                _uniques_n(0), _dupes_n(0), _raw_data(),
+                _uniques_n(0), _dupes_n(0), _raw_data(0xffffffff * sizeof(LeafCluster)),
                 _addr_set(0, FncHash(_raw_data), FncEq(_raw_data)) {
             // reserve first index
-            _raw_data.push_back(LeafCluster{});
+            _raw_data.push_back({});
         }
         // add a leaf cluster with the given contents and return its address
         auto add(LeafCluster lc) -> uint32_t {

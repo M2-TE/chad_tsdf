@@ -170,34 +170,34 @@ namespace chad::detail {
         }
         void saveGrid(std::string file) override {
             (void)file;
-            // // store all the points into .grid file
-            // std::ofstream output;
-            // output.open(file, std::ofstream::trunc | std::ofstream::binary);
-            // // store header data
-            // float voxel_res = LEAF_RESOLUTION;
-            // output.write(reinterpret_cast<char*>(&voxel_res), sizeof(float));
-            // size_t query_points_n = getQueryPoints().size();
-            // output.write(reinterpret_cast<char*>(&query_points_n), sizeof(size_t));
-            // size_t cells_n = getNumberOfCells();
-            // output.write(reinterpret_cast<char*>(&cells_n), sizeof(size_t));
-            // // store query points (vec3 + float)
-            // auto& query_points = getQueryPoints();
-            // for (auto cur = query_points.cbegin(); cur != query_points.cend(); cur++) {
-            //     Eigen::Vector3f pos { cur->m_position.x, cur->m_position.y, cur->m_position.z };
-            //     float signed_distance = cur->m_distance;
-            //     output.write(reinterpret_cast<const char*>(&pos), sizeof(Eigen::Vector3f));
-            //     output.write(reinterpret_cast<const char*>(&signed_distance), sizeof(float));
-            // }
-            // // store cells (8x uint32_t)
-            // for (auto cur = firstCell(); cur != lastCell(); cur++) {
-            //     auto* cell = cur->second;
-            //     for (size_t i = 0; i < 8; i++) {
-            //         uint32_t i_query_point = cell->getVertex(i);
-            //         output.write(reinterpret_cast<const char*>(&i_query_point), sizeof(uint32_t));
-            //     }
-            // }
-            // output.close();
-            // std::cout << "Saved grid as " << file << '\n';
+            // store all the points into .grid file
+            std::ofstream output;
+            output.open(file, std::ofstream::trunc | std::ofstream::binary);
+            // store header data
+            float voxel_res = m_voxelsize;
+            output.write(reinterpret_cast<char*>(&voxel_res), sizeof(float));
+            size_t query_points_n = getQueryPoints().size();
+            output.write(reinterpret_cast<char*>(&query_points_n), sizeof(size_t));
+            size_t cells_n = getNumberOfCells();
+            output.write(reinterpret_cast<char*>(&cells_n), sizeof(size_t));
+            // store query points (vec3 + float)
+            auto& query_points = getQueryPoints();
+            for (auto cur = query_points.cbegin(); cur != query_points.cend(); cur++) {
+                Eigen::Vector3f pos { cur->m_position.x, cur->m_position.y, cur->m_position.z };
+                float signed_distance = cur->m_distance;
+                output.write(reinterpret_cast<const char*>(&pos), sizeof(Eigen::Vector3f));
+                output.write(reinterpret_cast<const char*>(&signed_distance), sizeof(float));
+            }
+            // store cells (8x uint32_t)
+            for (auto cur = firstCell(); cur != lastCell(); cur++) {
+                auto* cell = cur->second;
+                for (size_t i = 0; i < 8; i++) {
+                    uint32_t i_query_point = cell->getVertex(i);
+                    output.write(reinterpret_cast<const char*>(&i_query_point), sizeof(uint32_t));
+                }
+            }
+            output.close();
+            std::cout << "Saved grid to " << file << '\n';
         }
 
     private:
@@ -376,10 +376,8 @@ namespace chad::detail {
         if (decomp_type == "MC") {
         }
         else if (decomp_type == "PMC") {
-            // auto node_levels = chad.get_node_levels();
-            // auto leaf_level = chad.get_leaf_level();
             auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(node_levels, submap.root_addr_tsdf, voxel_res, trunc_dist);
-            // if (save_grid) grid_p->saveGrid("hashgrid.grid");
+            grid_p->saveGrid("hashgrid.grid");
             
             ChadReconstruction<VecT, BoxT> reconstruction { grid_p };
             reconstruction.getMesh(mesh);

@@ -14,9 +14,6 @@ if (NOT LVR2_FOUND)
     FetchContent_MakeAvailable(lvr2)
 endif()
 
-add_definitions(${LVR2_DEFINITIONS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${LVR2_LIBRARIES}
-    "/usr/local/lib/liblvr2rply_static.a" # evil act #1
-    "/usr/local/lib/liblvr2las_static.a"  # evil act #2
-    )
+# add_definitions(${LVR2_DEFINITIONS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LVR2_LIBRARIES})
 target_include_directories(${PROJECT_NAME} PRIVATE ${LVR2_INCLUDE_DIRS})

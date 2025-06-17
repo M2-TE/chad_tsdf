@@ -44,8 +44,8 @@ namespace chad::detail {
             // as Bresehnham's line algorithm misses some voxels
             const glm::aligned_vec3 direction = glm::normalize(point - position_aligned);
             const glm::aligned_vec3 direction_recip = 1.0f / direction;
-            const glm::aligned_vec3 start = point - direction * truncation_distance;
-            const glm::aligned_vec3 final = point + direction * truncation_distance;
+            const glm::aligned_vec3 start = point - direction * (truncation_distance - 0.5f*voxel_resolution); // add flooring bias
+            const glm::aligned_vec3 final = point + direction * (truncation_distance + 0.5f*voxel_resolution); // add flooring bias
             const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * voxel_reciprocal));
             const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * voxel_reciprocal));
 
@@ -208,10 +208,12 @@ namespace chad::detail {
                         lc_weigh._weigh.set(leaf_i, uint8_t(leaf._weight));
                     }
                 }
+                // add the leaf clusters and remember their addresses
                 nodes_tsdf  [depth][child_i] = node_levels._leaf_clusters.add(lc_tsdfs);
                 nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weigh);
             }
         }
+        fmt::println("{} {}", node_levels._leaf_clusters._uniques_n, node_levels._leaf_clusters._dupes_n);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
