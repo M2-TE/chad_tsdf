@@ -31,10 +31,10 @@ jobs:
       with:
         packages: libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
         version: 1.0
-        execute_install_scripts: true
 
     - name: Build and install LVR2
       run: |
+        sudo apt update && sudo apt install libboost-optional-dev
         git clone https://github.com/uos/lvr2.git && cd lvr2
         cmake -B build -G Ninja                     \
           -DWITH_CUDA=OFF                           \
