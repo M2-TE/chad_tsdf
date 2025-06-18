@@ -20,20 +20,19 @@ jobs:
         build_type: [ Debug, Release ]
     
     steps:
-    - name: Install dependencies
+    - name: Install core dependencies
       uses: actions/cache-apt-pkgs-action@latest
       with:
         packages: ninja-build cmake libtbb-dev libeigen3-dev libglm-dev libfmt-dev
         version: 1.0
 
-    # - name: Install dependencies
-    #   run: sudo apt update && sudo apt install -y ninja-build cmake libtbb-dev libeigen3-dev libglm-dev libfmt-dev
+    # - name: Install lvr2 dependencies
+    #   uses: actions/cache-apt-pkgs-action@latest
+    #   with:
+    #     packages: libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
+    #     version: 1.0
 
     - name: Build and install LVR2
-      # uses: actions/cache-apt-pkgs-action@latest
-      # with:
-      #   packages: libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
-      #   version: 1.0
       run: |
         sudo apt update && sudo apt install -y libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
         git clone https://github.com/uos/lvr2.git && cd lvr2
@@ -44,8 +43,10 @@ jobs:
         cmake --build build --parallel
         sudo cmake --install build
 
-    - name: Build
+    - name: Clone
       uses: actions/checkout@v4
+
+    - name: Build
       run: |
         cmake -B build -G Ninja                     \
           -DCMAKE_CXX_COMPILER=${{matrix.compiler}} \
