@@ -213,7 +213,6 @@ namespace chad::detail {
                 nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weigh);
             }
         }
-        fmt::println("{} {}", node_levels._leaf_clusters._uniques_n, node_levels._leaf_clusters._dupes_n);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
