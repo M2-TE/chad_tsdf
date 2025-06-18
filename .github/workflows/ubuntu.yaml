@@ -26,16 +26,17 @@ jobs:
         packages: ninja-build cmake libtbb-dev libeigen3-dev libglm-dev libfmt-dev
         version: 1.0
 
-    - name: Install lvr2 dependencies
-      uses: awalsh128/cache-apt-pkgs-action@latest
-      with:
-        packages: libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
-        version: 1.0
+    # - name: Install lvr2 dependencies
+    #   uses: awalsh128/cache-apt-pkgs-action@latest
+    #   with:
+    #     packages: libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
+    #     version: 1.0
 
     - name: Build and install LVR2
       run: |
-        sudo apt update && sudo apt install libboost-all-dev
-        git clone https://github.com/uos/lvr2.git && cd lvr2
+        sudo apt update && sudo apt install libflann-dev libopenmpi-dev libtiff-dev libboost-all-dev \
+          freeglut3-dev libyaml-cpp-dev libopencv-dev libcgal-dev libgdal-dev libgsl-dev libomp-dev
+        git clone https://github.com/uos/lvr2.git --depth 1 && cd lvr2
         cmake -B build -G Ninja                     \
           -DWITH_CUDA=OFF                           \
           -DCMAKE_CXX_COMPILER=${{matrix.compiler}} \
