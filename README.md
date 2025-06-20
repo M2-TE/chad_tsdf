@@ -1,6 +1,10 @@
 # CHAD TSDF
 
-CHAD TSDF structure for SLAM
+CHAD TSDF data structure for SLAM with 3D mesh reconstruction.
+
+| Platform | Build Status |
+|:--------:|:------------:|
+| Linux    | [![Build on Ubuntu](https://github.com/M2-TE/chad_tsdf/actions/workflows/ubuntu.yaml/badge.svg)](https://github.com/M2-TE/chad_tsdf/actions/workflows/ubuntu.yaml) |
 
 ## Description
 TSDF mapping backend with real-time capabilities and high compression.
