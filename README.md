@@ -3,45 +3,11 @@
 CHAD TSDF structure for SLAM
 
 ## Description
-
-TODO: link to ros implementation
+TSDF mapping backend with real-time capabilities and high compression.
+It is tailored towards large-scale maps, while still being able to handle smaller voxel sizes (~0.05).
 
 ## Getting Started
-
-<details>
-    <summary>CMake options</summary>
-
-TODO:
-set(CHAD_POPCOUNT_INSTRUCTION std::popcount<uint8_t>)
-set(CHAD_NORM_NEIGH_UPPER 20)
-set(CHAD_NORM_NEIGH_LOWER 2)
-set(CHAD_NORM_MIN_NEIGH 3)
-set(CHAD_NORM_RADIUS_MOD 1.5)
-set(CHAD_LEAF_RESOLUTION 0.1)
-set(CHAD_LEAF_BITS 8)
-</details>
-
-<details>
-    <summary>CMake Build</summary>
-    
-#### 1. CMake local build
-
-```
-cmake -B build
-cmake --build build
-TODO: install
-TODO: CMake find()
-```
-
-#### 2. CMake subdirectory
-
-```cmake
-add_subdirectory(${CHAD_DIRECTORY})
-target_link_libraries(${PROJECT_NAME} PUBLIC chad::tsdf)
-```
-
-#### 3. CMake FetchContent
-
+### CMake
 ```cmake
 include(FetchContent)
 FetchContent_Declare(chad_tsdf
@@ -51,18 +17,40 @@ FetchContent_Declare(chad_tsdf
 FetchContent_MakeAvailable(chad_tsdf)
 target_link_libraries(${PROJECT_NAME} PUBLIC chad::tsdf)
 ```
-</details>
+### C++
 
+```cpp
+#include <chad/tsdf.hpp>
 
-## Authors
+int main() {
+    float sdf_size = 0.05f;
+    float sdf_trunc = 0.10f;
+    chad::TSDFMap map(sdf_size, sdf_trunc);
 
-Jan Kuhlmann
+    // insert glm points
+    std::vector<glm::vec3> points_glm;
+    glm::vec3 position_glm;
+    map.insert(points_glm, position_glm);
 
-## Version History
+    // insert eigen points
+    std::vector<Eigen::Vector3f> points_eigen;
+    Eigen::Vector3f position_eigen;
+    map.insert(points_eigen, position_eigen);
 
-* 0.1
-    * Initial Release
+    // reconstruct 3D mesh
+    map.save("mesh.ply");
+    return 0;
+}
+```
+
+## Roadmap
+* [x] Compressed sparse TSDF map
+* [x] Submapping
+* [ ] Loop closure
+* [ ] Space carving
 
 ## Acknowledgments
 
-* [parallel-hashmap](https://github.com/greg7mdp/parallel-hashmap)
+* [gtl](https://github.com/greg7mdp/gtl)
+* [libmorton](https://github.com/Forceflow/libmorton)
+* [lvr2](https://github.com/uos/lvr2)
