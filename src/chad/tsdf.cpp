@@ -30,9 +30,9 @@ namespace chad::detail {
     }
 
     // TODO: move these to proper headers
-    void update_octree(Octree& octree, const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float voxel_resolution, float truncation_distance) {
+    void update_octree(Octree& octree, const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
         auto beg = std::chrono::high_resolution_clock::now();
-        const float voxel_reciprocal = float(1.0 / double(voxel_resolution));
+        const float sdf_res_recip = float(1.0 / double(sdf_res));
         const glm::aligned_vec3 position_aligned = position;
 
         std::vector<glm::ivec3> traversed_voxels;
@@ -44,28 +44,28 @@ namespace chad::detail {
             // as Bresehnham's line algorithm misses some voxels
             const glm::aligned_vec3 direction = glm::normalize(point - position_aligned);
             const glm::aligned_vec3 direction_recip = 1.0f / direction;
-            const glm::aligned_vec3 start = point - direction * (truncation_distance - 0.5f*voxel_resolution); // add flooring bias
-            const glm::aligned_vec3 final = point + direction * (truncation_distance + 0.5f*voxel_resolution); // add flooring bias
-            const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * voxel_reciprocal));
-            const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * voxel_reciprocal));
+            const glm::aligned_vec3 start = point - direction * (sdf_trunc - 0.5f*sdf_res); // add flooring bias
+            const glm::aligned_vec3 final = point + direction * (sdf_trunc + 0.5f*sdf_res); // add flooring bias
+            const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * sdf_res_recip));
+            const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * sdf_res_recip));
 
             // stepN: direction of increment for each dimension
             const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
             // tDeltaN: portion of "direction" needed to traverse full voxel
-            const glm::aligned_vec3 voxel_step_delta = glm::abs(voxel_resolution * direction_recip);
+            const glm::aligned_vec3 voxel_step_delta = glm::abs(sdf_res * direction_recip);
             // tMaxN: portion of "direction" needed to traverse current voxel
             glm::aligned_vec3 voxel_step_max;
             // for x
-            if      (voxel_step_direction.x < 0) voxel_step_max.x = voxel_resolution * std::floor(start.x * voxel_reciprocal);
-            else if (voxel_step_direction.x > 0) voxel_step_max.x = voxel_resolution * std::ceil (start.x * voxel_reciprocal);
+            if      (voxel_step_direction.x < 0) voxel_step_max.x = sdf_res * std::floor(start.x * sdf_res_recip);
+            else if (voxel_step_direction.x > 0) voxel_step_max.x = sdf_res * std::ceil (start.x * sdf_res_recip);
             else /*voxel_step_direction.x == 0*/ voxel_step_max.x = std::numeric_limits<float>::max();
             // for y
-            if      (voxel_step_direction.y < 0) voxel_step_max.y = voxel_resolution * std::floor(start.y * voxel_reciprocal);
-            else if (voxel_step_direction.y > 0) voxel_step_max.y = voxel_resolution * std::ceil (start.y * voxel_reciprocal);
+            if      (voxel_step_direction.y < 0) voxel_step_max.y = sdf_res * std::floor(start.y * sdf_res_recip);
+            else if (voxel_step_direction.y > 0) voxel_step_max.y = sdf_res * std::ceil (start.y * sdf_res_recip);
             else /*voxel_step_direction.x == 0*/ voxel_step_max.y = std::numeric_limits<float>::max();
             // for z
-            if      (voxel_step_direction.z < 0) voxel_step_max.z = voxel_resolution * std::floor(start.z * voxel_reciprocal);
-            else if (voxel_step_direction.z > 0) voxel_step_max.z = voxel_resolution * std::ceil (start.z * voxel_reciprocal);
+            if      (voxel_step_direction.z < 0) voxel_step_max.z = sdf_res * std::floor(start.z * sdf_res_recip);
+            else if (voxel_step_direction.z > 0) voxel_step_max.z = sdf_res * std::ceil (start.z * sdf_res_recip);
             else /*voxel_step_direction.x == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
             voxel_step_max = voxel_step_max - start; // distance to voxel boundaries
             voxel_step_max = glm::abs(voxel_step_max * direction_recip); // portion of "direction" needed to cross voxel boundaries
@@ -109,7 +109,7 @@ namespace chad::detail {
                 auto& leaf = octree.insert(mc);
 
                 // compute signed distance
-                glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel) * voxel_resolution - point;
+                glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel) * sdf_res - point;
                 float signed_distance = glm::dot(normal, point_to_voxel);
                 // weighted average with incremented weight
                 leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
@@ -122,7 +122,7 @@ namespace chad::detail {
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("sub  upd {:.2f}", dur);
     }
-    void finalize_submap(const Octree& octree, Submap& submap, detail::NodeLevels& node_levels, float truncation_distance) {
+    void finalize_submap(const Octree& octree, Submap& submap, detail::NodeLevels& node_levels, float sdf_trunc) {
         using namespace detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
@@ -136,7 +136,7 @@ namespace chad::detail {
         nodes_oct[0] = octree.get_root();
         nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
         nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
-        const float truncation_distance_recip = 1.0f / truncation_distance;
+        const float sdf_trunc_recip = 1.0f / sdf_trunc;
 
         uint32_t depth = 0;
         while (true) {
@@ -204,7 +204,7 @@ namespace chad::detail {
                     }
                     else {
                         const auto& leaf = octree.get_leaf(leaf_addr);
-                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, truncation_distance_recip);
+                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
                         lc_weigh._weigh.set(leaf_i, uint8_t(leaf._weight));
                     }
                 }
@@ -221,7 +221,7 @@ namespace chad::detail {
 }
 
 namespace chad {
-    TSDFMap::TSDFMap(float voxel_resolution, float truncation_distance): _voxel_resolution(voxel_resolution), _truncation_distance(truncation_distance) {
+    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
         _active_octree_p = new detail::Octree();
         _active_submap_p = new detail::Submap();
         _node_levels_p = new detail::NodeLevels();
@@ -248,7 +248,7 @@ namespace chad {
             glm::vec3 start = positions.front();
             float dist_sqr = 5.0f * 5.0f;
             if (glm::distance2(position_vec, start) > dist_sqr) {
-                finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
+                finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _sdf_trunc);
                 _submaps.push_back(_active_submap_p);
                 _active_submap_p = new Submap();
                 _active_submap_p->positions.push_back(position_vec);
@@ -259,13 +259,13 @@ namespace chad {
         }
 
         // sort points by their morton code, discretized to the voxel resolution
-        MortonVector points_mc = calc_morton_vector(points, _voxel_resolution);
+        MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
         // estimate the normal of every point
         std::vector<glm::vec3> normals = estimate_normals(points_mc, position_vec);
 
         // octree shenanigans
-        update_octree(*_active_octree_p, points_sorted, normals, position_vec, _voxel_resolution, _truncation_distance);
+        update_octree(*_active_octree_p, points_sorted, normals, position_vec, _sdf_res, _sdf_trunc);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
@@ -274,12 +274,12 @@ namespace chad {
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
         if (!_active_submap_p->positions.empty()) {
-            finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _truncation_distance);
+            finalize_submap(*_active_octree_p, *_active_submap_p, *_node_levels_p, _sdf_trunc);
             _submaps.push_back(_active_submap_p);
         }
 
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing the first submap");
-        detail::reconstruct(*_submaps.front(), *_node_levels_p, _voxel_resolution, _truncation_distance, filename);
+        detail::reconstruct(*_submaps.front(), *_node_levels_p, _sdf_res, _sdf_trunc, filename);
     }
 }
