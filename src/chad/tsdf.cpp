@@ -1,9 +1,5 @@
 #include <chrono>
 #include <fmt/base.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/type_aligned.hpp>
-#include <gtl/phmap.hpp>
-#include <Eigen/Eigen>
 #include "chad/tsdf.hpp"
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/levels.hpp"
@@ -12,20 +8,17 @@
 #include "chad/detail/submap.hpp"
 #include "chad/detail/normals.hpp"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/norm.hpp>
-
 namespace chad::detail {
-    void print_vec(glm::vec3 vec) {
+    void inline print_vec(glm::vec3 vec) {
         fmt::println("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
     }
-    void print_vec(glm::aligned_vec3 vec) {
+    void inline print_vec(glm::aligned_vec3 vec) {
         fmt::println("{:.4f} {:.4f} {:.4f}", vec.x, vec.y, vec.z);
     }
-    void print_vec(glm::ivec3 vec) {
+    void inline print_vec(glm::ivec3 vec) {
         fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
     }
-    void print_vec(glm::aligned_ivec3 vec) {
+    void inline print_vec(glm::aligned_ivec3 vec) {
         fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
     }
     // TODO: make an iterator
@@ -57,8 +50,7 @@ namespace chad {
         else {
             // finalize active submap once traversed far enough
             glm::vec3 start = positions.front();
-            float dist_sqr = 5.0f * 5.0f;
-            if (glm::distance2(position_vec, start) > dist_sqr) {
+            if (glm::distance(position_vec, start) > 5.0f) {
                 _active_submap_p->finalize(*_active_octree_p, *_node_levels_p, _sdf_trunc);
                 _submaps.push_back(_active_submap_p);
                 _active_submap_p = new Submap();

@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <fmt/base.h>
+#include <set>
 #include <gtl/phmap.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_aligned.hpp>
@@ -18,7 +19,7 @@ namespace chad::detail {
             _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
             _leaves.push_back({}); // dummy leaf node
         }
-        
+
         void clear() {
             _node_lookup.clear();
             _nodes.clear();
@@ -27,6 +28,7 @@ namespace chad::detail {
             _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
             _leaves.push_back({}); // dummy leaf node
         }
+        // insert single leaf
         auto inline insert(MortonCode mc) -> Leaf& {
             // see if node at given level has been created already
             static constexpr uint32_t lookup_depth = 18;
@@ -75,12 +77,13 @@ namespace chad::detail {
 
             return _leaves[leaf_addr];
         }
+        // insert TSDFs via points and normals
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
             auto beg = std::chrono::high_resolution_clock::now();
             const float sdf_res_recip = float(1.0 / double(sdf_res));
             const glm::aligned_vec3 position_aligned = position;
 
-            std::vector<glm::ivec3> traversed_voxels;
+            gtl::flat_hash_set<MortonCode> traversed_voxels;
             for (size_t i = 0; i < points.size(); i++) {
                 const glm::aligned_vec3 point = points[i];
                 const glm::aligned_vec3 normal = normals[i];
@@ -118,8 +121,17 @@ namespace chad::detail {
                 // current voxel during traversal
                 glm::ivec3 voxel_current = voxel_start;
 
+                // add all 8 corner voxels at start voxel
+                for (uint8_t x = 0; x < 2; x++) {
+                    for (uint8_t y = 0; y < 2; y++) {
+                        for (uint8_t z = 0; z < 2; z++) {
+                            MortonCode mc = voxel_current + glm::ivec3{ x, y, z };
+                            traversed_voxels.emplace(mc);
+                        }
+                    }
+                }
+
                 // traverse ray within truncation distance
-                traversed_voxels.push_back(voxel_current);
                 while (true) {
                     if (voxel_step_max.x < voxel_step_max.y) {
                         if (voxel_step_max.x < voxel_step_max.z) {
@@ -146,15 +158,23 @@ namespace chad::detail {
                             if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
                         }
                     }
-                    traversed_voxels.push_back(voxel_current);
+
+                    // add all 8 corner voxels
+                    for (uint8_t x = 0; x < 2; x++) {
+                        for (uint8_t y = 0; y < 2; y++) {
+                            for (uint8_t z = 0; z < 2; z++) {
+                                MortonCode mc = voxel_current + glm::ivec3{ x, y, z };
+                                traversed_voxels.emplace(mc);
+                            }
+                        }
+                    }
                 }
                 
-                for (const glm::ivec3& voxel: traversed_voxels) {
-                    MortonCode mc { voxel };
-                    auto& leaf = insert(mc);
+                for (const MortonCode& voxel: traversed_voxels) {
+                    auto& leaf = insert(voxel);
 
                     // compute signed distance
-                    glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel) * sdf_res - point;
+                    glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel.decode()) * sdf_res - point;
                     float signed_distance = glm::dot(normal, point_to_voxel);
                     // weighted average with incremented weight
                     leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
@@ -165,7 +185,7 @@ namespace chad::detail {
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-            fmt::println("sub  upd {:.2f}", dur);
+            fmt::println("oct  upd {:.2f}", dur);
         }
 
         auto static get_root() -> uint32_t {

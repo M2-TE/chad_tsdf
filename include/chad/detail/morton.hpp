@@ -29,6 +29,9 @@ namespace chad::detail {
         bool inline operator==(const MortonCode& other) const noexcept {
             return _value == other._value;
         }
+        bool inline operator<(const MortonCode& other) const noexcept {
+            return _value < other._value;
+        }
 
         uint64_t _value;
     };
