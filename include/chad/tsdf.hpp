@@ -11,15 +11,13 @@
 #   include <Eigen/Eigen>
 #endif
 
-// forward declare implementation details
 namespace chad {
     namespace detail {
         struct Submap;
         struct Octree;
         struct NodeLevels;
     }
-}
-namespace chad {
+
     class TSDFMap {
     public:
         TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f);

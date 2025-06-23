@@ -1,7 +1,10 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <fmt/base.h>
 #include <gtl/phmap.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_aligned.hpp>
 #include "chad/detail/morton.hpp"
 #include "chad/detail/virtual_array.hpp"
 
@@ -15,6 +18,7 @@ namespace chad::detail {
             _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
             _leaves.push_back({}); // dummy leaf node
         }
+        
         void clear() {
             _node_lookup.clear();
             _nodes.clear();
@@ -70,6 +74,98 @@ namespace chad::detail {
             }
 
             return _leaves[leaf_addr];
+        }
+        void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
+            auto beg = std::chrono::high_resolution_clock::now();
+            const float sdf_res_recip = float(1.0 / double(sdf_res));
+            const glm::aligned_vec3 position_aligned = position;
+
+            std::vector<glm::ivec3> traversed_voxels;
+            for (size_t i = 0; i < points.size(); i++) {
+                const glm::aligned_vec3 point = points[i];
+                const glm::aligned_vec3 normal = normals[i];
+
+                // get all voxels along ray within truncation distance via variant of DDA line algorithm (-> "A fast voxel traversal algorithm for ray tracing")
+                // as Bresehnham's line algorithm misses some voxels
+                const glm::aligned_vec3 direction = glm::normalize(point - position_aligned);
+                const glm::aligned_vec3 direction_recip = 1.0f / direction;
+                const glm::aligned_vec3 start = point - direction * (sdf_trunc - 0.5f*sdf_res); // add flooring bias
+                const glm::aligned_vec3 final = point + direction * (sdf_trunc + 0.5f*sdf_res); // add flooring bias
+                const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * sdf_res_recip));
+                const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * sdf_res_recip));
+
+                // stepN: direction of increment for each dimension
+                const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
+                // tDeltaN: portion of "direction" needed to traverse full voxel
+                const glm::aligned_vec3 voxel_step_delta = glm::abs(sdf_res * direction_recip);
+                // tMaxN: portion of "direction" needed to traverse current voxel
+                glm::aligned_vec3 voxel_step_max;
+                // for x
+                if      (voxel_step_direction.x < 0) voxel_step_max.x = sdf_res * std::floor(start.x * sdf_res_recip);
+                else if (voxel_step_direction.x > 0) voxel_step_max.x = sdf_res * std::ceil (start.x * sdf_res_recip);
+                else /*voxel_step_direction.x == 0*/ voxel_step_max.x = std::numeric_limits<float>::max();
+                // for y
+                if      (voxel_step_direction.y < 0) voxel_step_max.y = sdf_res * std::floor(start.y * sdf_res_recip);
+                else if (voxel_step_direction.y > 0) voxel_step_max.y = sdf_res * std::ceil (start.y * sdf_res_recip);
+                else /*voxel_step_direction.x == 0*/ voxel_step_max.y = std::numeric_limits<float>::max();
+                // for z
+                if      (voxel_step_direction.z < 0) voxel_step_max.z = sdf_res * std::floor(start.z * sdf_res_recip);
+                else if (voxel_step_direction.z > 0) voxel_step_max.z = sdf_res * std::ceil (start.z * sdf_res_recip);
+                else /*voxel_step_direction.x == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
+                voxel_step_max = voxel_step_max - start; // distance to voxel boundaries
+                voxel_step_max = glm::abs(voxel_step_max * direction_recip); // portion of "direction" needed to cross voxel boundaries
+                
+                // current voxel during traversal
+                glm::ivec3 voxel_current = voxel_start;
+
+                // traverse ray within truncation distance
+                traversed_voxels.push_back(voxel_current);
+                while (true) {
+                    if (voxel_step_max.x < voxel_step_max.y) {
+                        if (voxel_step_max.x < voxel_step_max.z) {
+                            voxel_current.x += voxel_step_direction.x; // step in x direction
+                            voxel_step_max.x += voxel_step_delta.x; // update for next voxel boundary
+                            if (voxel_current.x == voxel_final.x + voxel_step_direction.x) break;
+                        }
+                        else {
+                            voxel_current.z += voxel_step_direction.z; // step in z direction
+                            voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
+                            if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
+                        }
+                    }
+                    else {
+                        if (voxel_step_max.y < voxel_step_max.z) {
+
+                            voxel_current.y += voxel_step_direction.y; // step in y direction
+                            voxel_step_max.y += voxel_step_delta.y; // update for next voxel boundary
+                            if (voxel_current.y == voxel_final.y + voxel_step_direction.y) break;
+                        }
+                        else {
+                            voxel_current.z += voxel_step_direction.z; // step in z direction
+                            voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
+                            if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
+                        }
+                    }
+                    traversed_voxels.push_back(voxel_current);
+                }
+                
+                for (const glm::ivec3& voxel: traversed_voxels) {
+                    MortonCode mc { voxel };
+                    auto& leaf = insert(mc);
+
+                    // compute signed distance
+                    glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel) * sdf_res - point;
+                    float signed_distance = glm::dot(normal, point_to_voxel);
+                    // weighted average with incremented weight
+                    leaf._signed_distance = leaf._signed_distance * leaf._weight + signed_distance;
+                    leaf._weight++;
+                    leaf._signed_distance = leaf._signed_distance / leaf._weight;
+                }
+                traversed_voxels.clear();
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+            fmt::println("sub  upd {:.2f}", dur);
         }
 
         auto static get_root() -> uint32_t {
