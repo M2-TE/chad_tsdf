@@ -2,7 +2,6 @@
 #include <array>
 #include <cstdint>
 #include <fmt/base.h>
-#include <set>
 #include <gtl/phmap.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_aligned.hpp>
@@ -125,7 +124,7 @@ namespace chad::detail {
                 for (uint8_t x = 0; x < 2; x++) {
                     for (uint8_t y = 0; y < 2; y++) {
                         for (uint8_t z = 0; z < 2; z++) {
-                            MortonCode mc = voxel_current + glm::ivec3{ x, y, z };
+                            MortonCode mc{ voxel_current + glm::ivec3{ x, y, z } };
                             traversed_voxels.emplace(mc);
                         }
                     }
@@ -163,7 +162,7 @@ namespace chad::detail {
                     for (uint8_t x = 0; x < 2; x++) {
                         for (uint8_t y = 0; y < 2; y++) {
                             for (uint8_t z = 0; z < 2; z++) {
-                                MortonCode mc = voxel_current + glm::ivec3{ x, y, z };
+                                MortonCode mc{ voxel_current + glm::ivec3{ x, y, z } };
                                 traversed_voxels.emplace(mc);
                             }
                         }
