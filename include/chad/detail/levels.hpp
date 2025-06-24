@@ -55,9 +55,8 @@ namespace chad::detail {
         }
         // add a single node with the given children and return its address
         auto add(const std::array<uint32_t, 8>& children) -> uint32_t {
-
             // check if theres enough space for a placeholder node
-            if (_occupied_n + 9 < _raw_data.size()) {
+            if (_occupied_n + 9 >= _raw_data.size()) {
                 _raw_data.resize(_raw_data.size() + 9);
             }
 
@@ -161,7 +160,22 @@ namespace chad::detail {
             else return 0;
         }
 
-        auto try_get_leaf_cluster(uint32_t parent_addr, uint8_t child_i) const -> std::pair<LeafCluster, bool> {
+        auto try_get_lc_addr(uint32_t parent_addr, uint8_t child_i) const -> std::pair<uint32_t, bool> {
+            uint32_t child_mask = _nodes[MAX_DEPTH - 1]._raw_data[parent_addr];
+            uint32_t child_bit = uint32_t(1) << child_i;
+
+            // check if the leaf cluster exists
+            if (child_mask & child_bit) {
+                // count the number of children that are stored before this one
+                uint8_t masked = uint8_t(child_mask & (child_bit - 1));
+                uint8_t child_count = std::popcount(masked);
+                // child count will correspond to the requested child's index
+                uint32_t child_addr = _nodes.back()._raw_data[parent_addr + uint32_t(child_count + 1)];
+                return { child_addr, true };
+            }
+            else return { {}, false };
+        }
+        auto try_get_lc(uint32_t parent_addr, uint8_t child_i) const -> std::pair<LeafCluster, bool> {
             uint32_t child_mask = _nodes[MAX_DEPTH - 1]._raw_data[parent_addr];
             uint32_t child_bit = uint32_t(1) << child_i;
 

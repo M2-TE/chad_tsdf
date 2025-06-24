@@ -2,6 +2,8 @@
 #include <array>
 #include <vector>
 #include <string>
+#include "chad/cluster.hpp"
+#include "chad/detail/morton.hpp"
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -20,6 +22,11 @@ namespace chad {
 
     class TSDFMap {
     public:
+        TSDFMap(const TSDFMap&  other) = delete; // copy constructor
+        TSDFMap(      TSDFMap&& other) = delete; // move constructor
+        TSDFMap& operator=(const TSDFMap&  other) = delete; // copy assignment
+        TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
+
         // initialize a TSDF map with the given voxel size and truncation distance
         TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f);
         // initialize a TSDF map with the given voxel size and truncation distance, then insert points into it
@@ -59,6 +66,7 @@ namespace chad {
             const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + vec_count);
             insert(points, { position_x, position_y, position_z });
         }
+
 
         // create interface for GLM vectors, if the header is present
         #if __has_include(<glm/vec3.hpp>)
@@ -115,11 +123,43 @@ namespace chad {
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
 
+        class iterator {
+        public:
+            bool inline operator==(const iterator& other) const noexcept {
+                return _mc == other._mc;
+            }
+            bool inline operator<(const iterator& other) const noexcept {
+                return _mc < other._mc;
+            }
+            bool inline operator>(const iterator& other) const noexcept {
+                return _mc > other._mc;
+            }
+            void operator++();
+            void operator--();
+            void operator+(uint32_t add);
+            void operator-(uint32_t sub);
+            
+        private:
+            friend class TSDFMap;
+            iterator(const detail::NodeLevels& node_levels, uint32_t root_addr);
+
+            detail::MortonCode _mc;
+            const LeafCluster* _leaf_cluster_p;
+            const detail::NodeLevels& _node_levels;
+            std::array<uint8_t,  20> _node_paths;
+            std::array<uint32_t, 20> _node_addrs;
+        };
+        [[nodiscard]] auto begin(uint32_t root_addr) const -> iterator;
+        [[nodiscard]] auto end(uint32_t root_addr) const -> iterator;
+        using const_iterator = iterator;
+        [[nodiscard]] auto cbegin(uint32_t root_addr) const -> const_iterator;
+        [[nodiscard]] auto cend(uint32_t root_addr) const -> const_iterator;
+
+
         // TODO:
         // leaf iterator
         // raycast to retrieve leaves along it + physics hit
         // map merging
-
     public:
         const float _sdf_res;
         const float _sdf_trunc;

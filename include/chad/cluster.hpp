@@ -5,7 +5,8 @@
 #include <algorithm>
 
 namespace chad {
-    namespace detail {
+    // cluster of 8 separate 8-bit leaves
+    struct LeafCluster {
         // wrapper for signed distance cluster
         struct TSDFs {
             // set 8 bits to represent signed distance, normalized within truncation distance
@@ -66,20 +67,40 @@ namespace chad {
             // }
             uint64_t _value;
         };
-    }
+        // wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)
+        struct Ufloats {
+            // TODO
+        };
+        // wrapper for cluster of 8 signed floats (-1.0f to +1.0f)
+        struct Sfloats {
+            // TODO
+        };
+        // wrapper for cluster of 8 uint8_t values (0xff is reserved)
+        struct Uints {
+            // TODO
+        };
+        // wrapper for cluster of 8 int8_t values (0xff is reserved)
+        struct Sints {
+            // TODO
+        };
 
-    // cluster of 8 separate 8-bit leaves
-    struct LeafCluster {
-        LeafCluster(): _value(0) {}
-        
-        bool is_empty() {
+        LeafCluster(): _value(0) {
+        }
+        bool inline is_empty() {
             return _value == std::numeric_limits<uint64_t>::max();
+        }
+        bool inline operator==(const LeafCluster& other) const noexcept {
+            return _value == other._value;
         }
 
         union {
-            uint64_t        _value;
-            detail::TSDFs   _tsdfs;
-            detail::Weights _weigh;
+            uint64_t _value;
+            TSDFs    _tsdfs;
+            Weights  _weigh;
+            Ufloats  _ufloats;
+            Sfloats  _sfloats;
+            Uints    _uints;
+            Sints    _sints;
         };
     };
 }
