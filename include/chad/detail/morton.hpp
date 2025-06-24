@@ -1,4 +1,6 @@
 #pragma once
+#include <array>
+#include <vector>
 #include <functional>
 #if !defined(__BMI2__)
 #   error "Requires BMI2 instruction set"
@@ -9,7 +11,11 @@
 namespace chad::detail {
     struct MortonCode {
         MortonCode(uint64_t value): _value(value) {}
-        MortonCode(glm::ivec3 vox_pos) noexcept {
+        MortonCode(const glm::ivec3& vox_pos) noexcept {
+            encode(vox_pos);
+        }
+
+        void inline encode(const glm::ivec3& vox_pos) noexcept {
             // truncate from 32-bit int to 21-bit int
             uint32_t x, y, z;
             x = (1 << 20) + uint32_t(vox_pos.x);
@@ -26,18 +32,26 @@ namespace chad::detail {
             z -= 1 << 20;
             return { int32_t(x), int32_t(y), int32_t(z) };
         }
+
         bool inline operator==(const MortonCode& other) const noexcept {
             return _value == other._value;
+        }
+        bool inline operator<(const MortonCode& other) const noexcept {
+            return _value < other._value;
+        }
+        bool inline operator>(const MortonCode& other) const noexcept {
+            return _value > other._value;
         }
 
         uint64_t _value;
     };
 
     using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
-    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector;
+    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector;
     auto sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3>;
 }
 
+// overload the standard hashing operator for MortonCode
 namespace std {
     template<> struct hash<chad::detail::MortonCode> {
         size_t inline operator()(const chad::detail::MortonCode& mc) const noexcept {

@@ -5,17 +5,18 @@
 #include <algorithm>
 
 namespace chad {
-    namespace detail {
+    // cluster of 8 separate 8-bit leaves
+    struct LeafCluster {
         // wrapper for signed distance cluster
         struct TSDFs {
             // set 8 bits to represent signed distance, normalized within truncation distance
-            void inline set(uint8_t leaf_i, float signed_distance, float truncation_distance_recip) noexcept {
+            void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) noexcept {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
                 
                 float sd = signed_distance;
                 // scale signed distance to be normalized within truncation distance
-                sd = std::clamp(sd * truncation_distance_recip, -1.0f, 1.0f);
+                sd = std::clamp(sd * sdf_trunc_recip, -1.0f, 1.0f);
                 // scale up to fit 8-bit integer, add offset to fit within unsigned
                 sd = sd * float(sd_range_abs) + float(sd_range_abs); // range should be [-127, 128]
 
@@ -30,7 +31,7 @@ namespace chad {
                 _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
             }
             // retrieve signed distance from single leaf if it is not empty
-            auto inline try_get(uint8_t leaf_i, float truncation_distance) const -> std::pair<float, bool> {
+            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const -> std::pair<float, bool> {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
 
@@ -46,7 +47,7 @@ namespace chad {
                 // scale signed distance back up to normalized [-1, 1]
                 signed_distance *= float(1.0 / float(sd_range_abs));
                 // scale back to denormalized signed distance
-                signed_distance *= truncation_distance;
+                signed_distance *= sdf_trunc;
                 return { signed_distance, true };
             }
             uint64_t _value;
@@ -66,20 +67,40 @@ namespace chad {
             // }
             uint64_t _value;
         };
-    }
+        // wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)
+        struct Ufloats {
+            // TODO
+        };
+        // wrapper for cluster of 8 signed floats (-1.0f to +1.0f)
+        struct Sfloats {
+            // TODO
+        };
+        // wrapper for cluster of 8 uint8_t values (0xff is reserved)
+        struct Uints {
+            // TODO
+        };
+        // wrapper for cluster of 8 int8_t values (0xff is reserved)
+        struct Sints {
+            // TODO
+        };
 
-    // cluster of 8 separate 8-bit leaves
-    struct LeafCluster {
-        LeafCluster(): _value(0) {}
-        
-        bool is_empty() {
+        LeafCluster(): _value(0) {
+        }
+        bool inline is_empty() {
             return _value == std::numeric_limits<uint64_t>::max();
+        }
+        bool inline operator==(const LeafCluster& other) const noexcept {
+            return _value == other._value;
         }
 
         union {
-            uint64_t        _value;
-            detail::TSDFs   _tsdfs;
-            detail::Weights _weigh;
+            uint64_t _value;
+            TSDFs    _tsdfs;
+            Weights  _weigh;
+            Ufloats  _ufloats;
+            Sfloats  _sfloats;
+            Uints    _uints;
+            Sints    _sints;
         };
     };
 }

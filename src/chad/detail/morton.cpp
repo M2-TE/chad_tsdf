@@ -4,11 +4,11 @@
 #include "chad/detail/morton.hpp"
 
 namespace chad::detail {
-    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float voxel_resolution) -> MortonVector {
+    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // calc reciprocal of voxel resolution for later
-        const float voxel_reciprocal = float(1.0 / double(voxel_resolution));
+        const float voxel_reciprocal = float(1.0 / double(sdf_res));
 
         // generate morton codes from discretized points
         MortonVector points_mc;

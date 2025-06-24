@@ -148,7 +148,7 @@ namespace chad::detail {
         // build morton code neighbourhood maps starting from the leaf level
         uint32_t neigh_level = 0;
         MortonNeighbourhoodMap neigh_map;
-        for (; neigh_level < 8; neigh_level++) {
+        for (; neigh_level < 21; neigh_level++) {
             neigh_map = build_neighbourhood_map(points_mc, neigh_level);
             if (!neigh_map.empty()) break;
         }

@@ -54,14 +54,14 @@ namespace chad::detail {
                 // node contains leaf cluster children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    auto [cluster, cluster_exists] = node_levels.try_get_leaf_cluster(path_addr[depth], child_i);
+                    auto [cluster, cluster_exists] = node_levels.try_get_lc(path_addr[depth], child_i);
                     if (!cluster_exists) continue;
 
                     // reconstruct morton code from path
                     uint64_t code = 0;
                     for (uint64_t k = 0; k < 63/3 - 1; k++) {
                         uint64_t part = path_child[k] - 1;
-                        code |= part << (60 - k*3);
+                        code |= part << uint64_t(60 - k*3);
                     }
                     MortonCode mc { code };
                     glm::ivec3 cluster_chunk = mc.decode();
