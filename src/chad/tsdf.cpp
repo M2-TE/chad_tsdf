@@ -85,81 +85,81 @@ namespace chad {
         detail::reconstruct(*_submaps.front(), *_node_levels_p, _sdf_res, _sdf_trunc, filename);
     }
 
-    TSDFMap::iterator::iterator(const detail::NodeLevels& node_levels, uint32_t root_addr): _mc(0), _leaf_cluster_p(nullptr), _node_levels(node_levels) {
-        _node_paths.fill(0);
-        _node_addrs.fill(0);
-        _node_addrs[0] = root_addr;
-    }
-    void inline TSDFMap::iterator::operator++() {
-        // TODO
-    }
-    void inline TSDFMap::iterator::operator--() {
-        // TODO
-    }
-    void inline TSDFMap::iterator::operator+(uint32_t increment) {
-        (void)increment;
-        // TODO
-    }
-    void inline TSDFMap::iterator::operator-(uint32_t decrement) {
-        (void)decrement;
-        // TODO
-    }
-    auto TSDFMap::begin(uint32_t root_addr) const -> iterator {
-        iterator it = iterator(*_node_levels_p, root_addr);
+    // TSDFMap::iterator::iterator(const detail::NodeLevels& node_levels, uint32_t root_addr): _mc(0), _leaf_cluster_p(nullptr), _node_levels(node_levels) {
+    //     _node_paths.fill(0);
+    //     _node_addrs.fill(0);
+    //     _node_addrs[0] = root_addr;
+    // }
+    // void inline TSDFMap::iterator::operator++() {
+    //     // TODO
+    // }
+    // void inline TSDFMap::iterator::operator--() {
+    //     // TODO
+    // }
+    // void inline TSDFMap::iterator::operator+(uint32_t increment) {
+    //     (void)increment;
+    //     // TODO
+    // }
+    // void inline TSDFMap::iterator::operator-(uint32_t decrement) {
+    //     (void)decrement;
+    //     // TODO
+    // }
+    // auto TSDFMap::begin(uint32_t root_addr) const -> iterator {
+    //     iterator it = iterator(*_node_levels_p, root_addr);
 
-        // validate root address
-        if (root_addr >= _node_levels_p->_nodes[0]._raw_data.size()) {
-            throw std::runtime_error("chad::TSDFMap::begin() given faulty root address");
-            return it;
-        }
+    //     // validate root address
+    //     if (root_addr >= _node_levels_p->_nodes[0]._raw_data.size()) {
+    //         throw std::runtime_error("chad::TSDFMap::begin() given faulty root address");
+    //         return it;
+    //     }
 
-        // walk to the first leaf node
-        uint32_t depth = 0;
-        while (true) {
-            uint8_t child_i = it._node_paths[depth]++;
+    //     // walk to the first leaf node
+    //     uint32_t depth = 0;
+    //     while (true) {
+    //         uint8_t child_i = it._node_paths[depth]++;
 
-            // standard node
-            if (depth < detail::NodeLevels::MAX_DEPTH - 1) { 
-                // try to find the child in current node
-                uint32_t node_addr = it._node_addrs[depth];
-                uint32_t child_addr = it._node_levels.get_child_addr(depth, node_addr, child_i);
+    //         // standard node
+    //         if (depth < detail::NodeLevels::MAX_DEPTH - 1) { 
+    //             // try to find the child in current node
+    //             uint32_t node_addr = it._node_addrs[depth];
+    //             uint32_t child_addr = it._node_levels.get_child_addr(depth, node_addr, child_i);
 
-                // check if child address is valid
-                if (child_addr > 0) {
-                    // assign child addr at next depth
-                    it._node_addrs[++depth] = child_addr;
-                }
-            }
-            // leaf cluster node
-            else {
-                // try to get the leaf cluster, skip if it doesn't exist
-                auto [cluster, cluster_exists] = it._node_levels.try_get_lc(it._node_addrs[depth], child_i);
-                if (!cluster_exists) continue;
-                // assign leaf cluster to iterator
-                it._leaf_cluster_p = &cluster;
-                break;
-            }
-        }
+    //             // check if child address is valid
+    //             if (child_addr > 0) {
+    //                 // assign child addr at next depth
+    //                 it._node_addrs[++depth] = child_addr;
+    //             }
+    //         }
+    //         // leaf cluster node
+    //         else {
+    //             // try to get the leaf cluster, skip if it doesn't exist
+    //             auto [cluster, cluster_exists] = it._node_levels.try_get_lc(it._node_addrs[depth], child_i);
+    //             if (!cluster_exists) continue;
+    //             // assign leaf cluster to iterator
+    //             it._leaf_cluster_p = &cluster;
+    //             break;
+    //         }
+    //     }
 
-        // reconstruct morton code from path
-        uint64_t code = 0;
-        for (uint64_t k = 0; k < detail::NodeLevels::MAX_DEPTH; k++) {
-            uint64_t part = it._node_paths[k] - 1;
-            code |= part << uint64_t(60 - k*3);
-        }
-        it._mc = detail::MortonCode(code);
-        return it;
-    }
-    auto TSDFMap::end(uint32_t root_addr) const -> iterator {
-        iterator it = iterator(*_node_levels_p, root_addr);
-        // walk to the last leaf node
-        // TODO
-        return it;
-    }
-    auto TSDFMap::cbegin(uint32_t root_addr) const -> const_iterator {
-        return begin(root_addr);
-    }
-    auto TSDFMap::cend(uint32_t root_addr) const -> const_iterator {
-        return begin(root_addr);
-    }
+    //     // reconstruct morton code from path
+    //     uint64_t code = 0;
+    //     for (uint64_t k = 0; k < detail::NodeLevels::MAX_DEPTH; k++) {
+    //         uint64_t part = it._node_paths[k] - 1;
+    //         code |= part << uint64_t(60 - k*3);
+    //     }
+    //     it._mc = detail::MortonCode(code);
+    //     return it;
+    // }
+    // auto TSDFMap::end(uint32_t root_addr) const -> iterator {
+    //     iterator it = iterator(*_node_levels_p, root_addr);
+    //     // walk to the last leaf node
+    //     // TODO
+    //     return it;
+    // }
+    // auto TSDFMap::cbegin(uint32_t root_addr) const -> const_iterator {
+    //     return begin(root_addr);
+    // }
+    // auto TSDFMap::cend(uint32_t root_addr) const -> const_iterator {
+    //     return begin(root_addr);
+    // }
 }

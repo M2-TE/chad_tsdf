@@ -2,8 +2,6 @@
 #include <array>
 #include <vector>
 #include <string>
-#include "chad/cluster.hpp"
-#include "chad/detail/morton.hpp"
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -123,37 +121,37 @@ namespace chad {
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
 
-        class iterator {
-        public:
-            bool inline operator==(const iterator& other) const noexcept {
-                return _mc == other._mc;
-            }
-            bool inline operator<(const iterator& other) const noexcept {
-                return _mc < other._mc;
-            }
-            bool inline operator>(const iterator& other) const noexcept {
-                return _mc > other._mc;
-            }
-            void operator++();
-            void operator--();
-            void operator+(uint32_t add);
-            void operator-(uint32_t sub);
+        // class iterator {
+        // public:
+        //     bool inline operator==(const iterator& other) const noexcept {
+        //         return _mc_raw == other._mc_raw;
+        //     }
+        //     bool inline operator<(const iterator& other) const noexcept {
+        //         return _mc_raw < other._mc_raw;
+        //     }
+        //     bool inline operator>(const iterator& other) const noexcept {
+        //         return _mc_raw > other._mc_raw;
+        //     }
+        //     void operator++();
+        //     void operator--();
+        //     void operator+(uint32_t add);
+        //     void operator-(uint32_t sub);
             
-        private:
-            friend class TSDFMap;
-            iterator(const detail::NodeLevels& node_levels, uint32_t root_addr);
+        // private:
+        //     friend class TSDFMap;
+        //     iterator(const detail::NodeLevels& node_levels, uint32_t root_addr);
 
-            detail::MortonCode _mc;
-            const LeafCluster* _leaf_cluster_p;
-            const detail::NodeLevels& _node_levels;
-            std::array<uint8_t,  20> _node_paths;
-            std::array<uint32_t, 20> _node_addrs;
-        };
-        [[nodiscard]] auto begin(uint32_t root_addr) const -> iterator;
-        [[nodiscard]] auto end(uint32_t root_addr) const -> iterator;
-        using const_iterator = iterator;
-        [[nodiscard]] auto cbegin(uint32_t root_addr) const -> const_iterator;
-        [[nodiscard]] auto cend(uint32_t root_addr) const -> const_iterator;
+        //     uint64_t _mc_raw;
+        //     const LeafCluster* _leaf_cluster_p;
+        //     const detail::NodeLevels& _node_levels;
+        //     std::array<uint8_t,  20> _node_paths;
+        //     std::array<uint32_t, 20> _node_addrs;
+        // };
+        // auto begin(uint32_t root_addr) const -> iterator;
+        // auto end(uint32_t root_addr) const -> iterator;
+        // using const_iterator = iterator;
+        // auto cbegin(uint32_t root_addr) const -> const_iterator;
+        // auto cend(uint32_t root_addr) const -> const_iterator;
 
 
         // TODO:
