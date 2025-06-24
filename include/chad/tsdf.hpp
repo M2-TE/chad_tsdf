@@ -121,6 +121,11 @@ namespace chad {
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
 
+        // TODO: what should iterators actually provide to the user?
+        //      -> real floating point position per leaf (with submap rotation and position as offset)
+        //      -> access to the data written there (signed distance, weight)
+        //     !-> users should not be exposed to morton codes or anything of the sort
+
         // class iterator {
         // public:
         //     bool inline operator==(const iterator& other) const noexcept {
