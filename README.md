@@ -11,6 +11,10 @@ TSDF mapping backend with real-time capabilities and high compression.
 It is tailored towards large-scale maps, while still being able to handle smaller voxel sizes (~0.05).
 
 ## Getting Started
+### LVR2
+The 3D mesh reconstruction currently relies on [LVR2](https://github.com/uos/lvr2), so you will likely need to build and install it yourself.
+If not present, chad_tsdf will attempt to build it dynamically via CMake's FetchContent mechanism, but this method may fail on some systems and will still require the LVR2 dependencies.
+
 ### CMake
 ```cmake
 include(FetchContent)
