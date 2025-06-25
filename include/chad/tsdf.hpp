@@ -102,7 +102,7 @@ namespace chad {
             // insert pointcloud alongside scanner position
             void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position){
                 // when using unpadded Vector3f, we can avoid copies
-                if (sizeof(glm::vec3) == 12) {
+                if (sizeof(Eigen::Vector3f) == 12) {
                     const float* points_p = points[0].data();
                     const float* position_p = position.data();
                     insert(points_p, points.size(), position_p);
