@@ -1,7 +1,7 @@
 #include <string>
 #include <cstring>
 #include <stdexcept>
-#if defined(linux)
+#if defined(linux) || defined (__unix__)
 #   include <sys/mman.h>
 #   include <errno.h>
 #elif defined(_WIN32) || defined(_WIN64)
