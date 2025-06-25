@@ -40,7 +40,7 @@ void static do_sphere_thing() {
         // }
     }
     map.save("mesh.ply");
-    map.begin(1);
+    // map.begin(1);
 }
 int main() {
     do_sphere_thing();
