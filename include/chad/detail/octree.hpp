@@ -82,7 +82,7 @@ namespace chad::detail {
             const float sdf_res_recip = float(1.0 / double(sdf_res));
             const glm::aligned_vec3 position_aligned = position;
 
-            gtl::flat_hash_set<MortonCode> traversed_voxels;
+            std::vector<MortonCode> traversed_voxels;
             for (size_t i = 0; i < points.size(); i++) {
                 const glm::aligned_vec3 point = points[i];
                 const glm::aligned_vec3 normal = normals[i];
@@ -91,8 +91,8 @@ namespace chad::detail {
                 // as Bresehnham's line algorithm misses some voxels
                 const glm::aligned_vec3 direction = glm::normalize(point - position_aligned);
                 const glm::aligned_vec3 direction_recip = 1.0f / direction;
-                const glm::aligned_vec3 start = point - direction * (sdf_trunc);
-                const glm::aligned_vec3 final = point + direction * (sdf_trunc);
+                const glm::aligned_vec3 start = point - direction * sdf_trunc;
+                const glm::aligned_vec3 final = point + direction * sdf_trunc;
                 const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * sdf_res_recip));
                 const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * sdf_res_recip));
 
@@ -109,27 +109,18 @@ namespace chad::detail {
                 // for y
                 if      (voxel_step_direction.y < 0) voxel_step_max.y = sdf_res * std::floor(start.y * sdf_res_recip);
                 else if (voxel_step_direction.y > 0) voxel_step_max.y = sdf_res * std::ceil (start.y * sdf_res_recip);
-                else /*voxel_step_direction.x == 0*/ voxel_step_max.y = std::numeric_limits<float>::max();
+                else /*voxel_step_direction.y == 0*/ voxel_step_max.y = std::numeric_limits<float>::max();
                 // for z
                 if      (voxel_step_direction.z < 0) voxel_step_max.z = sdf_res * std::floor(start.z * sdf_res_recip);
                 else if (voxel_step_direction.z > 0) voxel_step_max.z = sdf_res * std::ceil (start.z * sdf_res_recip);
-                else /*voxel_step_direction.x == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
+                else /*voxel_step_direction.z == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
                 voxel_step_max = voxel_step_max - start; // distance to voxel boundaries
                 voxel_step_max = glm::abs(voxel_step_max * direction_recip); // portion of "direction" needed to cross voxel boundaries
                 
                 // current voxel during traversal
                 glm::ivec3 voxel_current = voxel_start;
-
-                // add all 8 corner voxels at start voxel
-                for (int8_t x = 0; x < 2; x++) {
-                    for (int8_t y = 0; y < 2; y++) {
-                        for (int8_t z = 0; z < 2; z++) {
-                            MortonCode mc{ voxel_current + glm::ivec3{ x, y, z } };
-                            traversed_voxels.emplace(mc);
-                        }
-                    }
-                }
-
+                traversed_voxels.emplace_back(voxel_current);
+                
                 // traverse ray within truncation distance
                 while (true) {
                     if (voxel_step_max.x < voxel_step_max.y) {
@@ -157,24 +148,15 @@ namespace chad::detail {
                             if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
                         }
                     }
-
-                    // add all 8 corner voxels
-                    for (int8_t x = 0; x < 2; x++) {
-                        for (int8_t y = 0; y < 2; y++) {
-                            for (int8_t z = 0; z < 2; z++) {
-                                MortonCode mc{ voxel_current + glm::ivec3{ x, y, z } };
-                                traversed_voxels.emplace(mc);
-                            }
-                        }
-                    }
+                    traversed_voxels.emplace_back(voxel_current);
                 }
-                
                 for (const MortonCode& voxel_mc: traversed_voxels) {
                     auto& leaf = insert(voxel_mc);
 
                     // compute signed distance
                     glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel_mc.decode()) * sdf_res - point;
                     float signed_distance = glm::dot(normal, point_to_voxel);
+                    signed_distance = std::clamp(signed_distance, -sdf_trunc, +sdf_trunc);
                     // weighted average with incremented weight
                     leaf._signed_distance = leaf._signed_distance * float(leaf._weight) + signed_distance;
                     leaf._weight++;

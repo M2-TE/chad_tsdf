@@ -100,7 +100,6 @@ namespace chad::detail {
                     nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weigh);
                 }
             }
-
             auto end = std::chrono::high_resolution_clock::now();
             auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
             fmt::println("sub fin  {:.2f}", dur);

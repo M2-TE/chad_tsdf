@@ -18,6 +18,7 @@ namespace chad::detail {
             m_coordinateScales.y = 1.0;
             m_coordinateScales.z = 1.0;
             m_voxelsize = voxel_res;
+            m_truncsize = trunc_dist;
             BoxT::m_voxelsize = voxel_res;
             const float recip = 1.0 / m_voxelsize;
 
@@ -79,35 +80,32 @@ namespace chad::detail {
                         glm::vec3 leaf_pos = glm::vec3(leaf_chunk) * m_voxelsize;
 
                         // DEBUG
-                        // signed_distance = glm::length(leaf_pos) - 5.0f;
-                        // fmt::println("sd {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
+                        // float perf_signed_distance = glm::length(leaf_pos) - 5.0f;
+                        // signed_distance = perf_signed_distance;
+                        // fmt::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
                         
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
                         m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
                         
                         // 8 cells around the query point
-                        const std::array<glm::vec3, 8> cell_offsets = {
-                            glm::vec3(+0.5, +0.5, +0.5),
-                            glm::vec3(-0.5, +0.5, +0.5),
-                            glm::vec3(-0.5, -0.5, +0.5),
-                            glm::vec3(+0.5, -0.5, +0.5),
-                            glm::vec3(+0.5, +0.5, -0.5),
-                            glm::vec3(-0.5, +0.5, -0.5),
-                            glm::vec3(-0.5, -0.5, -0.5),
-                            glm::vec3(+0.5, -0.5, -0.5),
+                        const std::array<glm::ivec3, 8> cell_offsets = {
+                            glm::vec3(+1, +1, +1),
+                            glm::vec3(-1, +1, +1),
+                            glm::vec3(-1, -1, +1),
+                            glm::vec3(+1, -1, +1),
+                            glm::vec3(+1, +1, -1),
+                            glm::vec3(-1, +1, -1),
+                            glm::vec3(-1, -1, -1),
+                            glm::vec3(+1, -1, -1),
                         };
                         for (size_t i = 0; i < 8; i++) {
-                            // create cell
-                            glm::vec3 cell_center = leaf_pos + cell_offsets[i] * m_voxelsize;
                             // create morton code of cell
                             // convert position back to chunk index
-                            glm::vec3 cell_pos = glm::floor(cell_center * recip);
-                            glm::ivec3 cell_chunk = glm::ivec3(cell_pos);
-                            // convert to morton code
-                            MortonCode mc { cell_chunk };
+                            glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
+                            glm::vec3 cell_center = glm::vec3(cell_chunk) * m_voxelsize + m_voxelsize / 2.0f;
                             // emplace cell into map, check if it already existed
-                            auto [box_it, emplaced] = m_cells.emplace(mc._value, nullptr);
+                            auto [box_it, emplaced] = m_cells.emplace(MortonCode(cell_chunk)._value, nullptr);
                             if (emplaced) {
                                 box_it->second = new BoxT(BaseVecT(cell_center.x, cell_center.y, cell_center.z));
                             }
@@ -174,7 +172,7 @@ namespace chad::detail {
             std::ofstream output;
             output.open(file, std::ofstream::trunc | std::ofstream::binary);
             // store header data
-            float voxel_res = m_voxelsize;
+            float voxel_res = m_truncsize;
             output.write(reinterpret_cast<char*>(&voxel_res), sizeof(float));
             size_t query_points_n = getQueryPoints().size();
             output.write(reinterpret_cast<char*>(&query_points_n), sizeof(size_t));
@@ -208,6 +206,7 @@ namespace chad::detail {
         lvr2::BoundingBox<BaseVecT> qp_bb;
         lvr2::BoundingBox<BaseVecT> m_boundingBox;
         float m_voxelsize;
+        float m_truncsize;
         std::size_t m_maxIndex;
         std::size_t m_maxIndexSquare;
         std::size_t m_maxIndexX;
