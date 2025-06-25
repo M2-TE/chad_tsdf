@@ -89,8 +89,10 @@ namespace chad::detail {
                         }
                         else {
                             const auto& leaf = octree.get_leaf(leaf_addr);
+                            // weight can be above 255, so we cap it at the uint8_t limit
+                            uint8_t weight = std::max<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
                             lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
-                            lc_weigh._weigh.set(leaf_i, uint8_t(leaf._weight));
+                            lc_weigh._weigh.set(leaf_i, weight);
                         }
                     }
                     // add the leaf clusters and remember their addresses
