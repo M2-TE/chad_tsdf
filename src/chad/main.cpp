@@ -6,7 +6,7 @@
 
 void static do_sphere_thing() {
     // generate random point data
-    std::vector<glm::vec3> points { 1'000'000 };
+    std::vector<glm::vec3> points { 100'000 };
     std::random_device rd;
     std::mt19937 gen(420);
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
@@ -15,10 +15,6 @@ void static do_sphere_thing() {
     chad::TSDFMap map;
     std::vector<glm::vec3> positions {
         { 0, 0, 0 },
-        // { 2, 2, 2 },
-        // { 4, 4, 4 },
-        // { 6, 6, 6 },
-        // { 8, 8, 8 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
@@ -40,7 +36,6 @@ void static do_sphere_thing() {
         }
     }
     map.save("mesh.ply");
-    // map.begin(1);
 }
 int main() {
     do_sphere_thing();

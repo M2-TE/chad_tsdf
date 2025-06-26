@@ -25,6 +25,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
+include("cmake/eigen.cmake")
 include("cmake/lvr2.cmake")
 include("cmake/morton.cmake")
 

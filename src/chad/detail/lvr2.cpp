@@ -20,7 +20,6 @@ namespace chad::detail {
             m_voxelsize = voxel_res;
             m_truncsize = trunc_dist;
             BoxT::m_voxelsize = voxel_res;
-            const float recip = 1.0 / m_voxelsize;
 
             // trackers for the traversed path and nodes
             std::array<uint8_t,  NodeLevels::MAX_DEPTH> path_child;

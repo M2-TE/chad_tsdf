@@ -106,24 +106,20 @@ namespace chad {
     // }
     // auto TSDFMap::begin(uint32_t root_addr) const -> iterator {
     //     iterator it = iterator(*_node_levels_p, root_addr);
-
     //     // validate root address
     //     if (root_addr >= _node_levels_p->_nodes[0]._raw_data.size()) {
     //         throw std::runtime_error("chad::TSDFMap::begin() given faulty root address");
     //         return it;
     //     }
-
     //     // walk to the first leaf node
     //     uint32_t depth = 0;
     //     while (true) {
     //         uint8_t child_i = it._node_paths[depth]++;
-
     //         // standard node
     //         if (depth < detail::NodeLevels::MAX_DEPTH - 1) { 
     //             // try to find the child in current node
     //             uint32_t node_addr = it._node_addrs[depth];
     //             uint32_t child_addr = it._node_levels.get_child_addr(depth, node_addr, child_i);
-
     //             // check if child address is valid
     //             if (child_addr > 0) {
     //                 // assign child addr at next depth
@@ -140,7 +136,6 @@ namespace chad {
     //             break;
     //         }
     //     }
-
     //     // reconstruct morton code from path
     //     uint64_t code = 0;
     //     for (uint64_t k = 0; k < detail::NodeLevels::MAX_DEPTH; k++) {
