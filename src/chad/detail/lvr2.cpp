@@ -93,6 +93,7 @@ namespace chad::detail {
                             glm::vec3(-1, +1, +1),
                             glm::vec3(-1, -1, +1),
                             glm::vec3(+1, -1, +1),
+                            //
                             glm::vec3(+1, +1, -1),
                             glm::vec3(-1, +1, -1),
                             glm::vec3(-1, -1, -1),
@@ -102,12 +103,10 @@ namespace chad::detail {
                             // create morton code of cell
                             // convert position back to chunk index
                             glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
-                            glm::vec3 cell_center = glm::vec3(cell_chunk) * m_voxelsize + m_voxelsize / 2.0f;
+                            // glm::vec3 cell_center = glm::vec3(cell_chunk) * m_voxelsize + m_voxelsize / 2.0f;
                             // emplace cell into map, check if it already existed
                             auto [box_it, emplaced] = m_cells.emplace(MortonCode(cell_chunk)._value, nullptr);
-                            if (emplaced) {
-                                box_it->second = new BoxT(BaseVecT(cell_center.x, cell_center.y, cell_center.z));
-                            }
+                            if (emplaced) box_it->second = new BoxT(BaseVecT(0, 0, 0) /*unused*/);
                             // place query point at the correct cell index
                             box_it->second->setVertex(i, querypoint_i);
                         }
@@ -164,6 +163,7 @@ namespace chad::detail {
             (void)j;
             (void)k;
             (void)distance;
+            fmt::println("LVR2 addLatticePoint() unimplemented");
         }
         void saveGrid(std::string file) override {
             (void)file;
@@ -228,6 +228,7 @@ namespace chad::detail {
             (void)bb;
             (void)duplicates;
             (void)comparePrecision;
+            fmt::println("LVR2 getMesh(mesh, bb, duplicates, comparePrecision) unimplemented");
         }
         void getMesh(lvr2::BaseMesh<BaseVecT> &mesh) override {
             // Status message for mesh generation
@@ -244,12 +245,10 @@ namespace chad::detail {
             {
                 b = it->second;
                 b->getSurface(mesh, m_grid->getQueryPoints(), global_index);
-                if(!lvr2::timestamp.isQuiet())
-                    ++progress;
+                if(!lvr2::timestamp.isQuiet()) ++progress;
             }
 
-            if(!lvr2::timestamp.isQuiet())
-                cout << endl;
+            if(!lvr2::timestamp.isQuiet()) cout << endl;
 
             lvr2::BoxTraits<BoxT> traits;
 
@@ -366,6 +365,7 @@ namespace chad::detail {
         // begin 3D mesh reconstruction using LVR2
         typedef lvr2::BaseVector<float> VecT;
         typedef lvr2::BilinearFastBox<VecT> BoxT;
+        // typedef lvr2::SharpBox<VecT> BoxT;
         
         // create hash grid from entire tree
         // generate mesh from hash grid
