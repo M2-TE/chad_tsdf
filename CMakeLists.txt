@@ -26,7 +26,6 @@ include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
 include("cmake/lvr2.cmake")
-include("cmake/eigen.cmake")
 include("cmake/morton.cmake")
 
 # compile executable if top level project
