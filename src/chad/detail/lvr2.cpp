@@ -81,23 +81,34 @@ namespace chad::detail {
                         // DEBUG
                         // float perf_signed_distance = glm::length(leaf_pos) - 5.0f;
                         // signed_distance = perf_signed_distance;
+                        // signed_distance = -signed_distance;
                         // fmt::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
                         
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
                         m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
-                        
+
                         // 8 cells around the query point
-                        const std::array<glm::ivec3, 8> cell_offsets = {
-                            glm::vec3(+1, +1, +1),
-                            glm::vec3(-1, +1, +1),
-                            glm::vec3(-1, -1, +1),
-                            glm::vec3(+1, -1, +1),
+                        const std::array<glm::ivec3, 8> cell_offsets {
+                        //     glm::ivec3(+1, +1, +1),
+                        //     glm::ivec3(-1, +1, +1),
+                        //     glm::ivec3(-1, -1, +1),
+                        //     glm::ivec3(+1, -1, +1),
+                        //     //
+                        //     glm::ivec3(+1, +1, -1),
+                        //     glm::ivec3(-1, +1, -1),
+                        //     glm::ivec3(-1, -1, -1),
+                        //     glm::ivec3(+1, -1, -1),
+                        // };
+                            glm::ivec3(+0, +0, +0),
+                            glm::ivec3(-1, +0, +0),
+                            glm::ivec3(-1, -1, +0),
+                            glm::ivec3(+0, -1, +0),
                             //
-                            glm::vec3(+1, +1, -1),
-                            glm::vec3(-1, +1, -1),
-                            glm::vec3(-1, -1, -1),
-                            glm::vec3(+1, -1, -1),
+                            glm::ivec3(+0, +0, -1),
+                            glm::ivec3(-1, +0, -1),
+                            glm::ivec3(-1, -1, -1),
+                            glm::ivec3(+0, -1, -1),
                         };
                         for (size_t i = 0; i < 8; i++) {
                             // create morton code of cell
@@ -251,97 +262,6 @@ namespace chad::detail {
             if(!lvr2::timestamp.isQuiet()) cout << endl;
 
             lvr2::BoxTraits<BoxT> traits;
-
-            if(traits.type == "SharpBox")  // Perform edge flipping for extended marching cubes
-            {
-                string SFComment = lvr2::timestamp.getElapsedTime() + "Flipping edges  ";
-                lvr2::ProgressBar SFProgress(this->m_grid->getNumberOfCells(), SFComment);
-                for(it = this->m_grid->firstCell(); it != this->m_grid->lastCell(); it++)
-                {
-
-                    lvr2::SharpBox<BaseVecT>* sb;
-                    sb = reinterpret_cast<lvr2::SharpBox<BaseVecT>* >(it->second);
-                    if(sb->m_containsSharpFeature)
-                    {
-                        lvr2::OptionalVertexHandle v1;
-                        lvr2::OptionalVertexHandle v2;
-                        lvr2::OptionalEdgeHandle e;
-
-                        if(sb->m_containsSharpCorner)
-                        {
-                            // 1
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][0]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][1]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 2
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][2]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][3]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 3
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][4]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][5]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                        }
-                        else
-                        {
-                            // 1
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][0]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][1]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 2
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][4]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][5]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-                        }
-                    }
-                    ++SFProgress;
-                }
-                cout << endl;
-            }
 
             if(traits.type == "BilinearFastBox")
             {
