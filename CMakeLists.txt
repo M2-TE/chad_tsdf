@@ -14,8 +14,6 @@ include("cmake/options_compiler.cmake")
 set(CPP_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/lvr2.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/morton.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/normals.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/virtual_array.cpp")
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})

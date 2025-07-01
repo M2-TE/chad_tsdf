@@ -5,7 +5,7 @@
 #include <algorithm>
 
 namespace chad {
-    // cluster of 8 separate 8-bit leaves
+    // cluster of 8 separate 8-bit leaves, choose only one of the union partitions
     struct LeafCluster {
         // wrapper for signed distance cluster
         struct TSDFs {
@@ -94,7 +94,7 @@ namespace chad {
         }
 
         union {
-            uint64_t _value;
+            uint64_t _value; // raw cluster data interpreted as 64-bit uint
             TSDFs    _tsdfs;
             Weights  _weigh;
             Ufloats  _ufloats;
