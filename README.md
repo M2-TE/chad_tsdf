@@ -5,6 +5,8 @@ CHAD TSDF data structure for SLAM with 3D mesh reconstruction.
 | Platform | Build Status |
 |:--------:|:------------:|
 | Linux    | [![Build on Ubuntu](https://github.com/M2-TE/chad_tsdf/actions/workflows/ubuntu.yaml/badge.svg)](https://github.com/M2-TE/chad_tsdf/actions/workflows/ubuntu.yaml) |
+| MacOS    | - |
+| Windows  | - |
 
 ## Description
 TSDF mapping backend with real-time capabilities and high compression.
@@ -59,6 +61,6 @@ int main() {
 
 ## Acknowledgments
 
-* [gtl](https://github.com/greg7mdp/gtl)
-* [libmorton](https://github.com/Forceflow/libmorton)
-* [lvr2](https://github.com/uos/lvr2)
+* [gtl](https://github.com/greg7mdp/gtl): Hashmap implementations.
+* [lvr2](https://github.com/uos/lvr2): 3D mesh reconstruction via sdf marching cubes.
+* [libmorton](https://github.com/Forceflow/libmorton): Morton code en-/decoding with BMI2 acceleration.
