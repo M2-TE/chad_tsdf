@@ -49,9 +49,8 @@ namespace chad {
         // insert pointcloud as a raw array of repeating x,y,z coordinates
         void inline insert(const float* points_p, size_t points_count, const float* position_p) {
             const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
-            size_t vec_count = points_count / 3;
             // use points_p as the buffer for new vector (as vec_p), not requiring any copies
-            const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + vec_count);
+            const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
             // position_p should just be x y and z
             const auto position = *reinterpret_cast<const std::array<float, 3>*>(position_p);
             insert(points, position);
@@ -59,9 +58,8 @@ namespace chad {
         // insert pointcloud as a raw array of repeating x,y,z coordinates
         void inline insert(const float* points_p, size_t points_count, float position_x, float position_y, float position_z) {
             const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
-            size_t vec_count = points_count / 3;
             // use points_p as the buffer for new vector (as vec_p), not requiring any copies
-            const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + vec_count);
+            const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
             insert(points, { position_x, position_y, position_z });
         }
 
@@ -78,8 +76,7 @@ namespace chad {
                 // when using unpadded vec3, we can avoid copies
                 if (sizeof(glm::vec3) == 12) {
                     const float* points_p = &points[0].x;
-                    const float* position_p = &position.x;
-                    insert(points_p, points.size(), position_p);
+                    insert(points_p, points.size(), position.x, position.y, position.z);
                 }
                 else {
                     std::vector<std::array<float, 3>> points_vec;
@@ -102,10 +99,9 @@ namespace chad {
             // insert pointcloud alongside scanner position
             void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position){
                 // when using unpadded Vector3f, we can avoid copies
-                if (sizeof(Eigen::Vector3f) == 12) {
+                if (sizeof(Eigen::Vector3f) == 12 && false /*disable this temporarily*/) {
                     const float* points_p = points[0].data();
-                    const float* position_p = position.data();
-                    insert(points_p, points.size(), position_p);
+                    insert(points_p, points.size(), position.x(), position.y(), position.z());
                 }
                 else {
                     std::vector<std::array<float, 3>> points_vec;

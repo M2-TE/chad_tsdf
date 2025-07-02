@@ -1,10 +1,13 @@
 #pragma once
 #include <array>
+#include <chrono>
 #include <vector>
+#include <bitset>
 #include <functional>
 #if !defined(__BMI2__)
 #   error "Requires BMI2 instruction set"
 #endif
+#include <fmt/format.h>
 #include <glm/glm.hpp>
 #include <libmorton/morton.h>
 
@@ -42,20 +45,80 @@ namespace chad::detail {
         bool inline operator>(const MortonCode& other) const noexcept {
             return _value > other._value;
         }
+        auto friend operator&(MortonCode lhs, const MortonCode& rhs) noexcept -> MortonCode {
+            return lhs._value & rhs._value;
+        }
+        auto friend operator&(MortonCode lhs, const uint64_t& rhs) noexcept -> MortonCode {
+            return lhs._value & rhs;
+        }
+        
 
         uint64_t _value;
     };
-
     using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
-    auto calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector;
-    auto sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3>;
+    auto inline calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector {
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // calc reciprocal of voxel resolution for later
+        const float voxel_reciprocal = float(1.0 / double(sdf_res));
+
+        // generate morton codes from discretized points
+        MortonVector points_mc;
+        points_mc.reserve(points.size());
+        for (const auto& point_arr: points) {
+            glm::vec3 point { point_arr[0], point_arr[1], point_arr[2] };
+            // convert to voxel coordinate and discretize with floor()
+            glm::vec3 point_discretized = glm::floor(point * voxel_reciprocal);
+            // create morton code from discretized integer position
+            points_mc.emplace_back(point, glm::ivec3(point_discretized));
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("mc  calc {:.2f}", dur);
+        return points_mc;
+    }
+    auto inline sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3> {
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // sort points using morton codes
+        auto mc_sorter = [](const auto& a, const auto& b){
+            return a.second._value > b.second._value;
+        };
+        // std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
+        std::sort(points_mc.begin(), points_mc.end(), mc_sorter);
+        
+        // store isolated sorted points
+        std::vector<glm::vec3> points_sorted;
+        points_sorted.reserve(points_mc.size());
+        for (const auto& mc_point: points_mc) {
+            points_sorted.push_back(mc_point.first);
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("mc  sort {:.2f}", dur);
+        return points_sorted;
+    }
 }
 
-// overload the standard hashing operator for MortonCode
+// specialize the std hashing operator for MortonCode
 namespace std {
-    template<> struct hash<chad::detail::MortonCode> {
+    template<>
+    struct hash<chad::detail::MortonCode> {
         size_t inline operator()(const chad::detail::MortonCode& mc) const noexcept {
             return mc._value;
+        }
+    };
+}
+
+// specialize the fmt formatter for MortonCode
+namespace fmt {
+    template<>
+    struct formatter<chad::detail::MortonCode>: formatter<std::string> {
+        auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
+            std::string str = std::bitset<63>(mc._value).to_string();
+            return formatter<std::string>::format(str, ctx);
         }
     };
 }

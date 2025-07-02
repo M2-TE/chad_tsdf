@@ -20,7 +20,6 @@ namespace chad::detail {
             m_voxelsize = voxel_res;
             m_truncsize = trunc_dist;
             BoxT::m_voxelsize = voxel_res;
-            const float recip = 1.0 / m_voxelsize;
 
             // trackers for the traversed path and nodes
             std::array<uint8_t,  NodeLevels::MAX_DEPTH> path_child;
@@ -82,33 +81,30 @@ namespace chad::detail {
                         // DEBUG
                         // float perf_signed_distance = glm::length(leaf_pos) - 5.0f;
                         // signed_distance = perf_signed_distance;
+                        // signed_distance = -signed_distance;
                         // fmt::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
                         
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
                         m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
-                        
+
                         // 8 cells around the query point
-                        const std::array<glm::ivec3, 8> cell_offsets = {
-                            glm::vec3(+1, +1, +1),
-                            glm::vec3(-1, +1, +1),
-                            glm::vec3(-1, -1, +1),
-                            glm::vec3(+1, -1, +1),
-                            glm::vec3(+1, +1, -1),
-                            glm::vec3(-1, +1, -1),
-                            glm::vec3(-1, -1, -1),
-                            glm::vec3(+1, -1, -1),
+                        const std::array<glm::ivec3, 8> cell_offsets {
+                            glm::ivec3(+0, +0, +0),
+                            glm::ivec3(-1, +0, +0),
+                            glm::ivec3(-1, -1, +0),
+                            glm::ivec3(+0, -1, +0),
+                            //
+                            glm::ivec3(+0, +0, -1),
+                            glm::ivec3(-1, +0, -1),
+                            glm::ivec3(-1, -1, -1),
+                            glm::ivec3(+0, -1, -1),
                         };
                         for (size_t i = 0; i < 8; i++) {
-                            // create morton code of cell
-                            // convert position back to chunk index
-                            glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
-                            glm::vec3 cell_center = glm::vec3(cell_chunk) * m_voxelsize + m_voxelsize / 2.0f;
                             // emplace cell into map, check if it already existed
+                            glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
                             auto [box_it, emplaced] = m_cells.emplace(MortonCode(cell_chunk)._value, nullptr);
-                            if (emplaced) {
-                                box_it->second = new BoxT(BaseVecT(cell_center.x, cell_center.y, cell_center.z));
-                            }
+                            if (emplaced) box_it->second = new BoxT(BaseVecT(0, 0, 0) /*unused*/);
                             // place query point at the correct cell index
                             box_it->second->setVertex(i, querypoint_i);
                         }
@@ -131,10 +127,14 @@ namespace chad::detail {
                 delete cell->second;
                 m_cells.erase(cell);
             }
+
+            // TODO: connect cell "neighbours"
             std::cout << "ChadGrid created" << std::endl;
         }
         ~ChadGrid() {
-            lvr2::GridBase::~GridBase();
+            for (auto& [ _, cell ]: m_cells) {
+                delete cell;
+            }
         }
         
         auto getNumberOfCells() -> std::size_t { 
@@ -165,6 +165,7 @@ namespace chad::detail {
             (void)j;
             (void)k;
             (void)distance;
+            fmt::println("LVR2 addLatticePoint() unimplemented");
         }
         void saveGrid(std::string file) override {
             (void)file;
@@ -229,6 +230,7 @@ namespace chad::detail {
             (void)bb;
             (void)duplicates;
             (void)comparePrecision;
+            fmt::println("LVR2 getMesh(mesh, bb, duplicates, comparePrecision) unimplemented");
         }
         void getMesh(lvr2::BaseMesh<BaseVecT> &mesh) override {
             // Status message for mesh generation
@@ -245,105 +247,12 @@ namespace chad::detail {
             {
                 b = it->second;
                 b->getSurface(mesh, m_grid->getQueryPoints(), global_index);
-                if(!lvr2::timestamp.isQuiet())
-                    ++progress;
+                if(!lvr2::timestamp.isQuiet()) ++progress;
             }
 
-            if(!lvr2::timestamp.isQuiet())
-                cout << endl;
+            if(!lvr2::timestamp.isQuiet()) cout << endl;
 
             lvr2::BoxTraits<BoxT> traits;
-
-            if(traits.type == "SharpBox")  // Perform edge flipping for extended marching cubes
-            {
-                string SFComment = lvr2::timestamp.getElapsedTime() + "Flipping edges  ";
-                lvr2::ProgressBar SFProgress(this->m_grid->getNumberOfCells(), SFComment);
-                for(it = this->m_grid->firstCell(); it != this->m_grid->lastCell(); it++)
-                {
-
-                    lvr2::SharpBox<BaseVecT>* sb;
-                    sb = reinterpret_cast<lvr2::SharpBox<BaseVecT>* >(it->second);
-                    if(sb->m_containsSharpFeature)
-                    {
-                        lvr2::OptionalVertexHandle v1;
-                        lvr2::OptionalVertexHandle v2;
-                        lvr2::OptionalEdgeHandle e;
-
-                        if(sb->m_containsSharpCorner)
-                        {
-                            // 1
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][0]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][1]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 2
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][2]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][3]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 3
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][4]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][5]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                        }
-                        else
-                        {
-                            // 1
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][0]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][1]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-
-                            // 2
-                            v1 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][4]];
-                            v2 = sb->m_intersections[lvr2::ExtendedMCTable[sb->m_extendedMCIndex][5]];
-
-                            if(v1 && v2)
-                            {
-                                e = mesh.getEdgeBetween(v1.unwrap(), v2.unwrap());
-                                if(e)
-                                {
-                                    mesh.flipEdge(e.unwrap());
-                                }
-                            }
-                        }
-                    }
-                    ++SFProgress;
-                }
-                cout << endl;
-            }
 
             if(traits.type == "BilinearFastBox")
             {
@@ -367,6 +276,7 @@ namespace chad::detail {
         // begin 3D mesh reconstruction using LVR2
         typedef lvr2::BaseVector<float> VecT;
         typedef lvr2::BilinearFastBox<VecT> BoxT;
+        // typedef lvr2::SharpBox<VecT> BoxT;
         
         // create hash grid from entire tree
         // generate mesh from hash grid

@@ -12,13 +12,9 @@ void static do_sphere_thing() {
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
 
     // insert into CHAD TSDF
-    chad::TSDFMap map;
+    chad::TSDFMap map{ 0.05f, 0.1f };
     std::vector<glm::vec3> positions {
         { 0, 0, 0 },
-        // { 2, 2, 2 },
-        // { 4, 4, 4 },
-        // { 6, 6, 6 },
-        // { 8, 8, 8 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
@@ -34,13 +30,12 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
 
-        std::ofstream ofs("points.asc");
-        for (const auto& point: points) {
-            ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
-        }
+        // std::ofstream ofs("points.asc");
+        // for (const auto& point: points) {
+        //     ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
+        // }
     }
     map.save("mesh.ply");
-    // map.begin(1);
 }
 int main() {
     do_sphere_thing();

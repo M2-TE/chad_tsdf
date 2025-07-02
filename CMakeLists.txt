@@ -14,8 +14,6 @@ include("cmake/options_compiler.cmake")
 set(CPP_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/lvr2.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/morton.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/normals.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/virtual_array.cpp")
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
@@ -25,8 +23,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
-include("cmake/lvr2.cmake")
 include("cmake/eigen.cmake")
+include("cmake/lvr2.cmake")
 include("cmake/morton.cmake")
 
 # compile executable if top level project
