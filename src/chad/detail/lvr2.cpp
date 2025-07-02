@@ -90,16 +90,6 @@ namespace chad::detail {
 
                         // 8 cells around the query point
                         const std::array<glm::ivec3, 8> cell_offsets {
-                        //     glm::ivec3(+1, +1, +1),
-                        //     glm::ivec3(-1, +1, +1),
-                        //     glm::ivec3(-1, -1, +1),
-                        //     glm::ivec3(+1, -1, +1),
-                        //     //
-                        //     glm::ivec3(+1, +1, -1),
-                        //     glm::ivec3(-1, +1, -1),
-                        //     glm::ivec3(-1, -1, -1),
-                        //     glm::ivec3(+1, -1, -1),
-                        // };
                             glm::ivec3(+0, +0, +0),
                             glm::ivec3(-1, +0, +0),
                             glm::ivec3(-1, -1, +0),
@@ -111,11 +101,8 @@ namespace chad::detail {
                             glm::ivec3(+0, -1, -1),
                         };
                         for (size_t i = 0; i < 8; i++) {
-                            // create morton code of cell
-                            // convert position back to chunk index
-                            glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
-                            // glm::vec3 cell_center = glm::vec3(cell_chunk) * m_voxelsize + m_voxelsize / 2.0f;
                             // emplace cell into map, check if it already existed
+                            glm::ivec3 cell_chunk = leaf_chunk + cell_offsets[i];
                             auto [box_it, emplaced] = m_cells.emplace(MortonCode(cell_chunk)._value, nullptr);
                             if (emplaced) box_it->second = new BoxT(BaseVecT(0, 0, 0) /*unused*/);
                             // place query point at the correct cell index
@@ -140,10 +127,14 @@ namespace chad::detail {
                 delete cell->second;
                 m_cells.erase(cell);
             }
+
+            // TODO: connect cell "neighbours"
             std::cout << "ChadGrid created" << std::endl;
         }
         ~ChadGrid() {
-            lvr2::GridBase::~GridBase();
+            for (auto& [ _, cell ]: m_cells) {
+                delete cell;
+            }
         }
         
         auto getNumberOfCells() -> std::size_t { 

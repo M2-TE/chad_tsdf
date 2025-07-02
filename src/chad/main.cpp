@@ -30,10 +30,10 @@ void static do_sphere_thing() {
         }
         map.insert(points, positions[i]);
 
-        std::ofstream ofs("points.asc");
-        for (const auto& point: points) {
-            ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
-        }
+        // std::ofstream ofs("points.asc");
+        // for (const auto& point: points) {
+        //     ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
+        // }
     }
     map.save("mesh.ply");
 }

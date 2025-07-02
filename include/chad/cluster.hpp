@@ -5,9 +5,9 @@
 #include <algorithm>
 
 namespace chad {
-    // cluster of 8 separate 8-bit leaves, choose only one of the union partitions
+    // Cluster of 8 separate 8-bit leaves. Choose only one of the union partitions.
     struct LeafCluster {
-        // wrapper for signed distance cluster
+        // Wrapper for cluster of 8 TSDF values
         struct TSDFs {
             // set 8 bits to represent signed distance, normalized within truncation distance
             void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) noexcept {
@@ -52,7 +52,7 @@ namespace chad {
             }
             uint64_t _value;
         };
-        // wrapper for weight cluster
+        // Wrapper for cluster of 8 weights
         struct Weights {
             // set 8 bits to represent a single weight
             void inline set(uint8_t leaf_i, uint8_t weight) noexcept {
@@ -67,19 +67,19 @@ namespace chad {
             // }
             uint64_t _value;
         };
-        // wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)
+        // Wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)
         struct Ufloats {
             // TODO
         };
-        // wrapper for cluster of 8 signed floats (-1.0f to +1.0f)
+        // Wrapper for cluster of 8 signed floats (-1.0f to +1.0f)
         struct Sfloats {
             // TODO
         };
-        // wrapper for cluster of 8 uint8_t values (0xff is reserved)
+        // Wrapper for cluster of 8 uint8_t values (0xff is reserved)
         struct Uints {
             // TODO
         };
-        // wrapper for cluster of 8 int8_t values (0xff is reserved)
+        // Wrapper for cluster of 8 int8_t values (0xff is reserved)
         struct Sints {
             // TODO
         };
@@ -94,7 +94,7 @@ namespace chad {
         }
 
         union {
-            uint64_t _value; // raw cluster data interpreted as 64-bit uint
+            uint64_t _value; // Raw cluster data as 64-bit uint
             TSDFs    _tsdfs;
             Weights  _weigh;
             Ufloats  _ufloats;
