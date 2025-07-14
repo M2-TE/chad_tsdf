@@ -5,15 +5,13 @@
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
-    struct NodeHeader {
+    struct Node {
         uint8_t child_mask;
         uint8_t _; // padding
         uint16_t ref_count;
-    };
-    struct Node {
-        NodeHeader header;
         std::array<uint32_t, 8> children; // actual size may be smaller, accessing without checking child mask is UB
     };
+    static_assert(sizeof(Node) == 36); // ensure there is no automatic padding shenanigans going on
 
     struct NodeLevel {
         struct FncHash {
@@ -25,7 +23,7 @@ namespace chad::detail {
                 const void* raw_addr_p = &_node_data[addr];
                 const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
                 // count children
-                uint8_t child_count = std::popcount(node.header.child_mask);
+                uint8_t child_count = std::popcount(node.child_mask);
                 // hash entire node
                 uint64_t hash = 0;
                 for (uint8_t i = 0; i < child_count; i++) {
@@ -46,10 +44,10 @@ namespace chad::detail {
                 const Node& node_b = *reinterpret_cast<const Node*>(&_node_data[addr_b]);
 
                 // compare child masks
-                if (node_a.header.child_mask != node_b.header.child_mask) return false;
+                if (node_a.child_mask != node_b.child_mask) return false;
 
                 // count children (only need the count for a)
-                uint8_t child_count_a = std::popcount(node_a.header.child_mask);
+                uint8_t child_count_a = std::popcount(node_a.child_mask);
 
                 // compare entire nodes
                 int cmp = std::memcmp(
@@ -76,7 +74,6 @@ namespace chad::detail {
         VirtualArray<uint32_t> _raw_data; // raw unaligned node data
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
-
     struct LeafClusterLevel {
         struct FncHash {
             FncHash(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
@@ -147,29 +144,35 @@ namespace chad::detail {
             }
 
             // write placerholder node into raw data vector
-            uint32_t* node_p = nodes._raw_data.data() + nodes._occupied_n;
-            node_p[0] = 0;// first element is child mask
+            uint32_t placeholder_addr = nodes._occupied_n;
+            void* raw_addr_p = &nodes._raw_data[placeholder_addr];
+            Node& placeholder = *reinterpret_cast<Node*>(raw_addr_p);
+            placeholder.child_mask = 0; // first element is child mask
+            placeholder.ref_count = 1;
 
             // gather only valid children
             uint8_t children_n = 0;
             for (uint8_t i = 0; i < 8; i++) {
                 if (children[i] == 0) continue;
-                node_p[children_n + 1] = children[i];
-                node_p[0] |= 1 << i; // set child mask bit
+                placeholder.children[children_n] = children[i];
+                placeholder.child_mask |= 1 << i;
                 children_n++;
             }
             
             // emplace placeholder node if it's a new one
-            uint32_t new_addr = nodes._occupied_n;
-            auto [old_addr_it, new_addr_b] = nodes._addr_set.emplace(new_addr);
+            auto [old_addr_it, new_addr_b] = nodes._addr_set.emplace(placeholder_addr);
             if (new_addr_b) {
                 nodes._uniques_n++;
                 nodes._occupied_n += children_n + 1;
-                return new_addr;
+                return placeholder_addr;
             }
             else {
+                uint32_t old_addr = *old_addr_it;
+                void* raw_addr_p = &nodes._raw_data[old_addr];
+                Node& old_node = *reinterpret_cast<Node*>(raw_addr_p);
+                old_node.ref_count++;
                 nodes._dupes_n++;
-                return *old_addr_it;
+                return old_addr;
             }
         }
 
@@ -185,13 +188,15 @@ namespace chad::detail {
         }
         // get child address of given node; returns 0 if none is found
         auto inline get_child_addr(uint32_t parent_depth, uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
-            uint32_t child_mask = _node_levels[parent_depth]._raw_data[parent_addr];
+            // fetch node data
+            const void* raw_addr_p = &_node_levels[parent_depth]._raw_data[parent_addr];
+            const Node& parent = *reinterpret_cast<const Node*>(raw_addr_p);
             uint32_t child_bit = 1 << child_i;
 
             // check if the child exists
-            if (child_mask & child_bit) {
+            if (parent.child_mask & child_bit) {
                 // count the number of children that are stored before this one
-                uint8_t masked = uint8_t(child_mask & (child_bit - 1));
+                uint8_t masked = uint8_t(parent.child_mask & (child_bit - 1));
                 uint8_t child_count = std::popcount(masked);
                 // child count will correspond to the requested child's index + 1 (accounting for child mask index)
                 uint32_t raw_data_addr = parent_addr + uint32_t(child_count + 1);
