@@ -5,7 +5,6 @@
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
-    // TODO
     struct NodeHeader {
         uint8_t child_mask;
         uint8_t _; // padding
@@ -22,12 +21,15 @@ namespace chad::detail {
             }
 
             auto inline operator()(const uint32_t addr) const noexcept -> uint64_t {
+                // get node
+                const void* raw_addr_p = &_node_data[addr];
+                const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
                 // count children
-                uint8_t child_count = std::popcount(uint8_t(_node_data[addr]));
+                uint8_t child_count = std::popcount(node.header.child_mask);
                 // hash entire node
                 uint64_t hash = 0;
-                for (uint8_t i = 1; i <= child_count; i++) {
-                    hash = gtl::HashState::combine(hash, _node_data[addr + i]);
+                for (uint8_t i = 0; i < child_count; i++) {
+                    hash = gtl::HashState::combine(hash, node.children[i]);
                 }
                 return hash;
             }
@@ -39,15 +41,15 @@ namespace chad::detail {
             }
 
             bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const noexcept {
-                // compare child masks
-                uint8_t child_mask_a = uint8_t(_node_data[addr_a]);
-                uint8_t child_mask_b = uint8_t(_node_data[addr_b]);
-                if (child_mask_a != child_mask_b) return false;
+                // get node a
+                const Node& node_a = *reinterpret_cast<const Node*>(&_node_data[addr_a]);
+                const Node& node_b = *reinterpret_cast<const Node*>(&_node_data[addr_b]);
 
-                // count children
-                uint8_t child_count_a = std::popcount(child_mask_a);
-                uint8_t child_count_b = std::popcount(child_mask_b);
-                if (child_count_a != child_count_b) return false;
+                // compare child masks
+                if (node_a.header.child_mask != node_b.header.child_mask) return false;
+
+                // count children (only need the count for a)
+                uint8_t child_count_a = std::popcount(node_a.header.child_mask);
 
                 // compare entire nodes
                 int cmp = std::memcmp(
