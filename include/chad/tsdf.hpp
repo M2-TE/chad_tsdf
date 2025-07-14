@@ -13,9 +13,9 @@
 
 namespace chad {
     namespace detail {
+        class DAG;
         struct Submap;
         struct Octree;
-        struct NodeLevels;
     }
 
     class TSDFMap {
@@ -62,7 +62,6 @@ namespace chad {
             const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
             insert(points, { position_x, position_y, position_z });
         }
-
 
         // create interface for GLM vectors, if the header is present
         #if __has_include(<glm/vec3.hpp>)
@@ -156,6 +155,7 @@ namespace chad {
 
 
         // TODO:
+        // get submaps by bounding box
         // leaf iterator
         // raycast to retrieve leaves along it + physics hit
         // map merging
@@ -164,9 +164,9 @@ namespace chad {
         const float _sdf_trunc;
         
     private:
+        detail::DAG* _dag_p;
         detail::Octree* _active_octree_p;
         detail::Submap* _active_submap_p;
-        detail::NodeLevels* _node_levels_p;
         std::vector<detail::Submap*> _submaps;
     };
 }

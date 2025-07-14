@@ -2,20 +2,20 @@
 #include <vector>
 #include <cstdint>
 #include <glm/vec3.hpp>
+#include "chad/detail/dag.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/levels.hpp"
 
 namespace chad::detail {
     struct Submap {
-        void finalize(const Octree& octree, detail::NodeLevels& node_levels, float sdf_trunc) {
+        void finalize(const Octree& octree, detail::DAG& dag, float sdf_trunc) {
             using namespace detail;
             auto beg = std::chrono::high_resolution_clock::now();
 
             // trackers for the traversed path and nodes
-            std::array<uint8_t,  NodeLevels::MAX_DEPTH> path;
-            std::array<uint32_t, NodeLevels::MAX_DEPTH> nodes_oct;
-            std::array<std::array<uint32_t, 8>, NodeLevels::MAX_DEPTH> nodes_tsdf;
-            std::array<std::array<uint32_t, 8>, NodeLevels::MAX_DEPTH> nodes_weight;
+            std::array<uint8_t,  DAG::MAX_DEPTH> path;
+            std::array<uint32_t, DAG::MAX_DEPTH> nodes_oct; // for reading
+            std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_tsdf;   // for writing
+            std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_weight; // for writing
             path.fill(0);
             nodes_oct.fill(0);
             nodes_oct[0] = octree.get_root();
@@ -30,9 +30,8 @@ namespace chad::detail {
                 // when all children at this depth were iterated
                 if (child_i >= 8) {
                     // create/get nodes from current node level
-                    auto& node_level = node_levels._nodes[depth];
-                    uint32_t addr_tsdf   = node_level.add(nodes_tsdf  [depth]);
-                    uint32_t addr_weight = node_level.add(nodes_weight[depth]);
+                    uint32_t addr_tsdf   = dag.add_node(depth, nodes_tsdf  [depth]);
+                    uint32_t addr_weight = dag.add_node(depth, nodes_weight[depth]);
 
                     // reset node tracker for handled nodes
                     nodes_tsdf  [depth].fill(0);
@@ -45,22 +44,16 @@ namespace chad::detail {
                         break;
                     }
                     else {
-                        
                         // continue at parent depth
                         depth--;
                         // created nodes are standard tree nodes
                         uint32_t index_in_parent = path[depth] - 1;
                         nodes_tsdf  [depth][index_in_parent] = addr_tsdf;
                         nodes_weight[depth][index_in_parent] = addr_weight;
-
-
-                        // fmt::println("depth {}: index in parent: {} addr: {}", depth + 1, index_in_parent, addr_tsdf);
-                        // static int COUNTER = 0;
-                        // if (COUNTER++ >= 20) exit(0);
                     }
                 }
                 // node contains node children
-                else if (depth < NodeLevels::MAX_DEPTH - 1) {
+                else if (depth < DAG::MAX_DEPTH - 1) {
                     // retrieve child address
                     uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
                     if (child_addr == 0) continue;
@@ -96,8 +89,8 @@ namespace chad::detail {
                         }
                     }
                     // add the leaf clusters and remember their addresses
-                    nodes_tsdf  [depth][child_i] = node_levels._leaf_clusters.add(lc_tsdfs);
-                    nodes_weight[depth][child_i] = node_levels._leaf_clusters.add(lc_weigh);
+                    nodes_tsdf  [depth][child_i] = dag.add_lc(lc_tsdfs);
+                    nodes_weight[depth][child_i] = dag.add_lc(lc_weigh);
                 }
             }
             auto end = std::chrono::high_resolution_clock::now();

@@ -6,13 +6,14 @@
 #include <lvr2/reconstruction/QueryPoint.hpp>
 #include <lvr2/reconstruction/FastReconstruction.hpp>
 #include <lvr2/algorithm/NormalAlgorithms.hpp>
-#include "chad/detail/lvr2.hpp"
+#include "chad/detail/submap.hpp"
 #include "chad/detail/morton.hpp"
+#include "chad/detail/dag.hpp"
 
 namespace chad::detail {
     template<typename BaseVecT, typename BoxT>
     struct ChadGrid: public lvr2::GridBase {
-        ChadGrid(const detail::NodeLevels& node_levels, uint32_t root_addr, float voxel_res, float trunc_dist): lvr2::GridBase(false) {
+        ChadGrid(const DAG& dag, uint32_t root_addr, float voxel_res, float trunc_dist): lvr2::GridBase(false) {
             m_globalIndex = 0;
             m_coordinateScales.x = 1.0;
             m_coordinateScales.y = 1.0;
@@ -22,8 +23,8 @@ namespace chad::detail {
             BoxT::m_voxelsize = voxel_res;
 
             // trackers for the traversed path and nodes
-            std::array<uint8_t,  NodeLevels::MAX_DEPTH> path_child;
-            std::array<uint32_t, NodeLevels::MAX_DEPTH> path_addr;
+            std::array<uint8_t,  DAG::MAX_DEPTH> path_child;
+            std::array<uint32_t, DAG::MAX_DEPTH> path_addr;
             path_child.fill(0);
             path_addr.fill(0);
             path_addr[0] = root_addr;
@@ -40,10 +41,10 @@ namespace chad::detail {
                 }
 
                 // node contains node children
-                else if (depth < NodeLevels::MAX_DEPTH - 1) {
+                else if (depth < DAG::MAX_DEPTH - 1) {
                     // try to find the child in current node
                     uint32_t parent_addr = path_addr[depth];
-                    uint32_t child_addr = node_levels.get_child_addr(depth, parent_addr, child_i);
+                    uint32_t child_addr = dag.get_child_addr(depth, parent_addr, child_i);
                     // check if child address is valid
                     if (child_addr > 0) {
                         depth++;
@@ -54,8 +55,11 @@ namespace chad::detail {
                 // node contains leaf cluster children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    auto [cluster, cluster_exists] = node_levels.try_get_lc(path_addr[depth], child_i);
-                    if (!cluster_exists) continue;
+                    uint32_t child_addr = dag.get_child_addr(DAG::MAX_DEPTH - 1, path_addr[depth], child_i);
+                    if (child_addr == 0) continue;
+
+                    // fetch actual leaf cluster
+                    const auto& cluster = dag.get_lc(child_addr);
 
                     // reconstruct morton code from path
                     uint64_t code = 0;
@@ -201,21 +205,12 @@ namespace chad::detail {
 
     private:
         vector<lvr2::QueryPoint<BaseVecT>> m_queryPoints;
-        unordered_map<size_t, BoxT*> m_cells;
         unordered_map<size_t, size_t> m_qpIndices;
-        // DEPRECATED, check if bounding box is even needed
-        lvr2::BoundingBox<BaseVecT> qp_bb;
-        lvr2::BoundingBox<BaseVecT> m_boundingBox;
+        unordered_map<size_t, BoxT*> m_cells;
+        BaseVecT m_coordinateScales;
+        unsigned int m_globalIndex;
         float m_voxelsize;
         float m_truncsize;
-        std::size_t m_maxIndex;
-        std::size_t m_maxIndexSquare;
-        std::size_t m_maxIndexX;
-        std::size_t m_maxIndexY;
-        std::size_t m_maxIndexZ;
-        std::string m_boxType;
-        unsigned int m_globalIndex;
-        BaseVecT m_coordinateScales;
     };
 
     template<typename BaseVecT, typename BoxT>
@@ -272,7 +267,7 @@ namespace chad::detail {
         shared_ptr<ChadGrid<BaseVecT, BoxT>> m_grid;
     };
 
-    void reconstruct(const detail::Submap& submap, const NodeLevels& node_levels, float voxel_res, float trunc_dist, std::string_view filename) {
+    void reconstruct(const DAG& dag, const detail::Submap& submap, float voxel_res, float trunc_dist, std::string_view filename) {
         // begin 3D mesh reconstruction using LVR2
         typedef lvr2::BaseVector<float> VecT;
         typedef lvr2::BilinearFastBox<VecT> BoxT;
@@ -285,7 +280,7 @@ namespace chad::detail {
         if (decomp_type == "MC") {
         }
         else if (decomp_type == "PMC") {
-            auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(node_levels, submap.root_addr_tsdf, voxel_res, trunc_dist);
+            auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(dag, submap.root_addr_tsdf, voxel_res, trunc_dist);
             grid_p->saveGrid("hashgrid.grid");
             
             ChadReconstruction<VecT, BoxT> reconstruction { grid_p };

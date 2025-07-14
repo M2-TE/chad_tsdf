@@ -1,8 +1,8 @@
 #include <chrono>
 #include <fmt/base.h>
 #include "chad/tsdf.hpp"
+#include "chad/detail/dag.hpp"
 #include "chad/detail/lvr2.hpp"
-#include "chad/detail/levels.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
 #include "chad/detail/submap.hpp"
@@ -25,12 +25,12 @@ namespace chad::detail {
 
 namespace chad {
     TSDFMap::TSDFMap(float sdf_res, float sdf_trunc): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
+        _dag_p = new detail::DAG();
         _active_octree_p = new detail::Octree();
         _active_submap_p = new detail::Submap();
-        _node_levels_p = new detail::NodeLevels();
     }
     TSDFMap::~TSDFMap() {
-        delete _node_levels_p;
+        delete _dag_p;
         delete _active_octree_p;
         for (detail::Submap* submap_p: _submaps) {
             delete submap_p;
@@ -50,7 +50,7 @@ namespace chad {
             // finalize active submap once traversed far enough
             glm::vec3 start = positions.front();
             if (glm::distance(position_vec, start) > 5.0f) {
-                _active_submap_p->finalize(*_active_octree_p, *_node_levels_p, _sdf_trunc);
+                _active_submap_p->finalize(*_active_octree_p, *_dag_p, _sdf_trunc);
                 _submaps.push_back(_active_submap_p);
                 _active_submap_p = new Submap();
                 _active_submap_p->positions.push_back(position_vec);
@@ -76,13 +76,13 @@ namespace chad {
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
         if (!_active_submap_p->positions.empty()) {
-            _active_submap_p->finalize(*_active_octree_p, *_node_levels_p, _sdf_trunc);
+            _active_submap_p->finalize(*_active_octree_p, *_dag_p, _sdf_trunc);
             _submaps.push_back(_active_submap_p);
         }
 
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing the first submap");
-        detail::reconstruct(*_submaps.front(), *_node_levels_p, _sdf_res, _sdf_trunc, filename);
+        detail::reconstruct(*_dag_p, *_submaps.front(), _sdf_res, _sdf_trunc, filename);
     }
 
     // TSDFMap::iterator::iterator(const detail::NodeLevels& node_levels, uint32_t root_addr): _mc(0), _leaf_cluster_p(nullptr), _node_levels(node_levels) {
