@@ -1,11 +1,11 @@
 #include <chrono>
 #include <fmt/base.h>
 #include "chad/tsdf.hpp"
+#include "chad/submap.hpp"
 #include "chad/detail/dag.hpp"
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/submap.hpp"
 #include "chad/detail/normals.hpp"
 
 namespace chad::detail {
@@ -27,14 +27,10 @@ namespace chad {
     TSDFMap::TSDFMap(float sdf_res, float sdf_trunc): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
         _dag_p = new detail::DAG();
         _active_octree_p = new detail::Octree();
-        _active_submap_p = new detail::Submap();
     }
     TSDFMap::~TSDFMap() {
         delete _dag_p;
         delete _active_octree_p;
-        for (detail::Submap* submap_p: _submaps) {
-            delete submap_p;
-        }
     }
     void TSDFMap::insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
         using namespace detail;
@@ -44,20 +40,16 @@ namespace chad {
         const glm::vec3 position_vec { position[0], position[1], position[2] };
 
         // either update submap or create a new one
-        auto& positions = _active_submap_p->positions;
-        if (positions.empty()) positions.push_back(position_vec);
+        auto& positions = _active_submap.positions;
+        if (positions.empty()) positions.push_back(position);
         else {
             // finalize active submap once traversed far enough
-            glm::vec3 start = positions.front();
-            if (glm::distance(position_vec, start) > 5.0f) {
-                _active_submap_p->finalize(*_active_octree_p, *_dag_p, _sdf_trunc);
-                _submaps.push_back(_active_submap_p);
-                _active_submap_p = new Submap();
-                _active_submap_p->positions.push_back(position_vec);
-                _active_octree_p->clear();
+            glm::vec3 first_pos { positions[0][0], positions[0][1], positions[0][2] };
+            if (glm::distance(first_pos, position_vec) > 5.0f) {
+                finalize();
             }
-            // else just update active submap
-            else positions.push_back(position_vec);
+            // update active submap either way
+            positions.push_back(position);
         }
 
         // sort points by their morton code, discretized to the voxel resolution
@@ -71,90 +63,114 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("total    {:.2f}", dur);
+        fmt::println("total    {:.2f}\n", dur);
+    }
+    void TSDFMap::finalize() {
+        using namespace detail;
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // trackers for the traversed path and nodes
+        Octree& octree = *_active_octree_p;
+        std::array<uint8_t,  DAG::MAX_DEPTH> path;
+        std::array<uint32_t, DAG::MAX_DEPTH> nodes_oct; // for reading
+        std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_tsdf;   // for writing
+        std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_weight; // for writing
+        path.fill(0);
+        nodes_oct.fill(0);
+        nodes_oct[0] = octree.get_root();
+        nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
+        nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
+        const float sdf_trunc_recip = 1.0f / _sdf_trunc;
+
+        // traverse octree to build DAG
+        uint32_t depth = 0;
+        while (true) {
+            uint8_t child_i = path[depth]++;
+
+            // when all children at this depth were iterated
+            if (child_i >= 8) {
+                // create/get nodes from current node level
+                uint32_t addr_tsdf   = _dag_p->add_node(depth, nodes_tsdf  [depth]);
+                uint32_t addr_weight = _dag_p->add_node(depth, nodes_weight[depth]);
+
+                // reset node tracker for handled nodes
+                nodes_tsdf  [depth].fill(0);
+                nodes_weight[depth].fill(0);
+
+                // check if it's the root node
+                if (depth == 0) {
+                    _active_submap.root_addr_tsdf = addr_tsdf;
+                    _active_submap.root_addr_weight = addr_weight;
+                    break;
+                }
+                else {
+                    // continue at parent depth
+                    depth--;
+                    // created nodes are standard tree nodes
+                    uint32_t index_in_parent = path[depth] - 1;
+                    nodes_tsdf  [depth][index_in_parent] = addr_tsdf;
+                    nodes_weight[depth][index_in_parent] = addr_weight;
+                }
+            }
+            // node contains node children
+            else if (depth < DAG::MAX_DEPTH - 1) {
+                // retrieve child address
+                uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
+                if (child_addr == 0) continue;
+
+                // walk deeper
+                depth++;
+                path[depth] = 0;
+                nodes_oct[depth] = child_addr;
+            }
+            // node contains leaf children
+            else {
+                // retrieve address of current child node
+                uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
+                if (child_addr == 0) continue;
+
+                // retrieve node
+                const Octree::Node& node = octree.get_node(child_addr);
+                
+                // create leaf cluster from all 8 leaves
+                LeafCluster lc_tsdfs, lc_weigh;
+                for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
+                    uint32_t leaf_addr = node[leaf_i];
+                    if (leaf_addr == 0) {
+                        lc_tsdfs._tsdfs.set_empty(leaf_i);
+                        lc_weigh._weigh.set_empty(leaf_i);
+                    }
+                    else {
+                        const auto& leaf = octree.get_leaf(leaf_addr);
+                        // weight can be above 255, so we cap it at the uint8_t limit
+                        uint8_t weight = std::max<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
+                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
+                        lc_weigh._weigh.set(leaf_i, weight);
+                    }
+                }
+                // add the leaf clusters and remember their addresses
+                nodes_tsdf  [depth][child_i] = _dag_p->add_lc(lc_tsdfs);
+                nodes_weight[depth][child_i] = _dag_p->add_lc(lc_weigh);
+            }
+        }
+
+        // begin new submap
+        _submaps.push_back(_active_submap);
+        _active_submap.clear();
+        _active_octree_p->clear();
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("sub fin  {:.2f}\n", dur);
     }
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
-        if (!_active_submap_p->positions.empty()) {
-            _active_submap_p->finalize(*_active_octree_p, *_dag_p, _sdf_trunc);
-            _submaps.push_back(_active_submap_p);
+        if (!_active_submap.positions.empty()) {
+            finalize();
         }
 
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing the first submap");
-        detail::reconstruct(*_dag_p, *_submaps.front(), _sdf_res, _sdf_trunc, filename);
+        detail::reconstruct(*_dag_p, _submaps.front(), _sdf_res, _sdf_trunc, filename);
     }
-
-    // TSDFMap::iterator::iterator(const detail::NodeLevels& node_levels, uint32_t root_addr): _mc(0), _leaf_cluster_p(nullptr), _node_levels(node_levels) {
-    //     _node_paths.fill(0);
-    //     _node_addrs.fill(0);
-    //     _node_addrs[0] = root_addr;
-    // }
-    // void inline TSDFMap::iterator::operator++() {
-    //     // TODO
-    // }
-    // void inline TSDFMap::iterator::operator--() {
-    //     // TODO
-    // }
-    // void inline TSDFMap::iterator::operator+(uint32_t increment) {
-    //     (void)increment;
-    //     // TODO
-    // }
-    // void inline TSDFMap::iterator::operator-(uint32_t decrement) {
-    //     (void)decrement;
-    //     // TODO
-    // }
-    // auto TSDFMap::begin(uint32_t root_addr) const -> iterator {
-    //     iterator it = iterator(*_node_levels_p, root_addr);
-    //     // validate root address
-    //     if (root_addr >= _node_levels_p->_nodes[0]._raw_data.size()) {
-    //         throw std::runtime_error("chad::TSDFMap::begin() given faulty root address");
-    //         return it;
-    //     }
-    //     // walk to the first leaf node
-    //     uint32_t depth = 0;
-    //     while (true) {
-    //         uint8_t child_i = it._node_paths[depth]++;
-    //         // standard node
-    //         if (depth < detail::NodeLevels::MAX_DEPTH - 1) { 
-    //             // try to find the child in current node
-    //             uint32_t node_addr = it._node_addrs[depth];
-    //             uint32_t child_addr = it._node_levels.get_child_addr(depth, node_addr, child_i);
-    //             // check if child address is valid
-    //             if (child_addr > 0) {
-    //                 // assign child addr at next depth
-    //                 it._node_addrs[++depth] = child_addr;
-    //             }
-    //         }
-    //         // leaf cluster node
-    //         else {
-    //             // try to get the leaf cluster, skip if it doesn't exist
-    //             auto [cluster, cluster_exists] = it._node_levels.try_get_lc(it._node_addrs[depth], child_i);
-    //             if (!cluster_exists) continue;
-    //             // assign leaf cluster to iterator
-    //             it._leaf_cluster_p = &cluster;
-    //             break;
-    //         }
-    //     }
-    //     // reconstruct morton code from path
-    //     uint64_t code = 0;
-    //     for (uint64_t k = 0; k < detail::NodeLevels::MAX_DEPTH; k++) {
-    //         uint64_t part = it._node_paths[k] - 1;
-    //         code |= part << uint64_t(60 - k*3);
-    //     }
-    //     it._mc = detail::MortonCode(code);
-    //     return it;
-    // }
-    // auto TSDFMap::end(uint32_t root_addr) const -> iterator {
-    //     iterator it = iterator(*_node_levels_p, root_addr);
-    //     // walk to the last leaf node
-    //     // TODO
-    //     return it;
-    // }
-    // auto TSDFMap::cbegin(uint32_t root_addr) const -> const_iterator {
-    //     return begin(root_addr);
-    // }
-    // auto TSDFMap::cend(uint32_t root_addr) const -> const_iterator {
-    //     return begin(root_addr);
-    // }
 }

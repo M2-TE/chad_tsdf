@@ -2,6 +2,7 @@
 #include <array>
 #include <vector>
 #include <string>
+#include "chad/submap.hpp"
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -14,7 +15,6 @@
 namespace chad {
     namespace detail {
         class DAG;
-        struct Submap;
         struct Octree;
     }
 
@@ -113,46 +113,11 @@ namespace chad {
             }
         #endif
 
+        // finalize current active submap
+        void finalize();
+
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
-
-        // TODO: what should iterators actually provide to the user?
-        //      -> real floating point position per leaf (with submap rotation and position as offset)
-        //      -> access to the data written there (signed distance, weight)
-        //     !-> users should not be exposed to morton codes or anything of the sort
-
-        // class iterator {
-        // public:
-        //     bool inline operator==(const iterator& other) const noexcept {
-        //         return _mc_raw == other._mc_raw;
-        //     }
-        //     bool inline operator<(const iterator& other) const noexcept {
-        //         return _mc_raw < other._mc_raw;
-        //     }
-        //     bool inline operator>(const iterator& other) const noexcept {
-        //         return _mc_raw > other._mc_raw;
-        //     }
-        //     void operator++();
-        //     void operator--();
-        //     void operator+(uint32_t add);
-        //     void operator-(uint32_t sub);
-            
-        // private:
-        //     friend class TSDFMap;
-        //     iterator(const detail::NodeLevels& node_levels, uint32_t root_addr);
-
-        //     uint64_t _mc_raw;
-        //     const LeafCluster* _leaf_cluster_p;
-        //     const detail::NodeLevels& _node_levels;
-        //     std::array<uint8_t,  20> _node_paths;
-        //     std::array<uint32_t, 20> _node_addrs;
-        // };
-        // auto begin(uint32_t root_addr) const -> iterator;
-        // auto end(uint32_t root_addr) const -> iterator;
-        // using const_iterator = iterator;
-        // auto cbegin(uint32_t root_addr) const -> const_iterator;
-        // auto cend(uint32_t root_addr) const -> const_iterator;
-
 
         // TODO:
         // get submaps by bounding box
@@ -164,9 +129,11 @@ namespace chad {
         const float _sdf_trunc;
         
     private:
+        Submap _active_submap;
+        std::vector<Submap> _submaps;
+
+        // forward declared classes as raw pointers
         detail::DAG* _dag_p;
         detail::Octree* _active_octree_p;
-        detail::Submap* _active_submap_p;
-        std::vector<detail::Submap*> _submaps;
     };
 }
