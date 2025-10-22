@@ -26,34 +26,13 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f);
-        // initialize a TSDF map with the given voxel size and truncation distance, then insert points into it
-        TSDFMap(float sdf_res, float sdf_trunc, const float* points_p, size_t points_count, const float* position_p): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
-            insert(points_p, points_count, position_p);
-        }
-        // initialize a TSDF map with the given voxel size and truncation distance, then insert points into it
-        TSDFMap(float sdf_res, float sdf_trunc, const float* points_p, size_t points_count, float x, float y, float z): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
-            insert(points_p, points_count, x, y, z);
-        }
-        // Initialize a TSDF map with the given voxel size and truncation distance, then insert points into it.
-        // Provides template specializations for std::array<float, 3>, glm::vec3 and Eigen::Vector3f.
-        template<typename VEC3>
-        inline TSDFMap(float sdf_res, float sdf_trunc, const std::vector<VEC3>& points, const VEC3& position);
-        template<>
-        inline TSDFMap(float sdf_res, float sdf_trunc, const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
-            insert_internal(points, position);
-        }
-        // custom destructor to free allocations
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_fin_delta = 0.5f);
+        // destructor to free allocations
         ~TSDFMap();
 
-        // Insert pointcloud alongside scanner position.
-        // Provides template specializations for std::array<float, 3>, glm::vec3 and Eigen::Vector3f.
+        // Insert pointcloud alongside scanner position. VEC3 can be std::array<float, 3>, glm::vec3 or Eigen::Vector3f.
         template<typename VEC3>
         void inline insert(const std::vector<VEC3>& points, const VEC3& position);
-        template<>
-        void inline insert<std::array<float, 3>>(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
-            insert_internal(points, position);
-        }
         // insert pointcloud as a raw array of repeating x,y,z coordinates
         void inline insert(const float* points_p, size_t points_count, const float* position_p) {
             const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
@@ -73,10 +52,8 @@ namespace chad {
 
         // finalize current active submap
         auto finalize() -> Submap&;
-        
         // DEBUG ONLY: try matching two submaps to detect loop closure
         void DEBUG_match_submaps(const Submap& submap_a, const Submap& submap_b);
-
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
 
@@ -86,6 +63,7 @@ namespace chad {
     public:
         const float _sdf_res;
         const float _sdf_trunc;
+        const float _submap_fin_delta;
         
     private:
         Submap _active_submap;
@@ -95,6 +73,12 @@ namespace chad {
         detail::DAG* _dag_p;
         detail::Octree* _active_octree_p;
     };
+
+    // template specializations for std::array<float, 3>
+    template<>
+    void inline TSDFMap::insert<std::array<float, 3>>(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
+        insert_internal(points, position);
+    }
 
     // template specializations for glm::vec3
     #if __has_include(<glm/vec3.hpp>)
@@ -113,10 +97,6 @@ namespace chad {
             }
             insert_internal(points_vec, { position.x, position.y, position.z });
         }
-    }
-    template<>
-    inline TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, const std::vector<glm::vec3>& points, const glm::vec3& position): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
-        insert(points, position);
     }
     #endif
 
@@ -137,10 +117,6 @@ namespace chad {
             }
             insert_internal(points_vec, { position.x(), position.y(), position.z() });
         }
-    }
-    template<>
-    inline TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
-        insert(points, position);
     }
     #endif
 }

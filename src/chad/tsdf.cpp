@@ -24,7 +24,7 @@ namespace chad::detail {
 }
 
 namespace chad {
-    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc) {
+    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_fin_delta): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc), _submap_fin_delta(submap_fin_delta) {
         _dag_p = new detail::DAG();
         _active_octree_p = new detail::Octree();
     }
@@ -45,7 +45,7 @@ namespace chad {
         else {
             // finalize active submap once traversed far enough
             glm::vec3 first_pos { positions[0][0], positions[0][1], positions[0][2] };
-            if (glm::distance(first_pos, position_vec) > 5.0f) {
+            if (glm::distance(first_pos, position_vec) > _submap_fin_delta) {
                 finalize();
             }
             // update active submap either way
