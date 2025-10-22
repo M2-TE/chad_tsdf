@@ -1,15 +1,7 @@
 #pragma once
-#include <array>
-#include <chrono>
-#include <vector>
-#include <bitset>
-#include <functional>
 #if !defined(__BMI2__)
 #   error "Requires BMI2 instruction set"
 #endif
-#include <fmt/format.h>
-#include <glm/glm.hpp>
-#include <libmorton/morton.h>
 
 namespace chad::detail {
     struct MortonCode {

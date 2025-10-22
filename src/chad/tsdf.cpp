@@ -1,5 +1,3 @@
-#include <chrono>
-#include <fmt/base.h>
 #include "chad/tsdf.hpp"
 #include "chad/submap.hpp"
 #include "chad/detail/dag.hpp"

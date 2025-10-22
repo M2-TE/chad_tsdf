@@ -1,8 +1,4 @@
 #pragma once
-#include <chrono>
-#include <cstdint>
-#include <glm/glm.hpp>
-#include <gtl/phmap.hpp>
 #include "chad/detail/morton.hpp"
 
 namespace chad::detail {

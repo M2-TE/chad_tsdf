@@ -1,7 +1,3 @@
-#include <random>
-// #include <fstream>
-#include <fmt/base.h>
-#include <glm/glm.hpp>
 #include "chad/tsdf.hpp"
 
 [[maybe_unused]] void static do_sphere_thing() {

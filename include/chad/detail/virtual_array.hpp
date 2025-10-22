@@ -1,7 +1,4 @@
 #pragma once
-#include <cstdio>
-#include <cstring>
-#include <algorithm>
 
 namespace chad::detail {
     auto allocate_virtual(size_t virtual_capacity) -> void*;

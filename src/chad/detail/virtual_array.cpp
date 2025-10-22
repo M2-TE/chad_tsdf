@@ -1,6 +1,3 @@
-#include <string>
-#include <cstring>
-#include <stdexcept>
 #if defined (__unix__)
 #   include <sys/mman.h>
 #   include <errno.h>

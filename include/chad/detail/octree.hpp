@@ -1,10 +1,4 @@
 #pragma once
-#include <array>
-#include <cstdint>
-#include <fmt/base.h>
-#include <gtl/phmap.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/type_aligned.hpp>
 #include "chad/detail/morton.hpp"
 #include "chad/detail/virtual_array.hpp"
 

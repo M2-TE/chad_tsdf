@@ -1,4 +1,3 @@
-#include <fmt/base.h>
 #include <lvr2/geometry/PMPMesh.hpp>
 #include <lvr2/geometry/BoundingBox.hpp>
 #include <lvr2/reconstruction/HashGrid.hpp>

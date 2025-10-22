@@ -22,11 +22,4 @@ elseif (UNIX)
         message(STATUS "Using mold linker")
         set(CMAKE_LINKER_TYPE MOLD)
     endif()
-
-    # enable ccache if present
-    find_program(CCACHE_FOUND ccache)
-    if (CHAD_PREFER_CCACHE AND CCACHE_FOUND)
-        message(STATUS "Using ccache")
-        set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
-    endif()
 endif()
