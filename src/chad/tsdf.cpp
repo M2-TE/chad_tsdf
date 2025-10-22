@@ -32,8 +32,8 @@ namespace chad {
         delete _dag_p;
         delete _active_octree_p;
     }
-    void TSDFMap::insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
-        using namespace detail;
+    void TSDFMap::insert_internal(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
+        using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
         // turn float array into usable vector
@@ -65,13 +65,13 @@ namespace chad {
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("total    {:.2f}\n", dur);
     }
-    void TSDFMap::finalize() {
-        using namespace detail;
+    auto TSDFMap::finalize() -> Submap& {
+        using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
         // trackers for the traversed path and nodes
         Octree& octree = *_active_octree_p;
-        std::array<uint8_t,  DAG::MAX_DEPTH> path;
+        std::array<uint8_t, DAG::MAX_DEPTH> path;
         std::array<uint32_t, DAG::MAX_DEPTH> nodes_oct; // for reading
         std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_tsdf;   // for writing
         std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_weight; // for writing
@@ -99,7 +99,7 @@ namespace chad {
 
                 // check if it's the root node
                 if (depth == 0) {
-                    _active_submap.root_addr_tsdf = addr_tsdf;
+                    _active_submap.root_addr_tsdf   = addr_tsdf;
                     _active_submap.root_addr_weight = addr_weight;
                     break;
                 }
@@ -162,6 +162,19 @@ namespace chad {
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("sub fin  {:.2f}\n", dur);
+
+        return _submaps.back();
+    }
+    void TSDFMap::DEBUG_match_submaps(const Submap& submap_a, const Submap& submap_b) {
+        using namespace chad::detail;
+
+        // trackers for the traversed path and nodes
+        std::array<uint8_t, DAG::MAX_DEPTH> path;
+        std::array<uint32_t, DAG::MAX_DEPTH> nodes_a; // for reading
+        std::array<uint32_t, DAG::MAX_DEPTH> nodes_b; // for reading
+        path.fill(0);
+        nodes_a.fill(0);
+        nodes_b.fill(0);
     }
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
