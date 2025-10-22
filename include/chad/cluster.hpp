@@ -31,7 +31,7 @@ namespace chad {
                 _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
             }
             // retrieve signed distance from single leaf if it is not empty
-            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const -> std::pair<float, bool> {
+            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const noexcept -> std::pair<float, bool> {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
 
@@ -59,12 +59,25 @@ namespace chad {
                 uint8_t truncated_weight = std::min<uint8_t>(weight, std::numeric_limits<uint8_t>::max());
                 _value |= uint64_t(truncated_weight) << uint64_t(leaf_i * 8);
             }
-            void inline set_empty(uint8_t leaf_i) noexcept {
-                // bits 0xff for signed distance signify an empty leaf
-                _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
+            // set 8 bits to represent an empty leaf (does nothing, empty bits are 0x0)
+            void inline set_empty(uint8_t) noexcept {
             }
-            // auto try_get(uint8_t leaf_i) const -> std::pair<float, bool> {
-            // }
+            // retrieve signed distance from single leaf if it is not empty
+            auto try_get(uint8_t leaf_i) const noexcept -> std::pair<uint8_t, bool> {
+                // get the 8 bits corresponding to the requested leaf
+                uint64_t leaf_bits = _value >> uint64_t(leaf_i * 8);
+                leaf_bits &= 0xff; // mask out other bits
+
+                // check if the leaf is empty
+                if (leaf_bits == 0) return { 0, false };
+                else return { leaf_bits, true };
+            }
+            auto get(uint8_t leaf_i) const noexcept -> uint8_t {
+                // get the 8 bits corresponding to the requested leaf
+                uint64_t leaf_bits = _value >> uint64_t(leaf_i * 8);
+                leaf_bits &= 0xff; // mask out other bits
+                return uint8_t(leaf_bits);
+            }
             uint64_t _value;
         };
         // Wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)

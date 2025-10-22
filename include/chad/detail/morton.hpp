@@ -27,6 +27,9 @@ namespace chad::detail {
             z -= 1 << 20;
             return { int32_t(x), int32_t(y), int32_t(z) };
         }
+        void inline print() {
+            fmt::println("{}", std::bitset<63>(_value).to_string());
+        }
 
         bool inline operator==(const MortonCode& other) const noexcept {
             return _value == other._value;

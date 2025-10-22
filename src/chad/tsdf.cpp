@@ -10,14 +10,17 @@ namespace chad::detail {
     void inline print_vec(glm::vec3 vec) {
         fmt::println("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
     }
-    void inline print_vec(glm::aligned_vec3 vec) {
+    void inline print_vec(const glm::aligned_vec3& vec) {
         fmt::println("{:.4f} {:.4f} {:.4f}", vec.x, vec.y, vec.z);
     }
-    void inline print_vec(glm::ivec3 vec) {
+    void inline print_vec(const glm::ivec3& vec) {
         fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
     }
-    void inline print_vec(glm::aligned_ivec3 vec) {
+    void inline print_vec(const glm::aligned_ivec3& vec) {
         fmt::println("{:5} {:5} {:5}", vec.x, vec.y, vec.z);
+    }
+    void inline print_vec(const std::array<float, 3>& vec) {
+        fmt::println("{:.2f} {:.2f} {:.2f}", vec[0], vec[1], vec[2]);
     }
 }
 
@@ -63,7 +66,7 @@ namespace chad {
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("total    {:.2f}\n", dur);
     }
-    auto TSDFMap::finalize() -> Submap& {
+    auto TSDFMap::finalize() -> Submap {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
@@ -141,7 +144,7 @@ namespace chad {
                     else {
                         const auto& leaf = octree.get_leaf(leaf_addr);
                         // weight can be above 255, so we cap it at the uint8_t limit
-                        uint8_t weight = std::max<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
+                        uint8_t weight = std::min<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
                         lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
                         lc_weigh._weigh.set(leaf_i, weight);
                     }
@@ -161,7 +164,7 @@ namespace chad {
         _active_submap.position[0] = float(position.x);
         _active_submap.position[1] = float(position.y);
         _active_submap.position[2] = float(position.z);
-
+        
         // begin new submap
         _submaps.push_back(_active_submap);
         _active_submap.clear();
@@ -173,21 +176,103 @@ namespace chad {
 
         return _submaps.back();
     }
-    void TSDFMap::DEBUG_merge_submaps(const Submap& /*submap_a*/, const Submap& /*submap_b*/) {
-        using namespace chad::detail;
 
-        // octree to merge data into (TODO: should cache this to keep allocated memory)
+    // TODO: move to detail namespace
+    auto inline do_thingy(const detail::DAG& dag, const Submap& submap, float sdf_trunc) -> chad::detail::Octree /*TODO: simplify return*/ {
+        using namespace chad::detail; // TODO: simplify
         Octree octree;
 
-        // trackers for the traversed path and nodes
-        std::array<uint8_t, DAG::MAX_DEPTH> path;
-        std::array<uint32_t, DAG::MAX_DEPTH> nodes_a; // for reading
-        std::array<uint32_t, DAG::MAX_DEPTH> nodes_b; // for reading
-        path.fill(0);
-        nodes_a.fill(0);
-        nodes_b.fill(0);
+        // read-only trackers for submap
+        MortonCode path_mc{ 0 };
+        std::array<uint8_t,  DAG::MAX_DEPTH> path_child;// child indices along path
+        std::array<uint32_t, DAG::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+        std::array<uint32_t, DAG::MAX_DEPTH> addr_wght; // weight addresses along path
+        path_child.fill(0);
+        addr_tsdf.fill(0);
+        addr_wght.fill(0);
+        addr_tsdf[0] = submap.root_addr_tsdf;
+        addr_wght[0] = submap.root_addr_weight;
 
-        
+        // iterate both trees to build separate octrees
+        uint32_t depth = 0;
+        while (true) {
+            uint8_t child_i = path_child[depth]++;
+
+            // when all children at this depth were iterated
+            if (child_i >= 8) {
+                if (depth > 0) depth--;
+                else break; // exit main loop
+            }
+            // node contains node children
+            else if (depth < DAG::MAX_DEPTH - 1) {
+                // try to find the child in current node
+                uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
+                uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+
+                // check if child address is valid (only need to check one)
+                if (child_addr_tsdf > 0) {
+                    depth++;
+                    path_child[depth] = 0; // reset child index for new depth
+                    addr_tsdf[depth] = child_addr_tsdf;
+                    addr_wght[depth] = child_addr_wght;
+                }
+            }
+            // node contains leaf children
+            else {
+                // try to get the leaf cluster, skip if it doesn't exist
+                uint32_t child_addr_tsdf = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                uint32_t child_addr_wght = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                if (child_addr_tsdf == 0) continue; // only need to check one
+
+                // fetch actual leaf cluster
+                const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
+                const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+
+                // reconstruct morton code from path
+                uint64_t code = 0;
+                for (uint64_t k = 0; k < 63/3 - 1; k++) {
+                    uint64_t part = path_child[k] - 1;
+                    code |= part << uint64_t(60 - k*3);
+                }
+                MortonCode mc{ code };
+
+                // get the actual leaves
+                uint32_t leaf_i = 0;
+                for (int32_t z = 0; z <= 1; z++) {
+                for (int32_t y = 0; y <= 1; y++) {
+                for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                    // signed distance and weight within leaf
+                    auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
+                    if (!leaf_exists) continue;
+                    auto weight = cluster_wght._weigh.get(leaf_i);
+
+                    // leaf index will set the 3 LSB
+                    mc._value |= leaf_i;
+                    
+                    // now just add it
+                    Octree::Leaf& leaf = octree.insert({ mc });
+                    leaf._signed_distance = signed_distance;
+                    leaf._weight = weight;
+                }}}
+            }
+        }
+        return octree;
+    }
+
+    void TSDFMap::DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b) {
+        using namespace chad::detail;
+
+        // TODO: store "memory needed" into submaps from their original octrees?
+        // data is temporarily written to these octrees for memory coherency
+        Octree octree_a = do_thingy(*_dag_p, submap_a, _sdf_trunc);
+        Octree octree_b = do_thingy(*_dag_p, submap_b, _sdf_trunc);
+
+        // TODO: merge into octree_a or b (decide based on how trilinear interpolation should work)
+        uint32_t root_a = octree_a.get_root();
+        uint32_t root_b = octree_b.get_root();
+
+        print_vec(submap_a.position);
+        print_vec(submap_b.position);
     }
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap

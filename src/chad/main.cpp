@@ -56,7 +56,7 @@
         point += position;
     }
     map.insert(points, position);
-    chad::Submap& sub_0 = map.finalize();
+    chad::Submap sub_0 = map.finalize();
 
     // insert second sphere into CHAD TSDF
     position = {3.63456, 3.90122, 3.01233};
@@ -72,7 +72,7 @@
         point += position;
     }
     map.insert(points, position);
-    chad::Submap& sub_1 = map.finalize();
+    chad::Submap sub_1 = map.finalize();
 
     // try matching
     map.DEBUG_merge_submaps(sub_0, sub_1);
