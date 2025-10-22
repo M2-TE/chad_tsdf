@@ -79,7 +79,7 @@
     chad::Submap& sub_1 = map.finalize();
 
     // try matching
-    map.DEBUG_match_submaps(sub_0, sub_1);
+    map.DEBUG_merge_submaps(sub_0, sub_1);
 }
 int main() {
     // do_sphere_thing();

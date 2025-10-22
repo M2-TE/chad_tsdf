@@ -53,7 +53,7 @@ namespace chad {
         // finalize current active submap
         auto finalize() -> Submap&;
         // DEBUG ONLY: try matching two submaps to detect loop closure
-        void DEBUG_match_submaps(const Submap& submap_a, const Submap& submap_b);
+        void DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b);
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
 

@@ -154,6 +154,16 @@ namespace chad {
             }
         }
 
+        // calc average position of submap
+        glm::dvec3 position{ 0, 0, 0 };
+        for (const auto& pos: _active_submap.positions) {
+            position += glm::dvec3(pos[0], pos[1], pos[2]);
+        }
+        position /= double(_active_submap.positions.size());
+        _active_submap.position[0] = float(position.x);
+        _active_submap.position[1] = float(position.y);
+        _active_submap.position[2] = float(position.z);
+
         // begin new submap
         _submaps.push_back(_active_submap);
         _active_submap.clear();
@@ -165,8 +175,11 @@ namespace chad {
 
         return _submaps.back();
     }
-    void TSDFMap::DEBUG_match_submaps(const Submap& submap_a, const Submap& submap_b) {
+    void TSDFMap::DEBUG_merge_submaps(const Submap& /*submap_a*/, const Submap& /*submap_b*/) {
         using namespace chad::detail;
+
+        // octree to merge data into (TODO: should cache this to keep allocated memory)
+        Octree octree;
 
         // trackers for the traversed path and nodes
         std::array<uint8_t, DAG::MAX_DEPTH> path;
@@ -175,6 +188,8 @@ namespace chad {
         path.fill(0);
         nodes_a.fill(0);
         nodes_b.fill(0);
+
+        
     }
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
