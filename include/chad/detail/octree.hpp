@@ -1,4 +1,6 @@
 #pragma once
+#include <chad/submap.hpp>
+#include "chad/detail/dag.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/virtual_array.hpp"
 
@@ -69,6 +71,10 @@ namespace chad::detail {
             }
 
             return _leaves[leaf_addr];
+        }
+        // insert single leaf
+        void inline insert(MortonCode mc, Leaf leaf) {
+            insert(mc) = leaf;
         }
         // insert TSDFs via points and normals
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
@@ -162,6 +168,94 @@ namespace chad::detail {
             auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
             fmt::println("oct  upd {:.2f}", dur);
         }
+        // insert from existing TSDF and weight DAG
+        void insert(const DAG& dag, const Submap& submap, float sdf_trunc) {
+            // read-only trackers for submap
+            MortonCode path_mc{ 0 };
+            std::array<uint8_t, DAG::MAX_DEPTH> path_child; // child indices along path
+            std::array<uint32_t, DAG::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+            std::array<uint32_t, DAG::MAX_DEPTH> addr_wght; // weight addresses along path
+            path_child.fill(0);
+            addr_tsdf.fill(0);
+            addr_wght.fill(0);
+            addr_tsdf[0] = submap.root_addr_tsdf;
+            addr_wght[0] = submap.root_addr_weight;
+
+            // iterate both trees to build separate octrees
+            uint32_t depth = 0;
+            while (true) {
+                uint8_t child_i = path_child[depth]++;
+
+                // when all children at this depth were iterated
+                if (child_i >= 8) {
+                    if (depth > 0) depth--;
+                    else break; // exit main loop
+                }
+                // node contains node children
+                else if (depth < DAG::MAX_DEPTH - 1) {
+                    // try to find the child in current node
+                    uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
+                    uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+
+                    // check if child address is valid (only need to check one)
+                    if (child_addr_tsdf > 0) {
+                        depth++;
+                        path_child[depth] = 0; // reset child index for new depth
+                        addr_tsdf[depth] = child_addr_tsdf;
+                        addr_wght[depth] = child_addr_wght;
+                    }
+                }
+                // node contains leaf children
+                else {
+                    // try to get the leaf cluster, skip if it doesn't exist
+                    uint32_t child_addr_tsdf = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                    uint32_t child_addr_wght = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                    if (child_addr_tsdf == 0) continue; // only need to check one
+
+                    // fetch actual leaf cluster
+                    const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
+                    const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+
+                    // reconstruct morton code from path
+                    uint64_t code = 0;
+                    for (uint64_t k = 0; k < 63/3 - 1; k++) {
+                        uint64_t part = path_child[k] - 1;
+                        code |= part << uint64_t(60 - k*3);
+                    }
+                    MortonCode mc{ code };
+
+                    // get the actual leaves
+                    uint32_t leaf_i = 0;
+                    for (int32_t z = 0; z <= 1; z++) {
+                    for (int32_t y = 0; y <= 1; y++) {
+                    for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                        // signed distance and weight within leaf
+                        auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
+                        if (!leaf_exists) continue;
+                        auto weight = cluster_wght._weigh.get(leaf_i);
+
+                        // leaf index will set the 3 LSB
+                        mc._value |= leaf_i;
+                        
+                        // now just add it
+                        insert(mc, Leaf{ signed_distance, weight });
+                    }}}
+                }
+            }
+        }
+
+        // try to find specific leaf via morton code
+        auto inline try_find(MortonCode mc) -> std::pair<Leaf*, bool> {
+            // first check if lookup map can find this node
+            static constexpr uint32_t lookup_depth = 18;
+            static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
+            static constexpr uint64_t lookup_mask = ((0xffffffffffffffff - 1) >> lookup_shift) << lookup_shift;
+            auto it = _node_lookup.find(mc._value & lookup_mask);
+            if (it == _node_lookup.end()) return { nullptr, false };
+
+            // TODO
+            return { nullptr, true };
+        }
 
         auto static get_root() -> uint32_t {
             return 0;
@@ -169,11 +263,8 @@ namespace chad::detail {
         auto inline get_node(uint32_t node_addr) const -> const Node& {
             return _nodes[node_addr];
         }
-        auto inline get_leaf(uint32_t leaf_addr) const -> const Leaf& {
+        auto inline get_leaf(uint32_t leaf_addr) -> Leaf& {
             return _leaves[leaf_addr];
-        }
-        auto inline get_child_addr(uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
-            return _nodes[parent_addr][child_i];
         }
 
         VirtualArray<Node> _nodes;

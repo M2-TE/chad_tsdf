@@ -74,13 +74,13 @@ namespace chad {
         detail::Octree* _active_octree_p;
     };
 
-    // template specializations for std::array<float, 3>
+    // template specialization for std::array<float, 3>
     template<>
     void inline TSDFMap::insert<std::array<float, 3>>(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
         insert_internal(points, position);
     }
 
-    // template specializations for glm::vec3
+    // template specialization for glm::vec3
     #if __has_include(<glm/vec3.hpp>)
     template<>
     void inline TSDFMap::insert<glm::vec3>(const std::vector<glm::vec3>& points, const glm::vec3& position) {
@@ -100,7 +100,7 @@ namespace chad {
     }
     #endif
 
-    // template specializations for Eigen::Vector3f
+    // template specialization for Eigen::Vector3f
     #if __has_include(<Eigen/Eigen>)
     template<>
     void inline TSDFMap::insert<Eigen::Vector3f>(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position) {

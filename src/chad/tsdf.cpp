@@ -116,7 +116,7 @@ namespace chad {
             // node contains node children
             else if (depth < DAG::MAX_DEPTH - 1) {
                 // retrieve child address
-                uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
+                uint32_t child_addr = octree.get_node(nodes_oct[depth])[child_i];
                 if (child_addr == 0) continue;
 
                 // walk deeper
@@ -127,7 +127,7 @@ namespace chad {
             // node contains leaf children
             else {
                 // retrieve address of current child node
-                uint32_t child_addr = octree.get_child_addr(nodes_oct[depth], child_i);
+                uint32_t child_addr = octree.get_node(nodes_oct[depth])[child_i];
                 if (child_addr == 0) continue;
 
                 // retrieve node
@@ -177,99 +177,85 @@ namespace chad {
         return _submaps.back();
     }
 
-    // TODO: move to detail namespace
-    auto inline do_thingy(const detail::DAG& dag, const Submap& submap, float sdf_trunc) -> chad::detail::Octree /*TODO: simplify return*/ {
-        using namespace chad::detail; // TODO: simplify
-        Octree octree;
+    void TSDFMap::DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b) {
+        using namespace chad::detail;
+        auto beg = std::chrono::high_resolution_clock::now();
 
-        // read-only trackers for submap
-        MortonCode path_mc{ 0 };
-        std::array<uint8_t,  DAG::MAX_DEPTH> path_child;// child indices along path
-        std::array<uint32_t, DAG::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
-        std::array<uint32_t, DAG::MAX_DEPTH> addr_wght; // weight addresses along path
-        path_child.fill(0);
-        addr_tsdf.fill(0);
-        addr_wght.fill(0);
-        addr_tsdf[0] = submap.root_addr_tsdf;
-        addr_wght[0] = submap.root_addr_weight;
+        // data is temporarily written to these octrees for better memory access
+        Octree octree_a, octree_b;
+        octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
+        octree_b.insert(*_dag_p, submap_a, _sdf_trunc);
 
-        // iterate both trees to build separate octrees
+        // track node traversal
+        std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
+        std::array<uint8_t, DAG::MAX_DEPTH + 1> path_child_indices;
+        path_nodes[0] = &octree_a.get_node(octree_a.get_root()); // start at root
+        path_child_indices.fill(0);
+
         uint32_t depth = 0;
         while (true) {
-            uint8_t child_i = path_child[depth]++;
+            uint8_t child_i = path_child_indices[depth]++;
 
             // when all children at this depth were iterated
             if (child_i >= 8) {
                 if (depth > 0) depth--;
                 else break; // exit main loop
             }
-            // node contains node children
-            else if (depth < DAG::MAX_DEPTH - 1) {
-                // try to find the child in current node
-                uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
-                uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
 
-                // check if child address is valid (only need to check one)
-                if (child_addr_tsdf > 0) {
+            // node contains node children
+            else if (depth < DAG::MAX_DEPTH) {
+                const Octree::Node& node = *path_nodes[depth];
+                uint32_t child_addr = node[child_i];
+
+                // check if child address is valid
+                if (child_addr > 0) {
                     depth++;
-                    path_child[depth] = 0; // reset child index for new depth
-                    addr_tsdf[depth] = child_addr_tsdf;
-                    addr_wght[depth] = child_addr_wght;
+                    path_child_indices[depth] = 0; // reset child index for new depth
+                    path_nodes[depth] = &octree_a.get_node(child_addr);
                 }
             }
+
             // node contains leaf children
             else {
-                // try to get the leaf cluster, skip if it doesn't exist
-                uint32_t child_addr_tsdf = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
-                uint32_t child_addr_wght = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_wght[depth], child_i);
-                if (child_addr_tsdf == 0) continue; // only need to check one
-
-                // fetch actual leaf cluster
-                const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
-                const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+                const Octree::Node& node = *path_nodes[depth];
+                uint32_t child_addr = node[child_i];
+                if (child_addr == 0) continue;
 
                 // reconstruct morton code from path
                 uint64_t code = 0;
-                for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                    uint64_t part = path_child[k] - 1;
+                for (uint64_t k = 0; k < DAG::MAX_DEPTH + 1; k++) {
+                    uint64_t part = path_child_indices[k] - 1;
                     code |= part << uint64_t(60 - k*3);
                 }
                 MortonCode mc{ code };
+                glm::ivec3 leaf_voxel = mc.decode();
 
-                // get the actual leaves
-                uint32_t leaf_i = 0;
-                for (int32_t z = 0; z <= 1; z++) {
-                for (int32_t y = 0; y <= 1; y++) {
-                for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-                    // signed distance and weight within leaf
-                    auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
-                    if (!leaf_exists) continue;
-                    auto weight = cluster_wght._weigh.get(leaf_i);
-
-                    // leaf index will set the 3 LSB
-                    mc._value |= leaf_i;
-                    
-                    // now just add it
-                    Octree::Leaf& leaf = octree.insert({ mc });
-                    leaf._signed_distance = signed_distance;
-                    leaf._weight = weight;
+                // trinlinear interpolation between 8 neighour voxels of octree_b
+                float c[2][2][2];
+                for (int z = 0; z < 2; z++) {
+                for (int y = 0; y < 2; y++) {
+                for (int x = 0; x < 2; x++) {
+                    glm::ivec3 neigh_voxel = leaf_voxel + glm::ivec3(x, y, z);
+                    MortonCode neigh_morton{ neigh_voxel };
+                    auto [leaf_p, leaf_exists] = octree_b.try_find(neigh_morton);
+                    // if leaf exists in octree_b, store it for interpolation
+                    if (leaf_exists) c[x][y][z] = leaf_p->_signed_distance;
                 }}}
+                // https://en.wikipedia.org/wiki/Trilinear_interpolation
+                float sd = 0.0f;
+                // sd += c[0][0][0] * (1.0f - )
+
+
+
+
+                auto leaf = octree_a.get_leaf(child_addr);
+                (void)leaf; // TODO
             }
         }
-        return octree;
-    }
 
-    void TSDFMap::DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b) {
-        using namespace chad::detail;
-
-        // TODO: store "memory needed" into submaps from their original octrees?
-        // data is temporarily written to these octrees for memory coherency
-        Octree octree_a = do_thingy(*_dag_p, submap_a, _sdf_trunc);
-        Octree octree_b = do_thingy(*_dag_p, submap_b, _sdf_trunc);
-
-        // TODO: merge into octree_a or b (decide based on how trilinear interpolation should work)
-        uint32_t root_a = octree_a.get_root();
-        uint32_t root_b = octree_b.get_root();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("oct merge {:.2f}", dur);
 
         print_vec(submap_a.position);
         print_vec(submap_b.position);
