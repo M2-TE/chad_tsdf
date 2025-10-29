@@ -403,7 +403,10 @@ namespace chad {
         if (!_active_submap.positions.empty()) {
             finalize();
         }
-        save(filename, _submaps.front());
+
+        for (const auto& submap: _submaps) {
+            save(filename, submap);
+        }
     }
     void TSDFMap::save(const std::string& filename, Submap submap) {
         // reconstruct 3D mesh using LVR2
