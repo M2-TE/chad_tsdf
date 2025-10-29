@@ -60,6 +60,7 @@
 
     // insert second sphere into CHAD TSDF
     position = {3.63456, 3.90122, 3.01233};
+
     for (auto& point: points) {
         glm::dvec3 pointd = {
             dis(gen),
@@ -75,7 +76,10 @@
     chad::Submap sub_1 = map.finalize();
 
     // try matching
-    map.DEBUG_merge_submaps(sub_0, sub_1);
+    chad::Submap sub_merged = map.merge_submaps(sub_0, sub_1);
+    // map.save("raw_0.ply", sub_0);
+    // map.save("raw_1.ply", sub_1);
+    map.save("mergetest.ply", sub_merged);
 }
 int main() {
     // do_sphere_thing();

@@ -235,10 +235,10 @@ namespace chad::detail {
                         auto weight = cluster_wght._weigh.get(leaf_i);
 
                         // leaf index will set the 3 LSB
-                        mc._value |= leaf_i;
+                        uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
                         
                         // now just add it
-                        insert(mc, Leaf{ signed_distance, weight });
+                        insert(mc_leaf, Leaf{ signed_distance, weight });
                     }}}
                 }
             }

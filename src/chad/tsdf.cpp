@@ -176,8 +176,99 @@ namespace chad {
 
         return _submaps.back();
     }
+    // TODO: flimsy use of submaps currently, needs to be more distinct. Especially compared to other finalize() overload better naming perhaps?
+    auto TSDFMap::finalize(detail::Octree* octree_p) -> Submap {
+        using namespace chad::detail;
+        Octree& octree = *octree_p;
+        Submap submap;
 
-    void TSDFMap::DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b) {
+        std::array<uint8_t, DAG::MAX_DEPTH> path;
+        std::array<uint32_t, DAG::MAX_DEPTH> nodes_oct; // for reading
+        std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_tsdf;   // for writing
+        std::array<std::array<uint32_t, 8>, DAG::MAX_DEPTH> nodes_weight; // for writing
+        path.fill(0);
+        nodes_oct.fill(0);
+        nodes_oct[0] = octree.get_root();
+        nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
+        nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
+        const float sdf_trunc_recip = 1.0f / _sdf_trunc;
+
+        // traverse octree to build DAG
+        uint32_t depth = 0;
+        while (true) {
+            uint8_t child_i = path[depth]++;
+
+            // when all children at this depth were iterated
+            if (child_i >= 8) {
+                // create/get nodes from current node level
+                uint32_t addr_tsdf   = _dag_p->add_node(depth, nodes_tsdf  [depth]);
+                uint32_t addr_weight = _dag_p->add_node(depth, nodes_weight[depth]);
+
+                // reset node tracker for handled nodes
+                nodes_tsdf  [depth].fill(0);
+                nodes_weight[depth].fill(0);
+
+                // check if it's the root node
+                if (depth == 0) {
+                    submap.root_addr_tsdf   = addr_tsdf;
+                    submap.root_addr_weight = addr_weight;
+                    break;
+                }
+                else {
+                    // continue at parent depth
+                    depth--;
+                    // created nodes are standard tree nodes
+                    uint32_t index_in_parent = path[depth] - 1;
+                    nodes_tsdf  [depth][index_in_parent] = addr_tsdf;
+                    nodes_weight[depth][index_in_parent] = addr_weight;
+                }
+            }
+            // node contains node children
+            else if (depth < DAG::MAX_DEPTH - 1) {
+                // retrieve child address
+                uint32_t child_addr = octree.get_node(nodes_oct[depth])[child_i];
+                if (child_addr == 0) continue;
+
+                // walk deeper
+                depth++;
+                path[depth] = 0;
+                nodes_oct[depth] = child_addr;
+            }
+            // node contains leaf children
+            else {
+                // retrieve address of current child node
+                uint32_t child_addr = octree.get_node(nodes_oct[depth])[child_i];
+                if (child_addr == 0) continue;
+
+                // retrieve node
+                const Octree::Node& node = octree.get_node(child_addr);
+                
+                // create leaf cluster from all 8 leaves
+                LeafCluster lc_tsdfs, lc_weigh;
+                for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
+                    uint32_t leaf_addr = node[leaf_i];
+                    if (leaf_addr == 0) {
+                        lc_tsdfs._tsdfs.set_empty(leaf_i);
+                        lc_weigh._weigh.set_empty(leaf_i);
+                    }
+                    else {
+                        const auto& leaf = octree.get_leaf(leaf_addr);
+                        // weight can be above 255, so we cap it at the uint8_t limit
+                        uint8_t weight = std::min<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
+                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
+                        lc_weigh._weigh.set(leaf_i, weight);
+                    }
+                }
+                // add the leaf clusters and remember their addresses
+                nodes_tsdf  [depth][child_i] = _dag_p->add_lc(lc_tsdfs);
+                nodes_weight[depth][child_i] = _dag_p->add_lc(lc_weigh);
+            }
+        }
+        
+        return submap;
+    }
+
+    auto TSDFMap::merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
@@ -188,13 +279,13 @@ namespace chad {
 
         // calc delta between the two submaps (from A to B)
         glm::vec3 delta_a_to_b { // TODO: also needs rotation delta
-            submap_b.position[0] - submap_a.position[0],
-            submap_b.position[1] - submap_a.position[1],
-            submap_b.position[2] - submap_a.position[2],
+            submap_b.position[0] - submap_a.position[0] - 0.01f, // DEBUG
+            submap_b.position[1] - submap_a.position[1] - 0.01f, // DEBUG
+            submap_b.position[2] - submap_a.position[2] - 0.01f, // DEBUG
         };
 
         // track node traversal
-        std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
+        std::array<const Octree::Node*, DAG::MAX_DEPTH - 1> path_nodes;
         std::array<uint8_t, DAG::MAX_DEPTH + 1> path_child_indices;
         path_nodes[0] = &octree_a.get_node(octree_a.get_root()); // start at root
         path_child_indices.fill(0);
@@ -262,6 +353,9 @@ namespace chad {
 
                 // interpolation factor in all 3 dimensions. As coordinate frame B was not rotated, this is simple
                 glm::vec3 interpolation_factor = glm::ivec3(leaf_position_coord_b) - leaf_chunk_coord_b;
+
+                // TODO: need to consider empty leaves?
+                // TODO: instead of std::lerps, do weighted interpolation early?
                 
                 // trinlinear interpolation between 8 neighour voxels of octree_b
                 float tsdf_b;
@@ -287,29 +381,33 @@ namespace chad {
                 wght_b = wght_XYZ;
 
                 // now perform weighted interpolation between tsdf_a and tsdf_b
-                auto leaf_a = octree_a.get_leaf(child_addr);
+                Octree::Leaf& leaf_a = octree_a.get_leaf(child_addr);
                 leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_b * wght_b;
                 leaf_a._signed_distance /= float(leaf_a._weight) + wght_b;
-                // simply add the two weights together?
+                // simply add the two weights together
                 leaf_a._weight += uint32_t(wght_b);
             }
         }
+
+        // create a new DAG from the merged octree
+        Submap submap = finalize(&octree_a);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
         fmt::println("oct merge {:.2f}", dur);
 
-        print_vec(submap_a.position);
-        print_vec(submap_b.position);
+        return submap;
     }
     void TSDFMap::save(const std::string& filename) {
         // finalize current active submap
         if (!_active_submap.positions.empty()) {
             finalize();
         }
-
+        save(filename, _submaps.front());
+    }
+    void TSDFMap::save(const std::string& filename, Submap submap) {
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing the first submap");
-        detail::reconstruct(*_dag_p, _submaps.front(), _sdf_res, _sdf_trunc, filename);
+        detail::reconstruct(*_dag_p, submap, _sdf_res, _sdf_trunc, filename);
     }
 }

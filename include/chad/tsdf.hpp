@@ -52,10 +52,14 @@ namespace chad {
 
         // finalize current active submap
         auto finalize() -> Submap;
+        // finalize submap via given octree
+        auto finalize(chad::detail::Octree* octree_p) -> Submap;
         // DEBUG ONLY: try matching two submaps to detect loop closure
-        void DEBUG_merge_submaps(const Submap& submap_a, const Submap& submap_b);
+        auto merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap;
         // reconstruct 3D mesh and write it to disk
         void save(const std::string& filename);
+        // reconstruct 3D mesh and write it to disk
+        void save(const std::string& filename, Submap submap);
 
     private:
         void insert_internal(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
