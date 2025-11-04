@@ -267,7 +267,6 @@ namespace chad {
         
         return submap;
     }
-
     auto TSDFMap::merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
@@ -275,19 +274,20 @@ namespace chad {
         // data is temporarily written to these octrees for better memory access
         Octree octree_a, octree_b;
         octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
-        octree_b.insert(*_dag_p, submap_a, _sdf_trunc);
+        octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
 
-        // calc delta between the two submaps (from A to B)
-        glm::vec3 delta_a_to_b { // TODO: also needs rotation delta
-            submap_b.position[0] - submap_a.position[0] - 0.01f, // DEBUG
-            submap_b.position[1] - submap_a.position[1] - 0.01f, // DEBUG
-            submap_b.position[2] - submap_a.position[2] - 0.01f, // DEBUG
+        // calc delta between the two submaps
+        glm::vec3 delta_b_to_a { // TODO: also needs rotational delta
+            submap_a.position[0] - submap_b.position[0],
+            submap_a.position[1] - submap_b.position[1],
+            submap_a.position[2] - submap_b.position[2],
         };
+        delta_b_to_a = {0, 0, 0};
 
         // track node traversal
-        std::array<const Octree::Node*, DAG::MAX_DEPTH - 1> path_nodes;
+        std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
         std::array<uint8_t, DAG::MAX_DEPTH + 1> path_child_indices;
-        path_nodes[0] = &octree_a.get_node(octree_a.get_root()); // start at root
+        path_nodes[0] = &octree_b.get_node(octree_b.get_root()); // start at root
         path_child_indices.fill(0);
 
         uint32_t depth = 0;
@@ -309,7 +309,7 @@ namespace chad {
                 if (child_addr > 0) {
                     depth++;
                     path_child_indices[depth] = 0; // reset child index for new depth
-                    path_nodes[depth] = &octree_a.get_node(child_addr);
+                    path_nodes[depth] = &octree_b.get_node(child_addr);
                 }
             }
 
@@ -326,66 +326,76 @@ namespace chad {
                     code |= part << uint64_t(60 - k*3);
                 }
                 MortonCode mc{ code };
-                glm::ivec3 leaf_voxel = mc.decode();
-                glm::vec3 leaf_position = glm::vec3(leaf_voxel) * _sdf_res;
-                
-                // voxel pos of leaf_a in b coordinate frame
-                glm::vec3 leaf_position_coord_b = leaf_position + delta_a_to_b;
-                // TODO: add error of B >AND< A to A pos, so that B voxel positions are still on grid intersections
-                // TODO: rotation as well
-                // convert back to voxel position
-                leaf_position_coord_b *= 1.0f / _sdf_res;
-                // get lowest corner
-                glm::ivec3 leaf_chunk_coord_b = (glm::ivec3)glm::floor(leaf_position_coord_b);
+                glm::ivec3 leaf_voxel_b_coord_b = mc.decode();
 
-                // get the 8 corners surrounding current voxel A in coordinate frame B
+                // get the other 7 voxels of B to use as trinlinear interpolation input
                 Octree::Leaf leaves_b[2][2][2];
                 for (int z = 0; z < 2; z++) {
                 for (int y = 0; y < 2; y++) {
                 for (int x = 0; x < 2; x++) {
-                    glm::ivec3 neigh_voxel = leaf_chunk_coord_b + glm::ivec3(x, y, z);
-                    MortonCode neigh_morton{ neigh_voxel };
-                    auto [leaf_p, leaf_exists] = octree_b.try_find(neigh_morton);
-                    // store copy of submap_b leaf for interpolation
-                    if (!leaf_exists) leaves_b[x][y][z] = {};
+                    // save some compute
+                    if (x == 0 && y == 0 && z == 0) {
+                        leaves_b[0][0][0] = octree_b.get_leaf(child_addr);
+                        continue;
+                    }
+                    // get neighbouring leaf voxel position
+                    glm::ivec3 leaf_voxel_other = leaf_voxel_b_coord_b + glm::ivec3(x, y, z);
+                    MortonCode mc_other{ leaf_voxel_other };
+
+                    // read leaf from octree
+                    auto [leaf_p, leaf_exists] = octree_b.try_find(mc_other);
+                    if (!leaf_exists) leaves_b[x][y][z] = Octree::Leaf{};
                     else leaves_b[x][y][z] = *leaf_p;
                 }}}
 
-                // interpolation factor in all 3 dimensions. As coordinate frame B was not rotated, this is simple
-                glm::vec3 interpolation_factor = glm::ivec3(leaf_position_coord_b) - leaf_chunk_coord_b;
+                // the goal is to interpolate 8 corner voxels from B to position of A
+                // so we need to find the leaf A that leaf B encompasses (B as the lower left corner [0, 0, 0])
+                //  current:                      o........o 
+                // o--------o               o--------A     :
+                // |  A     |  convert to   |     : /|     :
+                // | /      | ------------> |     :/ |     :
+                // |/       |               |     B..|.....o
+                // B--------o               o--------o
+                //
 
-                // TODO: need to consider empty leaves?
-                // TODO: instead of std::lerps, do weighted interpolation early?
-                
-                // trinlinear interpolation between 8 neighour voxels of octree_b
-                float tsdf_b;
-                float wght_b;
+                // convert to coordinate frame of "A"
+                glm::vec3 leaf_position_b_coord_b = glm::vec3(leaf_voxel_b_coord_b) * _sdf_res;
+                glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + delta_b_to_a;
+
+                // round up to get the voxel in A that voxel B encompasses
+                const float _sdf_res_recip = 1.0f / _sdf_res;
+                glm::vec3 leaf_voxel_a_coord_a = (leaf_position_b_coord_a * _sdf_res_recip);
+
+                // real position of leaf A to use as the trilinear interpolation target
+                glm::vec3 leaf_position_a_coord_a = leaf_voxel_a_coord_a * _sdf_res;
+
+                // perform trilinear interpolation
+                glm::vec3 interpolation_factors = leaf_position_a_coord_a - leaf_position_b_coord_a;
+                // print_vec(interpolation_factors);
                 // interpolate on x
-                float tsdf_X00 = std::lerp(leaves_b[0][0][0]._signed_distance, leaves_b[1][0][0]._signed_distance, interpolation_factor.x);
-                float tsdf_X10 = std::lerp(leaves_b[0][1][0]._signed_distance, leaves_b[1][1][0]._signed_distance, interpolation_factor.x);
-                float tsdf_X01 = std::lerp(leaves_b[0][0][1]._signed_distance, leaves_b[1][0][1]._signed_distance, interpolation_factor.x);
-                float tsdf_X11 = std::lerp(leaves_b[0][1][1]._signed_distance, leaves_b[1][1][1]._signed_distance, interpolation_factor.x);
-                float wght_X00 = std::lerp(float(leaves_b[0][0][0]._weight), float(leaves_b[1][0][0]._weight), interpolation_factor.x);
-                float wght_X10 = std::lerp(float(leaves_b[0][1][0]._weight), float(leaves_b[1][1][0]._weight), interpolation_factor.x);
-                float wght_X01 = std::lerp(float(leaves_b[0][0][1]._weight), float(leaves_b[1][0][1]._weight), interpolation_factor.x);
-                float wght_X11 = std::lerp(float(leaves_b[0][1][1]._weight), float(leaves_b[1][1][1]._weight), interpolation_factor.x);
+                float tsdf_X00 = std::lerp(leaves_b[0][0][0]._signed_distance, leaves_b[1][0][0]._signed_distance, interpolation_factors.x);
+                float tsdf_X10 = std::lerp(leaves_b[0][1][0]._signed_distance, leaves_b[1][1][0]._signed_distance, interpolation_factors.x);
+                float tsdf_X01 = std::lerp(leaves_b[0][0][1]._signed_distance, leaves_b[1][0][1]._signed_distance, interpolation_factors.x);
+                float tsdf_X11 = std::lerp(leaves_b[0][1][1]._signed_distance, leaves_b[1][1][1]._signed_distance, interpolation_factors.x);
+                float wght_X00 = std::lerp(float(leaves_b[0][0][0]._weight), float(leaves_b[1][0][0]._weight), interpolation_factors.x);
+                float wght_X10 = std::lerp(float(leaves_b[0][1][0]._weight), float(leaves_b[1][1][0]._weight), interpolation_factors.x);
+                float wght_X01 = std::lerp(float(leaves_b[0][0][1]._weight), float(leaves_b[1][0][1]._weight), interpolation_factors.x);
+                float wght_X11 = std::lerp(float(leaves_b[0][1][1]._weight), float(leaves_b[1][1][1]._weight), interpolation_factors.x);
                 // interpolate on y
-                float tsdf_XY0 = std::lerp(tsdf_X00, tsdf_X10, interpolation_factor.y);
-                float tsdf_XY1 = std::lerp(tsdf_X01, tsdf_X11, interpolation_factor.y);
-                float wght_XY0 = std::lerp(wght_X00, wght_X10, interpolation_factor.y);
-                float wght_XY1 = std::lerp(wght_X01, wght_X11, interpolation_factor.y);
+                float tsdf_XY0 = std::lerp(tsdf_X00, tsdf_X10, interpolation_factors.y);
+                float tsdf_XY1 = std::lerp(tsdf_X01, tsdf_X11, interpolation_factors.y);
+                float wght_XY0 = std::lerp(wght_X00, wght_X10, interpolation_factors.y);
+                float wght_XY1 = std::lerp(wght_X01, wght_X11, interpolation_factors.y);
                 // interpolate on z
-                float tsdf_XYZ = std::lerp(tsdf_XY0, tsdf_XY1, interpolation_factor.z);
-                float wght_XYZ = std::lerp(wght_XY0, wght_XY1, interpolation_factor.z);
-                tsdf_b = tsdf_XYZ;
-                wght_b = wght_XYZ;
+                float tsdf_XYZ = std::lerp(tsdf_XY0, tsdf_XY1, interpolation_factors.z);
+                float wght_XYZ = std::lerp(wght_XY0, wght_XY1, interpolation_factors.z);
 
-                // now perform weighted interpolation between tsdf_a and tsdf_b
-                Octree::Leaf& leaf_a = octree_a.get_leaf(child_addr);
-                leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_b * wght_b;
-                leaf_a._signed_distance /= float(leaf_a._weight) + wght_b;
+                // update existing or create new leaf in A
+                Octree::Leaf& leaf_a = octree_a.insert(glm::ivec3(leaf_voxel_a_coord_a));
+                leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ * wght_XYZ;
+                leaf_a._signed_distance /= float(leaf_a._weight) + wght_XYZ;
                 // simply add the two weights together
-                leaf_a._weight += uint32_t(wght_b);
+                leaf_a._weight += uint32_t(wght_XYZ);
             }
         }
 
@@ -404,8 +414,10 @@ namespace chad {
             finalize();
         }
 
-        for (const auto& submap: _submaps) {
-            save(filename, submap);
+        // create meshes from all submaps
+        for (uint32_t i = 0; i < _submaps.size(); i++) {
+            std::string str = fmt::format("{}_{}", i, filename);
+            save(str, _submaps[i]);
         }
     }
     void TSDFMap::save(const std::string& filename, Submap submap) {

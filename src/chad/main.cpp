@@ -77,9 +77,10 @@
 
     // try matching
     chad::Submap sub_merged = map.merge_submaps(sub_0, sub_1);
+    map.save("merged.ply", sub_merged);
     // map.save("raw_0.ply", sub_0);
     // map.save("raw_1.ply", sub_1);
-    map.save("mergetest.ply", sub_merged);
+    // map.save("mergetest.ply");
 }
 int main() {
     // do_sphere_thing();

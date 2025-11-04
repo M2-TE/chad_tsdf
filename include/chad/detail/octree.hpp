@@ -250,11 +250,26 @@ namespace chad::detail {
             static constexpr uint32_t lookup_depth = 18;
             static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
             static constexpr uint64_t lookup_mask = ((0xffffffffffffffff - 1) >> lookup_shift) << lookup_shift;
-            auto it = _node_lookup.find(mc._value & lookup_mask);
-            if (it == _node_lookup.end()) return { nullptr, false };
+            auto node_it = _node_lookup.find(mc._value & lookup_mask);
+            if (node_it == _node_lookup.end()) return { nullptr, false };
 
-            // TODO
-            return { nullptr, true };
+            // start at lookup_depth + 1
+            uint32_t depth = lookup_depth + 1;
+            Node* node_p = node_it->second;
+            
+            // walk a bit further
+            while (depth < 20) {
+                uint64_t shift_amount = (20 - depth) * 3; // 3 bits per depth, assuming 21 levels
+                uint64_t child_index = (mc._value >> shift_amount) & 0b111;
+                uint32_t child_addr = (*node_p)[child_index];
+                // walk to child
+                node_p = &_nodes[child_addr];
+                depth++;
+            }
+            // get leaf node
+            uint64_t leaf_index = mc._value & 0b111;
+            uint32_t leaf_addr = (*node_p)[leaf_index];
+            return { &_leaves[leaf_addr], true };
         }
 
         auto static get_root() -> uint32_t {
