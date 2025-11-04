@@ -58,8 +58,11 @@
     map.insert(points, position);
     chad::Submap sub_0 = map.finalize();
 
+    glm::vec3 error = {1.623, 0.985, 1.204};
+    error = {1, 1, 1};
     // insert second sphere into CHAD TSDF
     position = {3.63456, 3.90122, 3.01233};
+    position += error;
 
     for (auto& point: points) {
         glm::dvec3 pointd = {
@@ -74,6 +77,11 @@
     }
     map.insert(points, position);
     chad::Submap sub_1 = map.finalize();
+    sub_1.error_pos = {
+        error.x,
+        error.y,
+        error.z,
+    };
 
     // try matching
     chad::Submap sub_merged = map.merge_submaps(sub_0, sub_1);

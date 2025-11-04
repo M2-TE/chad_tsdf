@@ -276,13 +276,19 @@ namespace chad {
         octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
         octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
 
-        // calc delta between the two submaps
-        glm::vec3 delta_b_to_a { // TODO: also needs rotational delta
-            submap_a.position[0] - submap_b.position[0],
-            submap_a.position[1] - submap_b.position[1],
-            submap_a.position[2] - submap_b.position[2],
+        // invert error to get delta from b to a
+        // assumes a is global coordinate frame
+        glm::vec3 error_delta_b_to_a {
+            -submap_b.error_pos[0],
+            -submap_b.error_pos[1],
+            -submap_b.error_pos[2],
         };
-        delta_b_to_a = {0, 0, 0};
+
+        // DEBUG
+        if (submap_a.error_pos[0] > 0.0f || submap_a.error_pos[1] > 0.0f || submap_a.error_pos[2] > 0.0f) {
+            fmt::println("submap A not in global coordinate frame");
+            exit(0);
+        }
 
         // track node traversal
         std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
@@ -359,19 +365,19 @@ namespace chad {
                 //
 
                 // convert to coordinate frame of "A"
+                glm::vec3 offset = glm::vec3{1, 1, 1} * _sdf_res * 0.01f; // small offset to avoid floating point oddities with glm::ceil
                 glm::vec3 leaf_position_b_coord_b = glm::vec3(leaf_voxel_b_coord_b) * _sdf_res;
-                glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + delta_b_to_a;
+                glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + error_delta_b_to_a - offset;
 
                 // round up to get the voxel in A that voxel B encompasses
                 const float _sdf_res_recip = 1.0f / _sdf_res;
-                glm::vec3 leaf_voxel_a_coord_a = (leaf_position_b_coord_a * _sdf_res_recip);
+                glm::vec3 leaf_voxel_a_coord_a = glm::ceil(leaf_position_b_coord_a * _sdf_res_recip);
 
                 // real position of leaf A to use as the trilinear interpolation target
                 glm::vec3 leaf_position_a_coord_a = leaf_voxel_a_coord_a * _sdf_res;
 
                 // perform trilinear interpolation
                 glm::vec3 interpolation_factors = leaf_position_a_coord_a - leaf_position_b_coord_a;
-                // print_vec(interpolation_factors);
                 // interpolate on x
                 float tsdf_X00 = std::lerp(leaves_b[0][0][0]._signed_distance, leaves_b[1][0][0]._signed_distance, interpolation_factors.x);
                 float tsdf_X10 = std::lerp(leaves_b[0][1][0]._signed_distance, leaves_b[1][1][0]._signed_distance, interpolation_factors.x);
