@@ -267,28 +267,9 @@ namespace chad {
         
         return submap;
     }
-    auto TSDFMap::merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap {
+
+    auto inline merge_octrees(detail::Octree& octree_a, const detail::Octree& octree_b, glm::vec3 error_b_to_a, float sdf_res) {
         using namespace chad::detail;
-        auto beg = std::chrono::high_resolution_clock::now();
-
-        // data is temporarily written to these octrees for better memory access
-        Octree octree_a, octree_b;
-        octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
-        octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
-
-        // invert error to get delta from b to a
-        // assumes a is global coordinate frame
-        glm::vec3 error_delta_b_to_a {
-            -submap_b.error_pos[0],
-            -submap_b.error_pos[1],
-            -submap_b.error_pos[2],
-        };
-
-        // DEBUG
-        if (submap_a.error_pos[0] > 0.0f || submap_a.error_pos[1] > 0.0f || submap_a.error_pos[2] > 0.0f) {
-            fmt::println("submap A not in global coordinate frame");
-            exit(0);
-        }
 
         // track node traversal
         std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
@@ -365,16 +346,16 @@ namespace chad {
                 //
 
                 // convert to coordinate frame of "A"
-                glm::vec3 offset = glm::vec3{1, 1, 1} * _sdf_res * 0.01f; // small offset to avoid floating point oddities with glm::ceil
-                glm::vec3 leaf_position_b_coord_b = glm::vec3(leaf_voxel_b_coord_b) * _sdf_res;
-                glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + error_delta_b_to_a - offset;
+                glm::vec3 offset = glm::vec3{1, 1, 1} * sdf_res * 0.01f; // small offset to avoid floating point oddities with glm::ceil
+                glm::vec3 leaf_position_b_coord_b = glm::vec3(leaf_voxel_b_coord_b) * sdf_res;
+                glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + error_b_to_a - offset;
 
                 // round up to get the voxel in A that voxel B encompasses
-                const float _sdf_res_recip = 1.0f / _sdf_res;
+                const float _sdf_res_recip = 1.0f / sdf_res;
                 glm::vec3 leaf_voxel_a_coord_a = glm::ceil(leaf_position_b_coord_a * _sdf_res_recip);
 
                 // real position of leaf A to use as the trilinear interpolation target
-                glm::vec3 leaf_position_a_coord_a = leaf_voxel_a_coord_a * _sdf_res;
+                glm::vec3 leaf_position_a_coord_a = leaf_voxel_a_coord_a * sdf_res;
 
                 // perform trilinear interpolation
                 glm::vec3 interpolation_factors = leaf_position_a_coord_a - leaf_position_b_coord_a;
@@ -404,6 +385,31 @@ namespace chad {
                 leaf_a._weight += uint32_t(wght_XYZ);
             }
         }
+    }
+    auto TSDFMap::merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap {
+        using namespace chad::detail;
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // data is temporarily written to these octrees for better memory access
+        Octree octree_a, octree_b;
+        octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
+        octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
+
+        // invert error to get delta from b to a
+        // assumes a is global coordinate frame
+        glm::vec3 error_delta_b_to_a {
+            -submap_b.error_pos[0],
+            -submap_b.error_pos[1],
+            -submap_b.error_pos[2],
+        };
+
+        // DEBUG
+        if (submap_a.error_pos[0] > 0.0f || submap_a.error_pos[1] > 0.0f || submap_a.error_pos[2] > 0.0f) {
+            fmt::println("submap A not in global coordinate frame");
+            exit(0);
+        }
+
+        merge_octrees(octree_a, octree_b, error_delta_b_to_a, _sdf_res);
 
         // create a new DAG from the merged octree
         Submap submap = finalize(&octree_a);
@@ -414,7 +420,46 @@ namespace chad {
 
         return submap;
     }
-    void TSDFMap::save(const std::string& filename) {
+    auto TSDFMap::merge_all_submaps() -> Submap {
+        using namespace chad::detail;
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        // assume first submap is the global coordinate frame
+        const Submap& submap_a = _submaps.front();
+
+        // create temporary octrees for faster memory access
+        Octree octree_a, octree_b;
+        octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
+        
+        if (_submaps.size() == 1) return submap_a;
+        for (uint32_t i = 1; i < _submaps.size(); i++) {
+            const Submap& submap_b = _submaps[i];
+            
+            // create simple octree from submap
+            octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
+
+            // invert error to get delta from b to a
+            // assumes a is global coordinate frame
+            glm::vec3 error_delta_b_to_a {
+                -submap_b.error_pos[0],
+                -submap_b.error_pos[1],
+                -submap_b.error_pos[2],
+            };
+            merge_octrees(octree_a, octree_b, error_delta_b_to_a, _sdf_res);
+            octree_b.clear();
+        }
+
+
+        // create a new DAG from the merged octree
+        Submap submap = finalize(&octree_a);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        fmt::println("oct merge {:.2f}", dur);
+        return submap;
+    }
+    // TODO: merge all submaps first
+    void TSDFMap::reconstruct(const std::string& filename) {
         // finalize current active submap
         if (!_active_submap.positions.empty()) {
             finalize();
@@ -423,10 +468,10 @@ namespace chad {
         // create meshes from all submaps
         for (uint32_t i = 0; i < _submaps.size(); i++) {
             std::string str = fmt::format("{}_{}", i, filename);
-            save(str, _submaps[i]);
+            reconstruct(str, _submaps[i]);
         }
     }
-    void TSDFMap::save(const std::string& filename, Submap submap) {
+    void TSDFMap::reconstruct(const std::string& filename, Submap submap) {
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing the first submap");
         detail::reconstruct(*_dag_p, submap, _sdf_res, _sdf_trunc, filename);

@@ -54,12 +54,18 @@ namespace chad {
         auto finalize() -> Submap;
         // finalize submap via given octree
         auto finalize(chad::detail::Octree* octree_p) -> Submap;
-        // DEBUG ONLY: try matching two submaps to detect loop closure
+        // DEBUG ONLY: try matching two submaps
         auto merge_submaps(const Submap& submap_a, const Submap& submap_b) -> Submap;
+        // merge all submaps into one
+        auto merge_all_submaps() -> Submap;
         // reconstruct 3D mesh and write it to disk
-        void save(const std::string& filename);
+        void reconstruct(const std::string& filename);
         // reconstruct 3D mesh and write it to disk
-        void save(const std::string& filename, Submap submap);
+        void reconstruct(const std::string& filename, Submap submap);
+        // DEBUG
+        auto get_submaps() -> std::vector<Submap>& {
+            return _submaps;
+        }
 
     private:
         void insert_internal(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);

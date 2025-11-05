@@ -31,7 +31,7 @@
         //     ofs << point.x << ' ' << point.y << ' ' << point.z << '\n';
         // }
     }
-    map.save("mesh.ply");
+    map.reconstruct("mesh.ply");
 }
 [[maybe_unused]] void static double_sphere_thing() {
     chad::TSDFMap map { 0.05f, 0.1f };
@@ -48,7 +48,7 @@
         glm::dvec3 pointd = {
             dis(gen),
             dis(gen),
-            dis(gen)
+            dis(gen),
         };
         pointd = glm::normalize(pointd);
         pointd *= 5.0;
@@ -58,12 +58,28 @@
     map.insert(points, position);
     chad::Submap sub_0 = map.finalize();
 
-    glm::vec3 error = {1.623, 0.985, 1.204};
-    error = {1, 1, 1};
+    // glm::vec3 error = {1.623, 0.985, 1.204};
+    // glm::vec3 error = {0, 0, 0};
+    glm::vec3 error = {1, 5, 1};
     // insert second sphere into CHAD TSDF
-    position = {3.63456, 3.90122, 3.01233};
-    position += error;
+    // position = {3.63456, 3.90122, 3.01233};
+    position = glm::vec3{5, 5, 5};
+    for (auto& point: points) {
+        glm::dvec3 pointd = {
+            dis(gen),
+            dis(gen),
+            dis(gen),
+        };
+        pointd = glm::normalize(pointd);
+        pointd *= 5.0;
+        point = (glm::vec3)pointd;
+        point += position + error;
+    }
+    map.insert(points, position + error);
+    map.finalize();
+    map.get_submaps().back().error_pos = { error.x, error.y, error.z };
 
+    position = {10, 10, 10};
     for (auto& point: points) {
         glm::dvec3 pointd = {
             dis(gen),
@@ -73,22 +89,15 @@
         pointd = glm::normalize(pointd);
         pointd *= 5.0;
         point = (glm::vec3)pointd;
-        point += position;
+        point += position + error;
     }
-    map.insert(points, position);
-    chad::Submap sub_1 = map.finalize();
-    sub_1.error_pos = {
-        error.x,
-        error.y,
-        error.z,
-    };
+    map.insert(points, position + error);
+    map.finalize();
+    map.get_submaps().back().error_pos = { error.x, error.y, error.z };
 
-    // try matching
-    chad::Submap sub_merged = map.merge_submaps(sub_0, sub_1);
-    map.save("merged.ply", sub_merged);
-    // map.save("raw_0.ply", sub_0);
-    // map.save("raw_1.ply", sub_1);
-    // map.save("mergetest.ply");
+    // merge all
+    chad::Submap sub_merged = map.merge_all_submaps();
+    map.reconstruct("merged.ply", sub_merged);
 }
 int main() {
     // do_sphere_thing();

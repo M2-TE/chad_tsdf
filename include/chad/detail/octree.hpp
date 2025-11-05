@@ -243,9 +243,8 @@ namespace chad::detail {
                 }
             }
         }
-
         // try to find specific leaf via morton code
-        auto inline try_find(MortonCode mc) -> std::pair<Leaf*, bool> {
+        auto inline try_find(MortonCode mc) const -> std::pair<const Leaf*, bool> {
             // first check if lookup map can find this node
             static constexpr uint32_t lookup_depth = 18;
             static constexpr uint64_t lookup_shift = (20 - lookup_depth) * 3;
@@ -255,7 +254,7 @@ namespace chad::detail {
 
             // start at lookup_depth + 1
             uint32_t depth = lookup_depth + 1;
-            Node* node_p = node_it->second;
+            const Node* node_p = node_it->second;
             
             // walk a bit further
             while (depth < 20) {
@@ -271,7 +270,6 @@ namespace chad::detail {
             uint32_t leaf_addr = (*node_p)[leaf_index];
             return { &_leaves[leaf_addr], true };
         }
-
         auto static get_root() -> uint32_t {
             return 0;
         }
@@ -279,6 +277,9 @@ namespace chad::detail {
             return _nodes[node_addr];
         }
         auto inline get_leaf(uint32_t leaf_addr) -> Leaf& {
+            return _leaves[leaf_addr];
+        }
+        auto inline get_leaf(uint32_t leaf_addr) const -> const Leaf& {
             return _leaves[leaf_addr];
         }
 
