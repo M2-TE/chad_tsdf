@@ -26,7 +26,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_fin_delta = 0.5f);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_fin_delta = 5.0f);
         // destructor to free allocations
         ~TSDFMap();
 
