@@ -18,7 +18,7 @@ add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/pch.hpp")
+target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include/chad/detail/pch.hpp")
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # handle dependencies
@@ -27,6 +27,7 @@ include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
 include("cmake/eigen.cmake")
 include("cmake/morton.cmake")
+include("cmake/opencv.cmake")
 include("cmake/lvr2.cmake")
 
 # compile executable if top level project

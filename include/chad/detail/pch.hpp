@@ -25,3 +25,4 @@
 #include <fmt/format.h>
 #include <gtl/phmap.hpp>
 #include <libmorton/morton.h>
+#include <opencv4/opencv2/opencv.hpp>
