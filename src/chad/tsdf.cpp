@@ -132,7 +132,7 @@ namespace chad {
 
                 // retrieve node
                 const Octree::Node& node = octree.get_node(child_addr);
-                
+
                 // create leaf cluster from all 8 leaves
                 LeafCluster lc_tsdfs, lc_weigh;
                 for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
@@ -164,7 +164,7 @@ namespace chad {
         _active_submap.position[0] = float(position.x);
         _active_submap.position[1] = float(position.y);
         _active_submap.position[2] = float(position.z);
-        
+
         // begin new submap
         _submaps.push_back(_active_submap);
         _active_submap.clear();
@@ -242,7 +242,7 @@ namespace chad {
 
                 // retrieve node
                 const Octree::Node& node = octree.get_node(child_addr);
-                
+
                 // create leaf cluster from all 8 leaves
                 LeafCluster lc_tsdfs, lc_weigh;
                 for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
@@ -264,11 +264,11 @@ namespace chad {
                 nodes_weight[depth][child_i] = _dag_p->add_lc(lc_weigh);
             }
         }
-        
+
         return submap;
     }
 
-    auto inline merge_octrees(detail::Octree& octree_a, const detail::Octree& octree_b, glm::vec3 error_b_to_a, float sdf_res) {
+    void inline merge_octrees(detail::Octree& octree_a, const detail::Octree& octree_b, glm::vec3 error_b_to_a, float sdf_res) {
         using namespace chad::detail;
 
         // track node traversal
@@ -337,7 +337,7 @@ namespace chad {
 
                 // the goal is to interpolate 8 corner voxels from B to position of A
                 // so we need to find the leaf A that leaf B encompasses (B as the lower left corner [0, 0, 0])
-                //  current:                      o........o 
+                //  current:                      o........o
                 // o--------o               o--------A     :
                 // |  A     |  convert to   |     : /|     :
                 // | /      | ------------> |     :/ |     :
@@ -381,8 +381,8 @@ namespace chad {
                 Octree::Leaf& leaf_a = octree_a.insert(glm::ivec3(leaf_voxel_a_coord_a));
                 leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ * wght_XYZ;
                 leaf_a._signed_distance /= float(leaf_a._weight) + wght_XYZ;
-                // simply add the two weights together
-                leaf_a._weight += uint32_t(wght_XYZ);
+                // avg out the weights (adding them gives too much weight)
+                leaf_a._weight = (leaf_a._weight + uint32_t(wght_XYZ)) / 2u;
             }
         }
     }
@@ -430,11 +430,11 @@ namespace chad {
         // create temporary octrees for faster memory access
         Octree octree_a, octree_b;
         octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
-        
+
         if (_submaps.size() == 1) return submap_a;
         for (uint32_t i = 1; i < _submaps.size(); i++) {
             const Submap& submap_b = _submaps[i];
-            
+
             // create simple octree from submap
             octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
 
