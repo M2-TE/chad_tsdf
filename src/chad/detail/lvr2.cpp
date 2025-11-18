@@ -68,7 +68,7 @@ namespace chad::detail {
                     }
                     MortonCode mc { code };
                     glm::ivec3 cluster_chunk = mc.decode();
-                    
+
                     uint32_t leaf_i = 0;
                     for (int32_t z = 0; z <= 1; z++) {
                     for (int32_t y = 0; y <= 1; y++) {
@@ -86,7 +86,7 @@ namespace chad::detail {
                         // signed_distance = perf_signed_distance;
                         // signed_distance = -signed_distance;
                         // fmt::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
-                        
+
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
                         m_queryPoints.emplace_back(BaseVecT(leaf_pos.x, leaf_pos.y, leaf_pos.z), signed_distance);
@@ -139,12 +139,12 @@ namespace chad::detail {
                 delete cell;
             }
         }
-        
-        auto getNumberOfCells() -> std::size_t { 
+
+        auto getNumberOfCells() -> std::size_t {
             return m_cells.size();
         }
-        auto firstCell() -> typename std::unordered_map<size_t, BoxT*>::iterator { 
-            return m_cells.begin(); 
+        auto firstCell() -> typename std::unordered_map<size_t, BoxT*>::iterator {
+            return m_cells.begin();
         }
         auto lastCell() -> typename unordered_map<size_t, BoxT*>::iterator {
             return m_cells.end();
@@ -271,7 +271,7 @@ namespace chad::detail {
         typedef lvr2::BaseVector<float> VecT;
         typedef lvr2::BilinearFastBox<VecT> BoxT;
         // typedef lvr2::SharpBox<VecT> BoxT;
-        
+
         // create hash grid from entire tree
         // generate mesh from hash grid
         lvr2::PMPMesh<VecT> mesh{};
@@ -279,13 +279,13 @@ namespace chad::detail {
         if (decomp_type == "MC") {
         }
         else if (decomp_type == "PMC") {
-            auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(dag, submap.root_addr_tsdf, voxel_res, trunc_dist);
+            auto grid_p = std::make_shared<ChadGrid<VecT, BoxT>>(dag, submap._roots._tsdfs, voxel_res, trunc_dist);
             grid_p->saveGrid("hashgrid.grid");
-            
+
             ChadReconstruction<VecT, BoxT> reconstruction { grid_p };
             reconstruction.getMesh(mesh);
         }
-        
+
         // generate mesh buffer from reconstructed mesh
         auto norm_face = lvr2::calcFaceNormals(mesh);
         auto norm_vert = lvr2::calcVertexNormals(mesh, norm_face);

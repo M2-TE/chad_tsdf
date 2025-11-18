@@ -36,7 +36,7 @@ namespace chad::detail {
             Node* node_p = &_nodes[0];
             if (!node_emplaced) depth = lookup_depth + 1;
             if (!node_emplaced) node_p = node_it->second;
-            
+
             while (depth < 20) {
                 uint64_t shift_amount = (20 - depth) * 3; // 3 bits per depth, assuming 21 levels
                 uint64_t child_index = (mc._value >> shift_amount) & 0b111;
@@ -48,7 +48,7 @@ namespace chad::detail {
 
                     // add the new child to current node
                     (*node_p)[child_index] = child_addr;
-                    
+
                     // if node was missing from lookup table, add it now
                     if (node_emplaced && depth == lookup_depth) {
                         node_it->second = &_nodes[child_addr];
@@ -116,11 +116,11 @@ namespace chad::detail {
                 else /*voxel_step_direction.z == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
                 voxel_step_max = voxel_step_max - start; // distance to voxel boundaries
                 voxel_step_max = glm::abs(voxel_step_max * direction_recip); // portion of "direction" needed to cross voxel boundaries
-                
+
                 // current voxel during traversal
                 glm::ivec3 voxel_current = voxel_start;
                 traversed_voxels.emplace_back(voxel_current);
-                
+
                 // traverse ray within truncation distance
                 while (true) {
                     if (voxel_step_max.x < voxel_step_max.y) {
@@ -178,8 +178,8 @@ namespace chad::detail {
             path_child.fill(0);
             addr_tsdf.fill(0);
             addr_wght.fill(0);
-            addr_tsdf[0] = submap.root_addr_tsdf;
-            addr_wght[0] = submap.root_addr_weight;
+            addr_tsdf[0] = submap._roots._tsdfs;
+            addr_wght[0] = submap._roots._weights;
 
             // iterate both trees to build separate octrees
             uint32_t depth = 0;
@@ -236,7 +236,7 @@ namespace chad::detail {
 
                         // leaf index will set the 3 LSB
                         uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
-                        
+
                         // now just add it
                         insert(mc_leaf, Leaf{ signed_distance, weight });
                     }}}
@@ -255,7 +255,7 @@ namespace chad::detail {
             // start at lookup_depth + 1
             uint32_t depth = lookup_depth + 1;
             const Node* node_p = node_it->second;
-            
+
             // walk a bit further
             while (depth < 20) {
                 uint64_t shift_amount = (20 - depth) * 3; // 3 bits per depth, assuming 21 levels

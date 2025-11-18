@@ -33,73 +33,73 @@
     }
     map.reconstruct("mesh.ply");
 }
-[[maybe_unused]] void static double_sphere_thing() {
-    chad::TSDFMap map { 0.05f, 0.1f };
+// [[maybe_unused]] void static double_sphere_thing() {
+//     chad::TSDFMap map { 0.05f, 0.1f };
 
-    // generate random point data
-    std::vector<glm::vec3> points { 1'000'000 };
-    std::random_device rd;
-    std::mt19937 gen(420);
-    std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
+//     // generate random point data
+//     std::vector<glm::vec3> points { 1'000'000 };
+//     std::random_device rd;
+//     std::mt19937 gen(420);
+//     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
 
-    // insert first sphere into CHAD TSDF
-    glm::vec3 position { 0, 0, 0 };
-    for (auto& point: points) {
-        glm::dvec3 pointd = {
-            dis(gen),
-            dis(gen),
-            dis(gen),
-        };
-        pointd = glm::normalize(pointd);
-        pointd *= 5.0;
-        point = (glm::vec3)pointd;
-        point += position;
-    }
-    map.insert(points, position);
-    chad::Submap sub_0 = map.finalize();
+//     // insert first sphere into CHAD TSDF
+//     glm::vec3 position { 0, 0, 0 };
+//     for (auto& point: points) {
+//         glm::dvec3 pointd = {
+//             dis(gen),
+//             dis(gen),
+//             dis(gen),
+//         };
+//         pointd = glm::normalize(pointd);
+//         pointd *= 5.0;
+//         point = (glm::vec3)pointd;
+//         point += position;
+//     }
+//     map.insert(points, position);
+//     chad::Submap sub_0 = map.finalize();
 
-    // glm::vec3 error = {1.623, 0.985, 1.204};
-    // glm::vec3 error = {0, 0, 0};
-    glm::vec3 error = {1, 5, 1};
-    // insert second sphere into CHAD TSDF
-    // position = {3.63456, 3.90122, 3.01233};
-    position = glm::vec3{5, 5, 5};
-    for (auto& point: points) {
-        glm::dvec3 pointd = {
-            dis(gen),
-            dis(gen),
-            dis(gen),
-        };
-        pointd = glm::normalize(pointd);
-        pointd *= 5.0;
-        point = (glm::vec3)pointd;
-        point += position + error;
-    }
-    map.insert(points, position + error);
-    map.finalize();
-    map.get_submaps().back().error_pos = { error.x, error.y, error.z };
+//     // glm::vec3 error = {1.623, 0.985, 1.204};
+//     // glm::vec3 error = {0, 0, 0};
+//     glm::vec3 error = {1, 5, 1};
+//     // insert second sphere into CHAD TSDF
+//     // position = {3.63456, 3.90122, 3.01233};
+//     position = glm::vec3{5, 5, 5};
+//     for (auto& point: points) {
+//         glm::dvec3 pointd = {
+//             dis(gen),
+//             dis(gen),
+//             dis(gen),
+//         };
+//         pointd = glm::normalize(pointd);
+//         pointd *= 5.0;
+//         point = (glm::vec3)pointd;
+//         point += position + error;
+//     }
+//     map.insert(points, position + error);
+//     map.finalize();
+//     map.get_submaps().back().error_pos = { error.x, error.y, error.z };
 
-    position = {10, 10, 10};
-    for (auto& point: points) {
-        glm::dvec3 pointd = {
-            dis(gen),
-            dis(gen),
-            dis(gen)
-        };
-        pointd = glm::normalize(pointd);
-        pointd *= 5.0;
-        point = (glm::vec3)pointd;
-        point += position + error;
-    }
-    map.insert(points, position + error);
-    map.finalize();
-    map.get_submaps().back().error_pos = { error.x, error.y, error.z };
+//     position = {10, 10, 10};
+//     for (auto& point: points) {
+//         glm::dvec3 pointd = {
+//             dis(gen),
+//             dis(gen),
+//             dis(gen)
+//         };
+//         pointd = glm::normalize(pointd);
+//         pointd *= 5.0;
+//         point = (glm::vec3)pointd;
+//         point += position + error;
+//     }
+//     map.insert(points, position + error);
+//     map.finalize();
+//     map.get_submaps().back().error_pos = { error.x, error.y, error.z };
 
-    // merge all
-    chad::Submap sub_merged = map.merge_all_submaps();
-    map.reconstruct("merged.ply", sub_merged);
-}
+//     // merge all
+//     chad::Submap sub_merged = map.merge_all_submaps();
+//     map.reconstruct("merged.ply", sub_merged);
+// }
 int main() {
-    // do_sphere_thing();
-    double_sphere_thing();
+    do_sphere_thing();
+    // double_sphere_thing();
 }
