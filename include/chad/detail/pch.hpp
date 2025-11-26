@@ -1,5 +1,6 @@
 // std
 #include <array>
+#include <print>
 #include <bitset>
 #include <chrono>
 #include <random>
@@ -21,8 +22,6 @@
 #define GLM_FORCE_INTRINSICS
 #include <glm/glm.hpp>
 #include <glm/gtc/type_aligned.hpp>
-#include <fmt/base.h>
-#include <fmt/format.h>
 #include <gtl/phmap.hpp>
 #include <libmorton/morton.h>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>

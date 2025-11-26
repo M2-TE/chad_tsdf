@@ -27,7 +27,7 @@ elseif (UNIX)
         "-mbmi2"
         )
     if (CHAD_USE_FAST_MATH)
-        add_compile_options("-ffast-math")
+        # add_compile_options("-ffast-math")
     endif()
     if (CHAD_USE_STRICT_COMPILATION)
         add_compile_options("-Werror")
@@ -35,10 +35,7 @@ elseif (UNIX)
 
     # compiler specific flags
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        add_compile_options("-Wno-stringop-overflow")
-        add_compile_options("-ffp-contract=off")
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        # none so far
     endif()
 endif()
 

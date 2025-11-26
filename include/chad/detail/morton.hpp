@@ -28,7 +28,7 @@ namespace chad::detail {
             return { int32_t(x), int32_t(y), int32_t(z) };
         }
         void inline print() {
-            fmt::println("{}", std::bitset<63>(_value).to_string());
+            std::println("{}", std::bitset<63>(_value).to_string());
         }
 
         bool inline operator==(const MortonCode& other) const noexcept {
@@ -70,7 +70,7 @@ namespace chad::detail {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc  calc {:.2f}", dur);
+        std::println("mc  calc {:.2f}", dur);
         return points_mc;
     }
     auto inline sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3> {
@@ -92,7 +92,7 @@ namespace chad::detail {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc  sort {:.2f}", dur);
+        std::println("mc  sort {:.2f}", dur);
         return points_sorted;
     }
 }
@@ -107,13 +107,13 @@ namespace std {
     };
 }
 
-// specialize the fmt formatter for MortonCode
-namespace fmt {
-    template<>
-    struct formatter<chad::detail::MortonCode>: formatter<std::string> {
-        auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
-            std::string str = std::bitset<63>(mc._value).to_string();
-            return formatter<std::string>::format(str, ctx);
-        }
-    };
-}
+// // specialize the fmt formatter for MortonCode
+// namespace fmt {
+//     template<>
+//     struct formatter<chad::detail::MortonCode>: formatter<std::string> {
+//         auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
+//             std::string str = std::bitset<63>(mc._value).to_string();
+//             return formatter<std::string>::format(str, ctx);
+//         }
+//     };
+// }

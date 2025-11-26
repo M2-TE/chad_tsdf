@@ -135,11 +135,11 @@ namespace chad::detail {
 
 
         // for (auto& normal: normals) normal = -normal;
-        // fmt::println("FLIPPED NORMALS FOR DEBUG RUN");
+        // std::println("FLIPPED NORMALS FOR DEBUG RUN");
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("norm est {:.2f}", dur);
+        std::println("norm est {:.2f}", dur);
         return normals;
     }
 }

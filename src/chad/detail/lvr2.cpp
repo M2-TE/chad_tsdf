@@ -31,7 +31,7 @@ namespace chad::detail {
             uint32_t depth = 0;
             while(true) {
                 auto child_i = path_child[depth]++;
-                // fmt::println("depth: {:2}, child: {:1}", depth, child_i);
+                // std::println("depth: {:2}, child: {:1}", depth, child_i);
 
                 // when all children at this depth were iterated
                 if (child_i == 8) {
@@ -85,7 +85,7 @@ namespace chad::detail {
                         // float perf_signed_distance = glm::length(leaf_pos) - 5.0f;
                         // signed_distance = perf_signed_distance;
                         // signed_distance = -signed_distance;
-                        // fmt::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
+                        // std::println("sd {:.2f}, perf {:.2f}, pos {:.2f} {:.2f} {:.2f}", signed_distance, perf_signed_distance, leaf_pos.x, leaf_pos.y, leaf_pos.z);
 
                         // create query point
                         size_t querypoint_i = m_queryPoints.size();
@@ -168,7 +168,7 @@ namespace chad::detail {
             (void)j;
             (void)k;
             (void)distance;
-            fmt::println("LVR2 addLatticePoint() unimplemented");
+            std::println("LVR2 addLatticePoint() unimplemented");
         }
         void saveGrid(std::string file) override {
             (void)file;
@@ -224,7 +224,7 @@ namespace chad::detail {
             (void)bb;
             (void)duplicates;
             (void)comparePrecision;
-            fmt::println("LVR2 getMesh(mesh, bb, duplicates, comparePrecision) unimplemented");
+            std::println("LVR2 getMesh(mesh, bb, duplicates, comparePrecision) unimplemented");
         }
         void getMesh(lvr2::BaseMesh<BaseVecT> &mesh) override {
             // Status message for mesh generation

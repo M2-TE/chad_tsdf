@@ -54,6 +54,11 @@ namespace chad {
         // finalize current active submap and octree
         void finalize_active_submap();
 
+        // PLACEHOLDERS
+        void featurematching();
+        auto merge_submaps(Submap::Handle submap_a, Submap::Handle submap_b) -> Submap::Handle;
+        auto merge_all_submaps() -> Submap::Handle;
+
     public:
         const float _sdf_res;
         const float _sdf_trunc;

@@ -9,6 +9,7 @@ namespace chad::detail {
         uint16_t ref_count;
     };
     static_assert(sizeof(NodeHead) == 4);
+
     struct NodeSegment {
         NodeSegment(uint32_t val) {
             child_addr = val;
@@ -19,6 +20,7 @@ namespace chad::detail {
         };
     };
     static_assert(sizeof(NodeSegment) == 4);
+
     struct Node {
         NodeHead head;
         std::array<uint32_t, 8> children; // actual size may be smaller, accessing without checking child mask is UB
@@ -126,7 +128,7 @@ namespace chad::detail {
         // add a DAG leaf cluster and return address of new or existing one
         auto inline add_lc(LeafCluster lc) -> uint32_t {
             auto& lcs = _leaf_clusters;
-            
+
             // append a placeholder node
             uint32_t new_addr = lcs._uniques_n + 1;
             if (lcs._raw_data.size() <= new_addr) lcs._raw_data.push_back(lc);
@@ -166,7 +168,7 @@ namespace chad::detail {
                 placeholder.head.child_mask |= 1 << i;
                 children_n++;
             }
-            
+
             // emplace placeholder node if it's a new one
             auto [old_addr_it, new_addr_b] = nodes._addr_set.emplace(placeholder_addr);
             if (new_addr_b) {

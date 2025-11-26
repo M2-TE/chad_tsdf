@@ -44,7 +44,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("total    {:.2f}\n", dur);
+        std::println("total    {:.2f}\n", dur);
     }
     auto TSDFMap::insert_octree(detail::Octree* octree_p) -> Submap::Roots {
         using namespace chad::detail;
@@ -138,7 +138,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("sub fin  {:.2f}\n", dur);
+        std::println("sub fin  {:.2f}\n", dur);
 
         return roots;
     }
@@ -152,63 +152,67 @@ namespace chad {
         _active_octree_p->clear();
     }
 
-    // auto TSDFMap::merge_submaps(Submap::Handle submap_handle_a, Submap::Handle submap_handle_b) -> Submap::Handle {
-    //     using namespace chad::detail;
-    //     auto beg = std::chrono::high_resolution_clock::now();
+    auto TSDFMap::merge_submaps(Submap::Handle submap_handle_a, Submap::Handle submap_handle_b) -> Submap::Handle {
+        auto beg = std::chrono::high_resolution_clock::now();
 
-    //     // data is temporarily written to these octrees for better memory access
-    //     Octree octree_a, octree_b;
-    //     octree_a.insert(*_dag_p, _submaps[submap_handle_a], _sdf_trunc);
-    //     octree_b.insert(*_dag_p, _submaps[submap_handle_b], _sdf_trunc);
+        // data is temporarily written to these octrees for better memory access
+        Octree octree_a, octree_b;
+        octree_a.insert(*_dag_p, _submaps[submap_handle_a], _sdf_trunc);
+        octree_b.insert(*_dag_p, _submaps[submap_handle_b], _sdf_trunc);
 
-    //     // invert error to get delta from b to a
-    //     // assumes a is global coordinate frame
-    //     glm::vec3 error_delta_b_to_a = -_submaps[submap_handle_b]._pose_err.get_position<glm::vec3>();
-    //     merge_octrees(octree_a, octree_b, error_delta_b_to_a, _sdf_res);
+        // invert error to get delta from b to a
+        // assumes a is global coordinate frame
+        glm::vec3 error_delta_b_to_a = -_submaps[submap_handle_b]._pose_err.get_position<glm::vec3>();
+        octree_a.insert(octree_b, error_delta_b_to_a, _sdf_res);
 
-    //     // create a new DAG from the merged octree
-    //     Submap submap = finalize(&octree_a);
+        // create a new DAG from the merged octree
+        Submap::Roots roots = insert_octree(&octree_a);
+        Submap::Handle handle = _submaps.size();
+        Submap& submap = _submaps.emplace_back();
+        submap._roots = roots;
 
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    //     fmt::println("oct merge {:.2f}", dur);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        std::println("oct merge {:.2f}", dur);
 
-    //     return submap;
-    // }
-    // auto TSDFMap::merge_all_submaps() -> Submap::Handle {
-    //     using namespace chad::detail;
-    //     auto beg = std::chrono::high_resolution_clock::now();
+        return handle;
+    }
+    auto TSDFMap::merge_all_submaps() -> Submap::Handle {
+        using namespace chad::detail;
+        auto beg = std::chrono::high_resolution_clock::now();
 
-    //     // assume first submap is the global coordinate frame
-    //     const Submap& submap_a = _submaps.front();
+        // assume first submap is the global coordinate frame
+        const Submap& submap_a = _submaps.front();
 
-    //     // create temporary octrees for faster memory access
-    //     Octree octree_a, octree_b;
-    //     octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
+        // create temporary octrees for faster memory access
+        Octree octree_a, octree_b;
+        octree_a.insert(*_dag_p, submap_a, _sdf_trunc);
 
-    //     if (_submaps.size() == 1) return submap_a;
-    //     for (uint32_t i = 1; i < _submaps.size(); i++) {
-    //         const Submap& submap_b = _submaps[i];
+        if (_submaps.size() == 1) return Submap::Handle(0);
+        for (uint32_t i = 1; i < _submaps.size(); i++) {
+            const Submap& submap_b = _submaps[i];
 
-    //         // create simple octree from submap
-    //         octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
+            // create simple octree from submap
+            octree_b.insert(*_dag_p, submap_b, _sdf_trunc);
 
-    //         // invert error to get delta from b to a
-    //         // assumes a is global coordinate frame
-    //         glm::vec3 error_delta_b_to_a = -submap_b._pose_err.get_position<glm::vec3>();
-    //         merge_octrees(octree_a, octree_b, error_delta_b_to_a, _sdf_res);
-    //         octree_b.clear();
-    //     }
+            // invert error to get delta from b to a
+            // assumes a is global coordinate frame
+            glm::vec3 error_delta_b_to_a = -submap_b._pose_err.get_position<glm::vec3>();
+            octree_a.insert(octree_b, error_delta_b_to_a, _sdf_res);
+            octree_b.clear();
+        }
 
+        // create a new DAG from the merged octree
+        Submap::Roots roots = insert_octree(&octree_a);
+        Submap::Handle handle = _submaps.size();
+        Submap& submap = _submaps.emplace_back();
+        submap._roots = roots;
 
-    //     // create a new DAG from the merged octree
-    //     Submap submap = finalize(&octree_a);
-
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-    //     fmt::println("oct merge {:.2f}", dur);
-    //     return submap;
-    // }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
+        std::println("oct merge {:.2f}", dur);
+        return handle;
+    }
 
     // TODO: merge all submaps first
     void TSDFMap::reconstruct(const std::string& filename) {
@@ -219,13 +223,40 @@ namespace chad {
 
         // create meshes from all submaps
         for (uint32_t i = 0; i < _submaps.size(); i++) {
-            std::string str = fmt::format("{}_{}", i, filename);
+            std::string str = std::format("{}_{}", i, filename);
             reconstruct(str, i);
         }
     }
     void TSDFMap::reconstruct(const std::string& filename, Submap::Handle submap_handle) {
         // reconstruct 3D mesh using LVR2
-        fmt::println("reconstructing a submap");
+        std::println("reconstructing a submap");
         detail::reconstruct(*_dag_p, _submaps[submap_handle], _sdf_res, _sdf_trunc, filename);
+    }
+
+    // DEBUG
+    void TSDFMap::featurematching() {
+        // // 2D slices to compare
+        // cv::Mat2d slice_a, slice_b;
+        // slice_a.create(50, 50);
+        // slice_b.create(50, 50);
+
+        // // detect features
+        // std::vector<cv::KeyPoint> keypoints_a, keypoints_b;
+        // auto feat_detector = brisk::BriskFeatureDetector{ 34, 4, false };
+        // feat_detector.detect(slice_a, keypoints_a);
+        // feat_detector.detect(slice_b, keypoints_b);
+
+        
+        // // extract descriptors
+        // cv::Mat2d descriptors_a, descriptors_b;
+        // auto description_extractor = brisk::BriskDescriptorExtractor{ false, false, brisk::BriskDescriptorExtractor::Version::briskV2 };
+        // description_extractor.compute(slice_a, keypoints_a, descriptors_b);
+
+        // // perform matching
+        // std::vector<std::vector<cv::DMatch>> matches;
+        // brisk::BruteForceMatcher matcher;
+        // // automatic threshhold
+        // float max_distance = 55.0f * float(descriptors_a.cols) / 48.0f;
+        // matcher.radiusMatch(descriptors_b, descriptors_a, matches, max_distance);
     }
 }

@@ -167,7 +167,7 @@ namespace chad::detail {
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-            fmt::println("oct  upd {:.2f}", dur);
+            std::println("oct  upd {:.2f}", dur);
         }
         // insert TSDFs from compressed DAG octree submap
         void insert(const DAG& dag, const Submap& submap, float sdf_trunc) {
