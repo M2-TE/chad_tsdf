@@ -38,14 +38,18 @@ namespace chad {
 
         void update_pose() {
             // calc average position of submap
-            glm::dvec3 position{ 0, 0, 0 };
+            std::array<double, 3> position;
             for (const auto& pose: _poses) {
-                position += pose.get_position<glm::dvec3>();
+                position[0] += double(pose._position[0]);
+                position[1] += double(pose._position[1]);
+                position[2] += double(pose._position[2]);
             }
-            position /= double(_poses.size());
-            _pose_avg._position[0] = float(position.x);
-            _pose_avg._position[1] = float(position.y);
-            _pose_avg._position[2] = float(position.z);
+            position[0] /= double(_poses.size());
+            position[1] /= double(_poses.size());
+            position[2] /= double(_poses.size());
+            _pose_avg._position[0] = float(position[0]);
+            _pose_avg._position[1] = float(position[1]);
+            _pose_avg._position[2] = float(position[2]);
 
             // // TODO: rotation
             // glm::quat rotation = glm::identity<glm::quat>();
