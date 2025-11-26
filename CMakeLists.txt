@@ -22,6 +22,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/i
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # handle dependencies
+include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
 # include("cmake/gtsam.cmake")

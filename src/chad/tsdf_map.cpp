@@ -44,7 +44,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        std::println("total    {:.2f}\n", dur);
+        fmt::println("total    {:.2f}\n", dur);
     }
     auto TSDFMap::insert_octree(detail::Octree* octree_p) -> Submap::Roots {
         using namespace chad::detail;
@@ -138,7 +138,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        std::println("sub fin  {:.2f}\n", dur);
+        fmt::println("sub fin  {:.2f}\n", dur);
 
         return roots;
     }
@@ -173,7 +173,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        std::println("oct merge {:.2f}", dur);
+        fmt::println("oct merge {:.2f}", dur);
 
         return handle;
     }
@@ -210,7 +210,7 @@ namespace chad {
 
         auto end = std::chrono::high_resolution_clock::now();
         auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        std::println("oct merge {:.2f}", dur);
+        fmt::println("oct merge {:.2f}", dur);
         return handle;
     }
 
@@ -223,13 +223,13 @@ namespace chad {
 
         // create meshes from all submaps
         for (uint32_t i = 0; i < _submaps.size(); i++) {
-            std::string str = std::format("{}_{}", i, filename);
+            std::string str = fmt::format("{}_{}", i, filename);
             reconstruct(str, i);
         }
     }
     void TSDFMap::reconstruct(const std::string& filename, Submap::Handle submap_handle) {
         // reconstruct 3D mesh using LVR2
-        std::println("reconstructing a submap");
+        fmt::println("reconstructing a submap");
         detail::reconstruct(*_dag_p, _submaps[submap_handle], _sdf_res, _sdf_trunc, filename);
     }
 
