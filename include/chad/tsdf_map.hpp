@@ -41,6 +41,15 @@ namespace chad {
             insert_pointcloud(points, { x, y, z });
         }
 
+        // finalize current active submap and octree
+        void finalize_active_submap();
+        auto get_submap(Submap::Handle handle) -> Submap& { // TODO: should return const
+            return _submaps[handle];
+        };
+        void featurematching(); // PLACEHOLDER
+        auto merge_submaps(Submap::Handle submap_a, Submap::Handle submap_b) -> Submap::Handle; // PLACEHOLDER
+        auto merge_all_submaps() -> Submap::Handle; // PLACEHOLDER
+
         // reconstruct 3D mesh and write it to disk
         void reconstruct(const std::string& filename);
         // reconstruct 3D mesh and write it to disk
@@ -51,13 +60,6 @@ namespace chad {
         void insert_pointcloud(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
         // insert finalized octree as read-only tree of hashed nodes
         auto insert_octree(detail::Octree* octree_p) -> Submap::Roots;
-        // finalize current active submap and octree
-        void finalize_active_submap();
-
-        // PLACEHOLDERS
-        void featurematching();
-        auto merge_submaps(Submap::Handle submap_a, Submap::Handle submap_b) -> Submap::Handle;
-        auto merge_all_submaps() -> Submap::Handle;
 
     public:
         const float _sdf_res;
