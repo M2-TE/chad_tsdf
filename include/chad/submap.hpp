@@ -47,12 +47,12 @@ namespace chad {
             _pose_avg._position[1] = float(position.y);
             _pose_avg._position[2] = float(position.z);
 
-            // TODO: rotation
-            glm::quat rotation = glm::identity<glm::quat>();
-            _pose_avg._rotation[0] = rotation.x;
-            _pose_avg._rotation[1] = rotation.y;
-            _pose_avg._rotation[2] = rotation.z;
-            _pose_avg._rotation[3] = rotation.w;
+            // // TODO: rotation
+            // glm::quat rotation = glm::identity<glm::quat>();
+            // _pose_avg._rotation[0] = rotation.x;
+            // _pose_avg._rotation[1] = rotation.y;
+            // _pose_avg._rotation[2] = rotation.z;
+            // _pose_avg._rotation[3] = rotation.w;
         }
 
         Roots _roots;
