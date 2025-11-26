@@ -228,9 +228,18 @@ namespace chad {
         }
     }
     void TSDFMap::reconstruct(const std::string& filename, Submap::Handle submap_handle) {
+        std::vector<std::array<uint8_t, 3>> colors {
+            {255, 0, 0},
+            {0, 255, 0},
+            {0, 0, 255},
+            {255, 255, 0},
+            {0, 255, 255},
+            {255, 0, 255},
+            {255, 255, 255},
+        };
         // reconstruct 3D mesh using LVR2
         fmt::println("reconstructing a submap");
-        detail::reconstruct(*_dag_p, _submaps[submap_handle], _sdf_res, _sdf_trunc, filename);
+        detail::reconstruct(*_dag_p, _submaps[submap_handle], _sdf_res, _sdf_trunc, filename, colors[submap_handle % colors.size()]);
     }
 
     // DEBUG

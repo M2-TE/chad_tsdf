@@ -266,7 +266,7 @@ namespace chad::detail {
         shared_ptr<ChadGrid<BaseVecT, BoxT>> m_grid;
     };
 
-    void reconstruct(const DAG& dag, const Submap& submap, float voxel_res, float trunc_dist, std::string_view filename) {
+    void reconstruct(const DAG& dag, const Submap& submap, float voxel_res, float trunc_dist, std::string_view filename, const std::array<uint8_t, 3>& col) {
         // begin 3D mesh reconstruction using LVR2
         typedef lvr2::BaseVector<float> VecT;
         typedef lvr2::BilinearFastBox<VecT> BoxT;
@@ -290,12 +290,17 @@ namespace chad::detail {
         auto norm_face = lvr2::calcFaceNormals(mesh);
         auto norm_vert = lvr2::calcVertexNormals(mesh, norm_face);
         lvr2::MeshBufferPtr mesh_buffer_p;
-        if (false) {
+        if (true) {
             // coloring
             auto cluster_map = lvr2::planarClusterGrowing(mesh, norm_face, 0.85);
             lvr2::ClusterPainter cluster_painter { cluster_map };
             lvr2::ColorGradient::GradientType t = lvr2::ColorGradient::gradientFromString("GREY");
-            auto cluster_colors = boost::optional<lvr2::DenseClusterMap<lvr2::RGB8Color>>(cluster_painter.colorize(mesh, t));
+            lvr2::DenseClusterMap<lvr2::RGB8Color> dense_cluster_map = cluster_painter.colorize(mesh, t);
+            for (auto key: dense_cluster_map) {
+                auto& val = dense_cluster_map.get(key).value();
+                val = col;
+            }
+            auto cluster_colors = boost::optional<lvr2::DenseClusterMap<lvr2::RGB8Color>>(dense_cluster_map);
             lvr2::TextureFinalizer<lvr2::BaseVector<float>> finalizer { cluster_map };
             finalizer.setClusterColors(*cluster_colors);
             finalizer.setVertexNormals(norm_vert);
