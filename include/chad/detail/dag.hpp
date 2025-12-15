@@ -37,10 +37,10 @@ namespace chad::detail {
                 const void* raw_addr_p = &_node_data[addr];
                 const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
                 // count children
-                uint8_t child_count = std::popcount(node.head.child_mask);
+                uint32_t child_count = std::popcount(node.head.child_mask);
                 // hash entire node
                 uint64_t hash = 0;
-                for (uint8_t i = 0; i < child_count; i++) {
+                for (uint32_t i = 0; i < child_count; i++) {
                     hash = gtl::HashState::combine(hash, node.children[i]);
                 }
                 return hash;
