@@ -1,12 +1,24 @@
 #pragma once
 #include <vector>
 #include <string>
-#include "chad/submap.hpp"
+#include "chad/indices.hpp"
+
+#if __has_include(<glm/vec3.hpp>) || defined(CHAD_FORCE_GLM)
+#   include <glm/vec3.hpp>
+#endif
+
+#if __has_include(<Eigen/Eigen>) || defined(CHAD_FORCE_EIGEN)
+#   include <Eigen/Eigen>
+#endif
+
+namespace ndd {
+};
 
 namespace chad {
     namespace detail {
-        class DAG;
         struct Octree;
+        struct DAGStorage;
+        struct MapOptimizer;
     }
 
     class TSDFMap {
@@ -21,11 +33,50 @@ namespace chad {
         // destructor to free allocations
         ~TSDFMap();
 
-        // Insert pointcloud alongside scanner position. VEC3 can be std::array<float, 3>, glm::vec3 or Eigen::Vector3f.
-        template<typename VEC3>
-        void inline insert(const std::vector<VEC3>& points, const VEC3& position);
+        #if __has_include(<glm/vec3.hpp>) || defined(CHAD_FORCE_GLM)
+        // insert pointcloud alongside scanner position
+        void inline insert(const std::vector<glm::vec3>& points, const glm::vec3& position) {
+            // when using unpadded vec3, we can avoid copies
+            if (sizeof(glm::vec3) == 12) {
+                const float* points_p = &points[0].x;
+                insert(points_p, points.size(), position.x, position.y, position.z);
+            }
+            else {
+                std::vector<std::array<float, 3>> points_vec;
+                points_vec.reserve(points.size());
+                for (const auto& point: points) {
+                    points_vec.push_back({ point.x, point.y, point.z });
+                }
+                insert_pointcloud(points_vec, { position.x, position.y, position.z });
+            }
+        }
+        #endif
+        
+        #if __has_include(<Eigen/Eigen>) || defined(CHAD_FORCE_EIGEN)
+        // insert pointcloud alongside scanner position
+        void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position) {
+            // when using unpadded Vector3f, we can avoid copies
+            if (sizeof(Eigen::Vector3f) == 12 && false /*disable this temporarily*/) {
+                const float* points_p = points[0].data();
+                insert(points_p, points.size(), position.x(), position.y(), position.z());
+            }
+            else {
+                std::vector<std::array<float, 3>> points_vec;
+                points_vec.reserve(points.size());
+                for (const auto& point: points) {
+                    points_vec.push_back({ point.x(), point.y(), point.z() });
+                }
+                insert_pointcloud(points_vec, { position.x(), position.y(), position.z() });
+            }
+        }
+        #endif
+
+        // insert pointcloud alongside scanner position
+        void inline insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
+            insert_pointcloud(points, position);
+        }
         // insert pointcloud as a raw array of repeating x,y,z coordinates
-        void inline insert(const float* points_p, size_t points_count, const float* position_p) {
+        void inline insert(const float* points_p, std::size_t points_count, const float* position_p) {
             const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
             // use points_p as the buffer for new vector (as vec_p), not requiring any copies
             const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
@@ -34,7 +85,7 @@ namespace chad {
             insert_pointcloud(points, position);
         }
         // insert pointcloud as a raw array of repeating x,y,z coordinates
-        void inline insert(const float* points_p, size_t points_count, float x, float y, float z) {
+        void inline insert(const float* points_p, std::size_t points_count, float x, float y, float z) {
             const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
             // use points_p as the buffer for new vector (as vec_p), not requiring any copies
             const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
@@ -43,38 +94,29 @@ namespace chad {
 
         // finalize current active submap and octree
         void finalize_active_submap();
-        auto get_submap(Submap::Handle handle) -> Submap& { // TODO: should return const
-            return _submaps[handle];
-        };
-        void featurematching(); // PLACEHOLDER
-        auto merge_submaps(Submap::Handle submap_a, Submap::Handle submap_b) -> Submap::Handle; // PLACEHOLDER
-        auto merge_all_submaps() -> Submap::Handle; // PLACEHOLDER
-
         // reconstruct 3D mesh and write it to disk
         void reconstruct(const std::string& filename);
         // reconstruct 3D mesh and write it to disk
-        void reconstruct(const std::string& filename, Submap::Handle submap_handle);
+        void reconstruct(const std::string& filename, SubmapIndex submap_handle);
 
     private:
-        // insert points into currently active octree
+        // insert points into currently active octree (internal function used by all insert(...) funcs)
         void insert_pointcloud(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
         // insert finalized octree as read-only tree of hashed nodes
-        auto insert_octree(detail::Octree* octree_p) -> Submap::Roots;
+        auto insert_octree(detail::Octree* octree_p) -> RootIndices;
 
     public:
         const float _sdf_res;
         const float _sdf_trunc;
         const float _submap_fin_delta;
-        const uint32_t _slice_count = 3; // TODO: not yet customizable
 
     private:
-        using DAG = detail::DAG;
-        using Octree = detail::Octree;
         // transient
-        Submap _active_submap; // currently active submap storing metadata
-        Octree* _active_octree_p; // currently active octree storing TSDF voxels
+        ScanIndex _active_scan_start = 0; // first scan index of active submap
+        ScanIndex _active_scan_final = 0; // final scan index of active submap
+        detail::Octree* _active_octree_p; // currently active octree storing TSDF voxels
         // persistent
-        std::vector<Submap> _submaps; // storage for all finalized submaps
-        DAG* _dag_p; // storage for all hashed nodes
+        detail::DAGStorage*   _dag_storage_p; // storage for all hashed nodes
+        detail::MapOptimizer* _map_optimizer_p; // loop closure detection and pose optimization
     };
 }

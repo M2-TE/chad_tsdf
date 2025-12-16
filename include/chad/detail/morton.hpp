@@ -6,11 +6,11 @@
 namespace chad::detail {
     struct MortonCode {
         MortonCode(uint64_t value): _value(value) {}
-        MortonCode(const glm::ivec3& vox_pos) noexcept {
+        MortonCode(const glm::ivec3& vox_pos) {
             encode(vox_pos);
         }
 
-        void inline encode(const glm::ivec3& vox_pos) noexcept {
+        void inline encode(const glm::ivec3& vox_pos) {
             // truncate from 32-bit int to 21-bit int
             uint32_t x, y, z;
             x = (1 << 20) + uint32_t(vox_pos.x);
@@ -18,7 +18,7 @@ namespace chad::detail {
             z = (1 << 20) + uint32_t(vox_pos.z);
             _value = uint64_t(libmorton::morton3D_64_encode(x, y, z));
         }
-        auto inline decode() const noexcept -> glm::ivec3 {
+        auto inline decode() const -> glm::ivec3 {
             uint_fast32_t x, y, z;
             libmorton::morton3D_64_decode(_value, x, y, z);
             // expand from 21-bit uint back to 32-bit int
@@ -31,19 +31,19 @@ namespace chad::detail {
             fmt::println("{}", std::bitset<63>(_value).to_string());
         }
 
-        bool inline operator==(const MortonCode& other) const noexcept {
+        bool inline operator==(const MortonCode& other) const {
             return _value == other._value;
         }
-        bool inline operator<(const MortonCode& other) const noexcept {
+        bool inline operator<(const MortonCode& other) const {
             return _value < other._value;
         }
-        bool inline operator>(const MortonCode& other) const noexcept {
+        bool inline operator>(const MortonCode& other) const {
             return _value > other._value;
         }
-        auto friend operator&(MortonCode lhs, const MortonCode& rhs) noexcept -> MortonCode {
+        auto friend operator&(MortonCode lhs, const MortonCode& rhs) -> MortonCode {
             return lhs._value & rhs._value;
         }
-        auto friend operator&(MortonCode lhs, const uint64_t& rhs) noexcept -> MortonCode {
+        auto friend operator&(MortonCode lhs, const uint64_t& rhs) -> MortonCode {
             return lhs._value & rhs;
         }
         
@@ -101,7 +101,7 @@ namespace chad::detail {
 namespace std {
     template<>
     struct hash<chad::detail::MortonCode> {
-        size_t inline operator()(const chad::detail::MortonCode& mc) const noexcept {
+        size_t inline operator()(const chad::detail::MortonCode& mc) const {
             return mc._value;
         }
     };

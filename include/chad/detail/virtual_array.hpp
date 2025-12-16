@@ -59,33 +59,33 @@ namespace chad::detail {
         auto inline back() -> T& {
             return _virt_mem_p[_size - 1];
         }
-        auto inline data() const noexcept -> const T* {
+        auto inline data() const -> const T* {
             return _virt_mem_p;
         }
-        auto inline data() noexcept -> T* {
+        auto inline data() -> T* {
             return _virt_mem_p;
         }
 
-        auto inline begin() const noexcept -> const_iterator {
+        auto inline begin() const -> const_iterator {
             return _virt_mem_p;
         }
-        auto inline begin() noexcept -> iterator {
+        auto inline begin() -> iterator {
             return _virt_mem_p;
         }
-        auto inline end() const noexcept -> const_iterator {
+        auto inline end() const -> const_iterator {
             return _virt_mem_p + _size;
         }
-        auto inline end() noexcept -> iterator {
+        auto inline end() -> iterator {
             return _virt_mem_p + _size;
         }
 
-        auto inline size() const noexcept -> size_t {
+        auto inline size() const -> size_t {
             return _size;
         }
-        auto inline capacity() const noexcept -> size_t {
+        auto inline capacity() const -> size_t {
             return _capacity;
         }
-        void inline resize(size_t new_size) noexcept {
+        void inline resize(size_t new_size) {
             // no need to worry about de-/reallocation
             _size = new_size;
         }

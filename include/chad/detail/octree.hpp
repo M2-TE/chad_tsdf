@@ -1,7 +1,7 @@
 #pragma once
-#include <chad/submap.hpp>
-#include "chad/detail/dag.hpp"
+#include "chad/indices.hpp"
 #include "chad/detail/morton.hpp"
+#include "chad/detail/dag_storage.hpp"
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
@@ -170,17 +170,17 @@ namespace chad::detail {
             fmt::println("oct  upd {:.2f}", dur);
         }
         // insert TSDFs from compressed DAG octree submap
-        void insert(const DAG& dag, const Submap& submap, float sdf_trunc) {
+        void insert(const DAGStorage& dag, RootIndices roots, float sdf_trunc) {
             // read-only trackers for submap
             MortonCode path_mc{ 0 };
-            std::array<uint8_t, DAG::MAX_DEPTH> path_child; // child indices along path
-            std::array<uint32_t, DAG::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
-            std::array<uint32_t, DAG::MAX_DEPTH> addr_wght; // weight addresses along path
+            std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
             path_child.fill(0);
             addr_tsdf.fill(0);
             addr_wght.fill(0);
-            addr_tsdf[0] = submap._roots._tsdfs;
-            addr_wght[0] = submap._roots._weights;
+            addr_tsdf[0] = roots._tsdfs;
+            addr_wght[0] = roots._weights;
 
             // iterate both trees to build separate octrees
             uint32_t depth = 0;
@@ -193,7 +193,7 @@ namespace chad::detail {
                     else break; // exit main loop
                 }
                 // node contains node children
-                else if (depth < DAG::MAX_DEPTH - 1) {
+                else if (depth < DAGStorage::MAX_DEPTH - 1) {
                     // try to find the child in current node
                     uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
                     uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
@@ -209,8 +209,8 @@ namespace chad::detail {
                 // node contains leaf children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    uint32_t child_addr_tsdf = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
-                    uint32_t child_addr_wght = dag.get_child_addr(DAG::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                    uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
                     if (child_addr_tsdf == 0) continue; // only need to check one
 
                     // fetch actual leaf cluster
@@ -247,8 +247,8 @@ namespace chad::detail {
         // insert TSDFs from another octree
         void insert(const Octree& octree_b, glm::vec3 error_b_to_a, float sdf_res) {
             // track node traversal
-            std::array<const Octree::Node*, DAG::MAX_DEPTH + 1> path_nodes;
-            std::array<uint8_t, DAG::MAX_DEPTH + 1> path_child_indices;
+            std::array<const Octree::Node*, DAGStorage::MAX_DEPTH + 1> path_nodes;
+            std::array<uint8_t, DAGStorage::MAX_DEPTH + 1> path_child_indices;
             path_nodes[0] = &octree_b.get_node(octree_b.get_root()); // start at root
             path_child_indices.fill(0);
 
@@ -263,7 +263,7 @@ namespace chad::detail {
                 }
 
                 // node contains node children
-                else if (depth < DAG::MAX_DEPTH) {
+                else if (depth < DAGStorage::MAX_DEPTH) {
                     const Octree::Node& node = *path_nodes[depth];
                     uint32_t child_addr = node[child_i];
 
@@ -283,7 +283,7 @@ namespace chad::detail {
 
                     // reconstruct morton code from path
                     uint64_t code = 0;
-                    for (uint64_t k = 0; k < DAG::MAX_DEPTH + 1; k++) {
+                    for (uint64_t k = 0; k < DAGStorage::MAX_DEPTH + 1; k++) {
                         uint64_t part = path_child_indices[k] - 1;
                         code |= part << uint64_t(60 - k*3);
                     }
@@ -356,8 +356,7 @@ namespace chad::detail {
                     Octree::Leaf& leaf_a = insert(glm::ivec3(leaf_voxel_a_coord_a));
                     leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ * wght_XYZ;
                     leaf_a._signed_distance /= float(leaf_a._weight) + wght_XYZ;
-                    // avg out the weights (adding them gives too much weight)
-                    leaf_a._weight = (leaf_a._weight + uint32_t(wght_XYZ)) / 2u;
+                    leaf_a._weight = std::min(leaf_a._weight, uint32_t(wght_XYZ));
                 }
             }
         }

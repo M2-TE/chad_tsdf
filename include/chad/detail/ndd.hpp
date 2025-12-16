@@ -254,8 +254,12 @@ namespace ndd {
         AlignmentKey _alignment_key;
     };
 
-    // find loop closure match for descriptor of given index with other (externally managed) descriptors 
-    void static detect_loop_closure(const std::vector<Descriptor>& descriptors, const std::vector<Descriptor::LookupKey>& lookup_keys, uint32_t descriptor_i) {
+    // find loop closure match for descriptor of given index with other (externally managed) descriptors
+    [[maybe_unused]]
+    void inline detect_loop_closure(
+            const std::vector<Descriptor>& descriptors,
+            const std::vector<Descriptor::LookupKey>& lookup_keys,
+            uint32_t descriptor_i) {
         auto& curr_desc = descriptors[descriptor_i];
         auto& curr_key = lookup_keys[descriptor_i];
 

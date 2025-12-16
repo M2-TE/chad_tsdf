@@ -32,7 +32,7 @@ namespace chad::detail {
             FncHash(const VirtualArray<NodeSegment>& node_data): _node_data(node_data) {
             }
 
-            auto inline operator()(const uint32_t addr) const noexcept -> uint64_t {
+            auto inline operator()(const uint32_t addr) const -> uint64_t {
                 // get node
                 const void* raw_addr_p = &_node_data[addr];
                 const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
@@ -52,7 +52,7 @@ namespace chad::detail {
             FncEq(const VirtualArray<NodeSegment>& node_data): _node_data(node_data) {
             }
 
-            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const noexcept {
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const {
                 // compare child masks
                 if (_node_data[addr_a].head.child_mask != _node_data[addr_b].head.child_mask) return false;
 
@@ -89,7 +89,7 @@ namespace chad::detail {
             FncHash(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
             }
 
-            auto inline operator()(const uint32_t addr) const noexcept -> uint64_t {
+            auto inline operator()(const uint32_t addr) const -> uint64_t {
                 // use the 64-bit value of the leaf cluster as the hash
                 return _lc_data[addr]._value;
             }
@@ -100,7 +100,7 @@ namespace chad::detail {
             FncEq(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
             }
 
-            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const noexcept {
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const {
                 // compare leaf clusters values directly
                 return _lc_data[addr_a]._value == _lc_data[addr_b]._value;
             }
@@ -120,11 +120,11 @@ namespace chad::detail {
         VirtualArray<LeafCluster> _raw_data; // leaf cluster data
         gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
     };
-}
+} // chad::detail
 
 namespace chad::detail {
-    class DAG {
-    public:
+    struct DAGStorage {
+        public:
         // add a DAG leaf cluster and return address of new or existing one
         auto inline add_lc(LeafCluster lc) -> uint32_t {
             auto& lcs = _leaf_clusters;
@@ -214,14 +214,14 @@ namespace chad::detail {
             else return 0;
         }
 
-    public:
+        public:
         // 21 levels total
         static constexpr uint64_t MAX_DEPTH = 20;
 
-    private:
+        private:
         // 20 levels of standard nodes
         std::array<NodeLevel, MAX_DEPTH> _node_levels;
         // 1 level of leaf clusters
         LeafClusterLevel _leaf_clusters;
     };
-}
+} // chad::detail

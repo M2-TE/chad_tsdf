@@ -10,7 +10,7 @@ namespace chad {
         // Wrapper for cluster of 8 TSDF values
         struct TSDFs {
             // set 8 bits to represent signed distance, normalized within truncation distance
-            void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) noexcept {
+            void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
                 
@@ -26,12 +26,12 @@ namespace chad {
                 _value |= uint64_t(sd) << uint64_t(leaf_i * 8);
             }
             // set 8 bits to represent an empty leaf
-            void inline set_empty(uint8_t leaf_i) noexcept {
+            void inline set_empty(uint8_t leaf_i) {
                 // bits 0xff for signed distance signify an empty leaf
                 _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
             }
             // retrieve signed distance from single leaf if it is not empty
-            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const noexcept -> std::pair<float, bool> {
+            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const -> std::pair<float, bool> {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
 
@@ -55,15 +55,15 @@ namespace chad {
         // Wrapper for cluster of 8 weights
         struct Weights {
             // set 8 bits to represent a single weight
-            void inline set(uint8_t leaf_i, uint8_t weight) noexcept {
+            void inline set(uint8_t leaf_i, uint8_t weight) {
                 uint8_t truncated_weight = std::min<uint8_t>(weight, std::numeric_limits<uint8_t>::max());
                 _value |= uint64_t(truncated_weight) << uint64_t(leaf_i * 8);
             }
             // set 8 bits to represent an empty leaf (does nothing, empty bits are 0x0)
-            void inline set_empty(uint8_t) noexcept {
+            void inline set_empty(uint8_t) {
             }
             // retrieve signed distance from single leaf if it is not empty
-            auto try_get(uint8_t leaf_i) const noexcept -> std::pair<uint8_t, bool> {
+            auto try_get(uint8_t leaf_i) const -> std::pair<uint8_t, bool> {
                 // get the 8 bits corresponding to the requested leaf
                 uint64_t leaf_bits = _value >> uint64_t(leaf_i * 8);
                 leaf_bits &= 0xff; // mask out other bits
@@ -72,7 +72,7 @@ namespace chad {
                 if (leaf_bits == 0) return { 0, false };
                 else return { leaf_bits, true };
             }
-            auto get(uint8_t leaf_i) const noexcept -> uint8_t {
+            auto get(uint8_t leaf_i) const -> uint8_t {
                 // get the 8 bits corresponding to the requested leaf
                 uint64_t leaf_bits = _value >> uint64_t(leaf_i * 8);
                 leaf_bits &= 0xff; // mask out other bits
@@ -102,7 +102,7 @@ namespace chad {
         bool inline is_empty() {
             return _value == std::numeric_limits<uint64_t>::max();
         }
-        bool inline operator==(const LeafCluster& other) const noexcept {
+        bool inline operator==(const LeafCluster& other) const {
             return _value == other._value;
         }
 
