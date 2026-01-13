@@ -25,12 +25,11 @@ namespace chad::detail {
         MapOptimizer() = default;
         ~MapOptimizer() = default;
 
-        // adds a new scan and creates descriptors for it
-        void add_scan(const std::vector<std::array<float, 3>>& points, const Pose& pose) {
+        // adds a new scan and creates a descriptor + lookup key for it
+        void add_scan(const std::vector<glm::vec3>& points, const Pose& pose) {
             _scan_poses.push_back(pose);
-            // _scan_descriptors.emplace_back(); // TODO
-            // _scan_alignment_keys.emplace_back(); // TODO
-            auto f = 1235245; // DEBUG
+            _scan_descriptors.emplace_back(points, pose._position);
+            _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
         }
 
         // finalizes and adds a submap
@@ -64,13 +63,13 @@ namespace chad::detail {
         }
 
         // persistent data per submap
-        std::vector<Submap> _submaps;
+        std::vector<Submap>      _submaps;
         std::vector<SubmapIndex> _merged_submaps;
 
         // persistent data per scan
-        std::vector<Pose>                          _scan_poses;
-        std::vector<ndd::Descriptor>               _scan_descriptors;
-        std::vector<ndd::Descriptor::AlignmentKey> _scan_alignment_keys;
+        std::vector<Pose>                       _scan_poses;
+        std::vector<ndd::Descriptor>            _scan_descriptors;
+        std::vector<ndd::Descriptor::LookupKey> _scan_lookup_keys;
     };
 };
 
@@ -90,9 +89,13 @@ namespace chad {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
+        // sort points by their morton code, discretized to the voxel resolution
+        MortonVector points_mc = calc_morton_vector(points, _sdf_res);
+        std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
+
         // add pose and create descriptor for current scan
         const Pose pose{ position, {} };
-        _map_optimizer_p->add_scan(points, pose);
+        _map_optimizer_p->add_scan(points_sorted, pose);
 
         // check if a new submap should be created
         if (_active_scan_final > 0) {
@@ -103,9 +106,6 @@ namespace chad {
         }
         else _active_scan_final++; // include current scan in active submap
 
-        // sort points by their morton code, discretized to the voxel resolution
-        MortonVector points_mc = calc_morton_vector(points, _sdf_res);
-        std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
         // estimate the normal of every point
         std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
 
@@ -234,36 +234,34 @@ namespace chad {
 
         SubmapIndex merged_index;
         // merge all submaps
-        {
-            if (_map_optimizer_p->_submaps.size() == 1) {
-                merged_index = 0;
+        if (_map_optimizer_p->_submaps.size() == 1) {
+            merged_index = 0;
+        }
+        else {
+            // create temporary octrees for faster memory access
+            detail::Octree octree_a, octree_b;
+            octree_a.insert(*_dag_storage_p, _map_optimizer_p->_submaps.front()._root_indices, _sdf_trunc);
+
+            // merge sequentially
+            for (uint32_t i = 1; i < uint32_t(_map_optimizer_p->_submaps.size()); i++) {
+                const detail::Submap& submap_b = _map_optimizer_p->_submaps[i];
+
+                // create simple octree from submap
+                octree_b.insert(*_dag_storage_p, submap_b._root_indices, _sdf_trunc);
+
+                // invert error to get delta from b to a
+                // assumes a is global coordinate frame
+                glm::vec3 error_delta_b_to_a = -submap_b._pose_error._position;
+                octree_a.insert(octree_b, error_delta_b_to_a, _sdf_res);
+                octree_b.clear();
             }
-            else {
-                // create temporary octrees for faster memory access
-                detail::Octree octree_a, octree_b;
-                octree_a.insert(*_dag_storage_p, _map_optimizer_p->_submaps.front()._root_indices, _sdf_trunc);
 
-                // merge sequentially
-                for (uint32_t i = 1; i < uint32_t(_map_optimizer_p->_submaps.size()); i++) {
-                    const detail::Submap& submap_b = _map_optimizer_p->_submaps[i];
-
-                    // create simple octree from submap
-                    octree_b.insert(*_dag_storage_p, submap_b._root_indices, _sdf_trunc);
-
-                    // invert error to get delta from b to a
-                    // assumes a is global coordinate frame
-                    glm::vec3 error_delta_b_to_a = -submap_b._pose_error._position;
-                    octree_a.insert(octree_b, error_delta_b_to_a, _sdf_res);
-                    octree_b.clear();
-                }
-
-                // create a new DAG from the merged octree
-                RootIndices roots = insert_octree(&octree_a);
-                SubmapIndex index = _map_optimizer_p->_submaps.size();
-                _map_optimizer_p->add_submap(roots, 0, 0); // placeholder poses
-                _map_optimizer_p->_merged_submaps.push_back(index);
-                merged_index = index;
-            }
+            // create a new DAG from the merged octree
+            RootIndices roots = insert_octree(&octree_a);
+            SubmapIndex index = _map_optimizer_p->_submaps.size();
+            _map_optimizer_p->add_submap(roots, 0, 0); // placeholder poses
+            _map_optimizer_p->_merged_submaps.push_back(index);
+            merged_index = index;
         }
 
         // reconstruct the fully merged submap
