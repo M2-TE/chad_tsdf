@@ -8,7 +8,10 @@ namespace chad::detail {
     struct Octree {
         using NodeAddr = uint32_t;
         using Node = std::array<NodeAddr, 8>;
-        struct Leaf { float _signed_distance = 0.0f; uint32_t _weight = 0; };
+        struct Leaf {
+            float _signed_distance = 0.0f;
+            uint32_t _weight = 0;
+        };
 
         Octree() {
             _nodes.push_back({ 0, 0, 0, 0, 0, 0, 0, 0 }); // root node
@@ -244,8 +247,8 @@ namespace chad::detail {
                 }
             }
         }
-        // insert TSDFs from another octree
-        void insert(const Octree& octree_b, glm::vec3 error_b_to_a, float sdf_res) {
+        // insert TSDFs from another octree via trilinear interpolation
+        void insert(const Octree& octree_b, glm::vec3 delta_b_to_a, float sdf_res) {
             // track node traversal
             std::array<const Octree::Node*, DAGStorage::MAX_DEPTH + 1> path_nodes;
             std::array<uint8_t, DAGStorage::MAX_DEPTH + 1> path_child_indices;
@@ -323,7 +326,7 @@ namespace chad::detail {
                     // convert to coordinate frame of "A"
                     glm::vec3 offset = glm::vec3{1, 1, 1} * sdf_res * 0.01f; // small offset to avoid floating point oddities with glm::ceil
                     glm::vec3 leaf_position_b_coord_b = glm::vec3(leaf_voxel_b_coord_b) * sdf_res;
-                    glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + error_b_to_a - offset;
+                    glm::vec3 leaf_position_b_coord_a = leaf_position_b_coord_b + delta_b_to_a - offset;
 
                     // round up to get the voxel in A that voxel B encompasses
                     const float _sdf_res_recip = 1.0f / sdf_res;
@@ -334,29 +337,49 @@ namespace chad::detail {
 
                     // perform trilinear interpolation
                     glm::vec3 interpolation_factors = leaf_position_a_coord_a - leaf_position_b_coord_a;
+
+                    // get weights
+                    const float wght_000 = float(leaves_b[0][0][0]._weight);
+                    const float wght_010 = float(leaves_b[0][1][0]._weight);
+                    const float wght_001 = float(leaves_b[0][0][1]._weight);
+                    const float wght_011 = float(leaves_b[0][1][1]._weight);
+                    const float wght_100 = float(leaves_b[1][0][0]._weight);
+                    const float wght_110 = float(leaves_b[1][1][0]._weight);
+                    const float wght_101 = float(leaves_b[1][0][1]._weight);
+                    const float wght_111 = float(leaves_b[1][1][1]._weight);
+                    // get tsdfs (weighted)
+                    const float tsdf_000 = leaves_b[0][0][0]._signed_distance * wght_000;
+                    const float tsdf_010 = leaves_b[0][1][0]._signed_distance * wght_010;
+                    const float tsdf_001 = leaves_b[0][0][1]._signed_distance * wght_001;
+                    const float tsdf_011 = leaves_b[0][1][1]._signed_distance * wght_011;
+                    const float tsdf_100 = leaves_b[1][0][0]._signed_distance * wght_100;
+                    const float tsdf_110 = leaves_b[1][1][0]._signed_distance * wght_110;
+                    const float tsdf_101 = leaves_b[1][0][1]._signed_distance * wght_101;
+                    const float tsdf_111 = leaves_b[1][1][1]._signed_distance * wght_111;
+
                     // interpolate on x
-                    float tsdf_X00 = std::lerp(leaves_b[0][0][0]._signed_distance, leaves_b[1][0][0]._signed_distance, interpolation_factors.x);
-                    float tsdf_X10 = std::lerp(leaves_b[0][1][0]._signed_distance, leaves_b[1][1][0]._signed_distance, interpolation_factors.x);
-                    float tsdf_X01 = std::lerp(leaves_b[0][0][1]._signed_distance, leaves_b[1][0][1]._signed_distance, interpolation_factors.x);
-                    float tsdf_X11 = std::lerp(leaves_b[0][1][1]._signed_distance, leaves_b[1][1][1]._signed_distance, interpolation_factors.x);
-                    float wght_X00 = std::lerp(float(leaves_b[0][0][0]._weight), float(leaves_b[1][0][0]._weight), interpolation_factors.x);
-                    float wght_X10 = std::lerp(float(leaves_b[0][1][0]._weight), float(leaves_b[1][1][0]._weight), interpolation_factors.x);
-                    float wght_X01 = std::lerp(float(leaves_b[0][0][1]._weight), float(leaves_b[1][0][1]._weight), interpolation_factors.x);
-                    float wght_X11 = std::lerp(float(leaves_b[0][1][1]._weight), float(leaves_b[1][1][1]._weight), interpolation_factors.x);
+                    const float wght_X00 = std::lerp(wght_000, wght_100, interpolation_factors.x);
+                    const float wght_X10 = std::lerp(wght_010, wght_110, interpolation_factors.x);
+                    const float wght_X01 = std::lerp(wght_001, wght_101, interpolation_factors.x);
+                    const float wght_X11 = std::lerp(wght_011, wght_111, interpolation_factors.x);
+                    const float tsdf_X00 = std::lerp(tsdf_000, tsdf_100, interpolation_factors.x);
+                    const float tsdf_X10 = std::lerp(tsdf_010, tsdf_110, interpolation_factors.x);
+                    const float tsdf_X01 = std::lerp(tsdf_001, tsdf_101, interpolation_factors.x);
+                    const float tsdf_X11 = std::lerp(tsdf_011, tsdf_111, interpolation_factors.x);
                     // interpolate on y
-                    float tsdf_XY0 = std::lerp(tsdf_X00, tsdf_X10, interpolation_factors.y);
-                    float tsdf_XY1 = std::lerp(tsdf_X01, tsdf_X11, interpolation_factors.y);
-                    float wght_XY0 = std::lerp(wght_X00, wght_X10, interpolation_factors.y);
-                    float wght_XY1 = std::lerp(wght_X01, wght_X11, interpolation_factors.y);
+                    const float wght_XY0 = std::lerp(wght_X00, wght_X10, interpolation_factors.y);
+                    const float wght_XY1 = std::lerp(wght_X01, wght_X11, interpolation_factors.y);
+                    const float tsdf_XY0 = std::lerp(tsdf_X00, tsdf_X10, interpolation_factors.y);
+                    const float tsdf_XY1 = std::lerp(tsdf_X01, tsdf_X11, interpolation_factors.y);
                     // interpolate on z
-                    float tsdf_XYZ = std::lerp(tsdf_XY0, tsdf_XY1, interpolation_factors.z);
-                    float wght_XYZ = std::lerp(wght_XY0, wght_XY1, interpolation_factors.z);
+                    const float wght_XYZ = std::lerp(wght_XY0, wght_XY1, interpolation_factors.z);
+                    const float tsdf_XYZ = std::lerp(tsdf_XY0, tsdf_XY1, interpolation_factors.z);
 
                     // update existing or create new leaf in A
                     Octree::Leaf& leaf_a = insert(glm::ivec3(leaf_voxel_a_coord_a));
-                    leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ * wght_XYZ;
+                    leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ; // tsdf_XYZ is already weighted
                     leaf_a._signed_distance /= float(leaf_a._weight) + wght_XYZ;
-                    leaf_a._weight = std::min(leaf_a._weight, uint32_t(wght_XYZ));
+                    leaf_a._weight += uint32_t(wght_XYZ);
                 }
             }
         }
