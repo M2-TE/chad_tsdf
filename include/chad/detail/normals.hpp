@@ -75,8 +75,6 @@ namespace chad::detail {
         return glm::vec3(glm::normalize(weighted_dir));
     }
     auto inline estimate_normals(const MortonVector& points_mc, const glm::vec3 position) -> std::vector<glm::vec3> {
-        auto beg = std::chrono::high_resolution_clock::now();
-
         std::vector<glm::vec3> normals;
         normals.resize(points_mc.size());
         for (auto it = points_mc.cbegin(); it != points_mc.cend();) {
@@ -132,14 +130,6 @@ namespace chad::detail {
             // increment point iterator to mark these points as handled
             it += neigh_size;
         }
-
-
-        // for (auto& normal: normals) normal = -normal;
-        // fmt::println("FLIPPED NORMALS FOR DEBUG RUN");
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("norm est {:.2f}", dur);
         return normals;
     }
 }

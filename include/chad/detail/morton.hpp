@@ -50,10 +50,11 @@ namespace chad::detail {
 
         uint64_t _value;
     };
+}
+
+namespace chad::detail {
     using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
     auto inline calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector {
-        auto beg = std::chrono::high_resolution_clock::now();
-
         // calc reciprocal of voxel resolution for later
         const float voxel_reciprocal = float(1.0 / double(sdf_res));
 
@@ -67,15 +68,9 @@ namespace chad::detail {
             // create morton code from discretized integer position
             points_mc.emplace_back(point, glm::ivec3(point_discretized));
         }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc  calc {:.2f}", dur);
         return points_mc;
     }
     auto inline sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3> {
-        auto beg = std::chrono::high_resolution_clock::now();
-
         // sort points using morton codes
         auto mc_sorter = [](const auto& a, const auto& b){
             return a.second._value > b.second._value;
@@ -89,10 +84,6 @@ namespace chad::detail {
         for (const auto& mc_point: points_mc) {
             points_sorted.push_back(mc_point.first);
         }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("mc  sort {:.2f}", dur);
         return points_sorted;
     }
 }

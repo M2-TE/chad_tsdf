@@ -112,11 +112,13 @@ namespace chad {
 
     private:
         // transient
-        ScanIndex _active_scan_start = 0; // first scan index of active submap
-        ScanIndex _active_scan_final = 0; // final scan index of active submap
+        ScanIndex _active_scan_beg = 0; // first scan index of active submap
+        ScanIndex _active_scan_end = 0; // final scan index of active submap
         detail::Octree* _active_octree_p; // currently active octree storing TSDF voxels
         // persistent
         detail::DAGStorage*   _dag_storage_p; // storage for all hashed nodes
         detail::MapOptimizer* _map_optimizer_p; // loop closure detection and pose optimization
+        // misc
+        bool _debug_outputs = true;
     };
 }

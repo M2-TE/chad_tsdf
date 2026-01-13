@@ -82,7 +82,6 @@ namespace chad::detail {
 
         // insert TSDFs via points and normals
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
-            auto beg = std::chrono::high_resolution_clock::now();
             const float sdf_res_recip = float(1.0 / double(sdf_res));
             const glm::aligned_vec3 position_aligned = position;
 
@@ -168,9 +167,6 @@ namespace chad::detail {
                 }
                 traversed_voxels.clear();
             }
-            auto end = std::chrono::high_resolution_clock::now();
-            auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-            fmt::println("oct  upd {:.2f}", dur);
         }
         // insert TSDFs from compressed DAG octree submap
         void insert(const DAGStorage& dag, RootIndices roots, float sdf_trunc) {
@@ -252,7 +248,7 @@ namespace chad::detail {
             // track node traversal
             std::array<const Octree::Node*, DAGStorage::MAX_DEPTH + 1> path_nodes;
             std::array<uint8_t, DAGStorage::MAX_DEPTH + 1> path_child_indices;
-            path_nodes[0] = &octree_b.get_node(octree_b.get_root()); // start at root
+            path_nodes[0] = &octree_b.get_node(Octree::ROOT);
             path_child_indices.fill(0);
 
             uint32_t depth = 0;
@@ -411,9 +407,6 @@ namespace chad::detail {
             uint32_t leaf_addr = (*node_p)[leaf_index];
             return { &_leaves[leaf_addr], true };
         }
-        auto static get_root() -> uint32_t {
-            return 0;
-        }
         auto inline get_node(uint32_t node_addr) const -> const Node& {
             return _nodes[node_addr];
         }
@@ -424,6 +417,7 @@ namespace chad::detail {
             return _leaves[leaf_addr];
         }
 
+        static constexpr uint32_t ROOT = 0;
         VirtualArray<Node> _nodes;
         VirtualArray<Leaf> _leaves;
         gtl::flat_hash_map<MortonCode, Node*> _node_lookup; // depth 18

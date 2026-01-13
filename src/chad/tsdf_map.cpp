@@ -8,6 +8,11 @@
 #include "chad/detail/normals.hpp"
 #include "chad/detail/dag_storage.hpp"
 
+#define DEBUGTHINGY(beg, message) \
+    if (_debug_outputs) { \
+        fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count()); \
+    }
+
 namespace chad::detail {
     struct Submap {
         Submap(const Pose& pose, const Pose& pose_error, const RootIndices& root_indices, ScanIndex scan_start_i, ScanIndex scan_final_i):
@@ -90,35 +95,40 @@ namespace chad {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // sort points by their morton code, discretized to the voxel resolution
+
+        auto beg_intermediate = std::chrono::high_resolution_clock::now();
         MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
+        DEBUGTHINGY(beg_intermediate, "MortonCode calc and sort");
 
         // add pose and create descriptor for current scan
+        beg_intermediate = std::chrono::high_resolution_clock::now();
         const Pose pose{ position, {} };
         _map_optimizer_p->add_scan(points_sorted, pose);
+        DEBUGTHINGY(beg_intermediate, "Adding scan to map optimizer");
 
         // check if a new submap should be created
-        if (_active_scan_final > 0) {
-            const Pose& first_pose = _map_optimizer_p->_scan_poses[_active_scan_start];
-            const Pose& final_pose = _map_optimizer_p->_scan_poses[_active_scan_final];
+        if (_active_scan_beg != _active_scan_end) {
+            const Pose& first_pose = _map_optimizer_p->_scan_poses[_active_scan_beg];
+            const Pose& final_pose = _map_optimizer_p->_scan_poses[_active_scan_end];
             float distance = glm::distance(first_pose._position, final_pose._position);
             if (distance > _submap_fin_delta) finalize_active_submap();
         }
-        else _active_scan_final++; // include current scan in active submap
+        else _active_scan_end++; // include current scan in active submap
 
         // estimate the normal of every point
+        beg_intermediate = std::chrono::high_resolution_clock::now();
         std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
+        DEBUGTHINGY(beg_intermediate, "Normal estimation");
 
         // insert points into active octree as signed distances
+        beg_intermediate = std::chrono::high_resolution_clock::now();
         _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("total    {:.2f}\n", dur);
+        DEBUGTHINGY(beg_intermediate, "Update active octree");
+        DEBUGTHINGY(beg, "-- Total insertion time");
     }
     auto TSDFMap::insert_octree(detail::Octree* octree_p) -> RootIndices {
         using namespace chad::detail;
-        auto beg = std::chrono::high_resolution_clock::now();
         const Octree& octree = *octree_p;
 
         // trackers for the traversed path and nodes
@@ -128,7 +138,7 @@ namespace chad {
         std::array<std::array<uint32_t, 8>, DAGStorage::MAX_DEPTH> nodes_weight; // for writing
         path.fill(0);
         nodes_oct.fill(0);
-        nodes_oct[0] = octree.get_root();
+        nodes_oct[0] = Octree::ROOT;
         nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
         nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
         const float sdf_trunc_recip = 1.0f / _sdf_trunc;
@@ -206,28 +216,26 @@ namespace chad {
             }
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur = std::chrono::duration<double, std::milli> (end - beg).count();
-        fmt::println("sub fin  {:.2f}\n", dur);
-
         return roots;
     }
     void TSDFMap::finalize_active_submap() {
+        auto beg = std::chrono::high_resolution_clock::now();
         // create persistent octree with DAG nodes
         RootIndices roots = insert_octree(_active_octree_p);
-        _map_optimizer_p->add_submap(roots, _active_scan_start, _active_scan_final);
+        _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
 
         // start new submap with a fresh octree and new pose indices
         _active_octree_p->clear();
-        _active_scan_start = ++_active_scan_final;
+        _active_scan_beg = ++_active_scan_end;
+        DEBUGTHINGY(beg, "++ Finalizing submap");
     }
 
     void TSDFMap::reconstruct(const std::string& filename) {
         // finalize current active submap
-        if (_map_optimizer_p->_scan_poses.size() > 0) {
+        if (_active_scan_beg != _active_scan_end) {
             finalize_active_submap();
         }
-        else {
+        else if (_map_optimizer_p->_scan_poses.size() == 0) {
             fmt::println("There are no submaps to reconstruct yet");
             return;
         }
