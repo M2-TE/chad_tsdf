@@ -109,6 +109,7 @@ namespace chad {
         const float _sdf_res;
         const float _sdf_trunc;
         const float _submap_fin_delta;
+        bool _debug_outputs = true;
 
     private:
         // transient
@@ -119,6 +120,5 @@ namespace chad {
         detail::DAGStorage*   _dag_storage_p; // storage for all hashed nodes
         detail::MapOptimizer* _map_optimizer_p; // loop closure detection and pose optimization
         // misc
-        bool _debug_outputs = true;
     };
 }

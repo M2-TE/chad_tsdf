@@ -8,10 +8,7 @@
 #include "chad/detail/normals.hpp"
 #include "chad/detail/dag_storage.hpp"
 
-#define DEBUGTHINGY(beg, message) \
-    if (_debug_outputs) { \
-        fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count()); \
-    }
+#define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count());
 
 namespace chad::detail {
     struct Submap {
@@ -99,13 +96,13 @@ namespace chad {
         auto beg_intermediate = std::chrono::high_resolution_clock::now();
         MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
-        DEBUGTHINGY(beg_intermediate, "MortonCode calc and sort");
+        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
 
         // add pose and create descriptor for current scan
         beg_intermediate = std::chrono::high_resolution_clock::now();
         const Pose pose{ position, {} };
         _map_optimizer_p->add_scan(points_sorted, pose);
-        DEBUGTHINGY(beg_intermediate, "Adding scan to map optimizer");
+        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
 
         // check if a new submap should be created
         if (_active_scan_beg != _active_scan_end) {
@@ -119,13 +116,13 @@ namespace chad {
         // estimate the normal of every point
         beg_intermediate = std::chrono::high_resolution_clock::now();
         std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
-        DEBUGTHINGY(beg_intermediate, "Normal estimation");
+        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Normal estimation");
 
         // insert points into active octree as signed distances
         beg_intermediate = std::chrono::high_resolution_clock::now();
         _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
-        DEBUGTHINGY(beg_intermediate, "Update active octree");
-        DEBUGTHINGY(beg, "-- Total insertion time");
+        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
+        MEASURE_TIME(beg, "-- Total insertion time");
     }
     auto TSDFMap::insert_octree(detail::Octree* octree_p) -> RootIndices {
         using namespace chad::detail;
@@ -227,7 +224,7 @@ namespace chad {
         // start new submap with a fresh octree and new pose indices
         _active_octree_p->clear();
         _active_scan_beg = ++_active_scan_end;
-        DEBUGTHINGY(beg, "++ Finalizing submap");
+        if (_debug_outputs) MEASURE_TIME(beg, "++ Finalizing submap");
     }
 
     void TSDFMap::reconstruct(const std::string& filename) {
