@@ -1,6 +1,7 @@
 #include "chad/indices.hpp"
 #include "chad/tsdf_map.hpp"
 #include "chad/detail/ndd.hpp"
+#include "chad/detail/ply.hpp"
 #include "chad/detail/lvr2.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
@@ -273,6 +274,16 @@ namespace chad {
         reconstruct(filename, merged_index);
     }
     void TSDFMap::reconstruct(const std::string& filename, SubmapIndex submap_index) {
+        
+        gtl::parallel_flat_hash_map<detail::MortonCode, uint32_t> indices;
+
+        while (true) {
+            
+        }
+
+        detail::Ply ply{filename}; // DEBUG
+        return;
+
         std::vector<std::array<uint8_t, 3>> colors {
             {255, 0, 0},
             {0, 255, 0},
