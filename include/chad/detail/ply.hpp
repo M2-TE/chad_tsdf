@@ -6,12 +6,30 @@
 namespace chad::detail {
     class Ply {
         private:
+        struct Vertex {
+            void write(std::ofstream& ofs) const {
+                ofs.write(reinterpret_cast<const char*>(&_position), sizeof(_position));
+                ofs.write(reinterpret_cast<const char*>(&_normal), sizeof(_normal));
+                ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
+            }
+            glm::f32vec3 _position{ 0, 0, 0 };
+            glm::f32vec3 _normal{ 0, 0, 0 };
+            glm::u8vec3 _color{ 0, 0, 0 };
+        };
+        struct Face {
+            void write(std::ofstream& ofs) const {
+                const uint8_t vertcount = 3;
+                ofs.write(reinterpret_cast<const char*>(&vertcount), sizeof(vertcount));
+                ofs.write(reinterpret_cast<const char*>(&_indices), sizeof(_indices));
+            }
+            glm::u32vec3 _indices{ 0, 0, 0 };
+        };
         struct LeafCopy {
             LeafCopy(float sd): _signed_distance(sd) {}
             // simple raw signed distance from a leaf in f32
             const float _signed_distance;
             // every leaf will have a maximum of 3 vertices placed on +x, +y or +z
-            glm::u32vec3 _vertex_indices;
+            glm::u32vec3 _vertex_indices{ 0, 0, 0 };
         };
 
         public:
@@ -64,10 +82,13 @@ namespace chad::detail {
                     if (leaf._signed_distance * other_sd < 0.0f) {
                         // calc vertex position
                         const float other_pos_x = leaf_pos.x + sdf_res;
-                        const float interpolation = other_pos_x - other_sd * (leaf_pos.x - other_pos_x) / (leaf._signed_distance - other_sd);
-                        fmt::println(" x: {} leaf_x: {} other_x: {}, leaf_sd: {}, other_sd: {}", interpolation, leaf_pos.x, other_pos_x, leaf._signed_distance, other_sd);
+                        const float final_pos_x = other_pos_x - other_sd * (leaf_pos.x - other_pos_x) / (leaf._signed_distance - other_sd);
                         
-                        leaf._vertex_indices.x = 99999999;
+                        Vertex v;
+                        v._position = leaf_pos;
+                        v._position.x = final_pos_x;
+                        
+                        leaf._vertex_indices.x = 99999999; // TODO
                     }
                 }
                 if (leaf_y != leaves.cend()) {
