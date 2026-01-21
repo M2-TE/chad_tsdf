@@ -1,7 +1,6 @@
 # use either system or FetchContent package
 find_package(gtl QUIET)
 if (NOT gtl_FOUND)
-
     include(FetchContent)
     FetchContent_Declare(gtl
         GIT_REPOSITORY "https://github.com/greg7mdp/gtl.git"
@@ -11,4 +10,4 @@ if (NOT gtl_FOUND)
         EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(gtl)
 endif()
-target_link_libraries(${PROJECT_NAME} PUBLIC gtl)
+target_link_libraries(${PROJECT_NAME} PRIVATE gtl)

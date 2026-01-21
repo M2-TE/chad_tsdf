@@ -3,16 +3,13 @@
 #include <string>
 #include "chad/indices.hpp"
 
-#if __has_include(<glm/vec3.hpp>) || defined(CHAD_FORCE_GLM)
+#if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
 #endif
 
-#if __has_include(<Eigen/Eigen>) || defined(CHAD_FORCE_EIGEN)
+#if __has_include(<Eigen/Eigen>)
 #   include <Eigen/Eigen>
 #endif
-
-namespace ndd {
-};
 
 namespace chad {
     namespace detail {
@@ -33,7 +30,7 @@ namespace chad {
         // destructor to free allocations
         ~TSDFMap();
 
-        #if __has_include(<glm/vec3.hpp>) || defined(CHAD_FORCE_GLM)
+#if __has_include(<glm/vec3.hpp>)
         // insert pointcloud alongside scanner position
         void inline insert(const std::vector<glm::vec3>& points, const glm::vec3& position) {
             // when using unpadded vec3, we can avoid copies
@@ -50,9 +47,9 @@ namespace chad {
                 insert_pointcloud(points_vec, { position.x, position.y, position.z });
             }
         }
-        #endif
+#endif // <glm/vec3.hpp>
         
-        #if __has_include(<Eigen/Eigen>) || defined(CHAD_FORCE_EIGEN)
+#if __has_include(<Eigen/Eigen>)
         // insert pointcloud alongside scanner position
         void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position) {
             // when using unpadded Vector3f, we can avoid copies
@@ -69,7 +66,7 @@ namespace chad {
                 insert_pointcloud(points_vec, { position.x(), position.y(), position.z() });
             }
         }
-        #endif
+#endif // <Eigen/Eigen>
 
         // insert pointcloud alongside scanner position
         void inline insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
@@ -99,6 +96,11 @@ namespace chad {
         // reconstruct 3D mesh and write it to disk
         void reconstruct(const std::string& filename, SubmapIndex submap_handle);
 
+        // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
+        void release_hashes() { throw std::logic_error("Function not yet implemented"); }
+        // rebuild all hash structures to allow insertion of new data
+        void rebuild_hashes() { throw std::logic_error("Function not yet implemented"); }
+
     private:
         // insert points into currently active octree (internal function used by all insert(...) funcs)
         void insert_pointcloud(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position);
@@ -119,6 +121,5 @@ namespace chad {
         // persistent
         detail::DAGStorage*   _dag_storage_p; // storage for all hashed nodes
         detail::MapOptimizer* _map_optimizer_p; // loop closure detection and pose optimization
-        // misc
     };
 }

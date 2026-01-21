@@ -1,4 +1,3 @@
-#define CHAD_FORCE_GLM
 #include "chad/tsdf_map.hpp"
 
 [[maybe_unused]] void static do_sphere_thing() {

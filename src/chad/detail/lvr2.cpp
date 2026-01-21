@@ -31,7 +31,6 @@ namespace chad::detail {
             uint32_t depth = 0;
             while(true) {
                 auto child_i = path_child[depth]++;
-                // fmt::println("depth: {:2}, child: {:1}", depth, child_i);
 
                 // when all children at this depth were iterated
                 if (child_i == 8) {

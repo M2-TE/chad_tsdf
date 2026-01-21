@@ -98,13 +98,13 @@ namespace std {
     };
 }
 
-// // specialize the fmt formatter for MortonCode
-// namespace fmt {
-//     template<>
-//     struct formatter<chad::detail::MortonCode>: formatter<std::string> {
-//         auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
-//             std::string str = std::bitset<63>(mc._value).to_string();
-//             return formatter<std::string>::format(str, ctx);
-//         }
-//     };
-// }
+// specialize the fmt formatter for MortonCode
+namespace fmt {
+    template<>
+    struct formatter<chad::detail::MortonCode>: formatter<std::string> {
+        auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
+            std::string str = std::bitset<63>(mc._value).to_string();
+            return formatter<std::string>::format(str, ctx);
+        }
+    };
+}

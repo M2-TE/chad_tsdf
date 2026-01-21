@@ -274,14 +274,10 @@ namespace chad {
         reconstruct(filename, merged_index);
     }
     void TSDFMap::reconstruct(const std::string& filename, SubmapIndex submap_index) {
-        
-        gtl::parallel_flat_hash_map<detail::MortonCode, uint32_t> indices;
-
-        while (true) {
-            
-        }
-
-        detail::Ply ply{filename}; // DEBUG
+        fmt::println("[CHAD] >> Reconstructing a submap");
+        detail::Ply mesh{ filename };
+        RootIndex tsdf_root = _map_optimizer_p->_submaps[submap_index]._root_indices._tsdfs;
+        mesh.reconstruct(*_dag_storage_p, tsdf_root, _sdf_res, _sdf_trunc);
         return;
 
         std::vector<std::array<uint8_t, 3>> colors {
@@ -294,7 +290,6 @@ namespace chad {
             {255, 255, 255},
         };
         // reconstruct 3D mesh using LVR2
-        fmt::println("reconstructing a submap");
         detail::reconstruct(*_dag_storage_p, _map_optimizer_p->_submaps[submap_index]._root_indices, _sdf_res, _sdf_trunc, filename, colors[submap_index % colors.size()]);
     }
 }
