@@ -1,5 +1,6 @@
 #pragma once
 #include "chad/indices.hpp"
+#include "chad/detail/mc.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/dag_storage.hpp"
 
@@ -33,8 +34,9 @@ namespace chad::detail {
         };
 
         public:
-        Ply(const std::string& filename) {
-            std::ofstream ofs{ filename, std::ios::binary };
+        Ply(const std::string& filename): _vertex_count(0), _face_count(0) {
+            _ofs.open(filename, std::ios::binary);
+            if (!_ofs.is_open()) fmt::println("Failed to open {} for writing", filename);
 
             _ofs << std::string("ply\n");
             _ofs << std::string("format binary_little_endian 1.0\n");
@@ -54,31 +56,34 @@ namespace chad::detail {
             _ofs << std::string("end_header\n");
         }
         void reconstruct(const DAGStorage& dag, RootIndex tsdf_root, float sdf_res, float sdf_trunc) {
-            // TODO: separate lookups for sds and vertices? some leaves will have no sign flips in their neighbourhood and could be omitted
             gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves = create_hashmap(dag, tsdf_root, sdf_trunc);
 
-            // now iterate over all hashmap entries to find flipping signs
-            for (auto& [key, leaf]: leaves) {
-                const glm::ivec3 leaf_voxel = key.decode();
+            // create vertices at flipping signs
+            for (auto& [mc, leaf]: leaves) {
+                const glm::ivec3 leaf_voxel = mc.decode();
                 const glm::vec3 leaf_pos = glm::vec3(leaf_voxel) * sdf_res;
 
+                // handle sds of 0 as a special case
                 if (leaf._signed_distance == 0.0f) {
-                    // TODO: handle this special case
-                    // TODO: add vertex
-                    fmt::println("zero");
+                    Vertex v;
+                    v._position = leaf_pos;
+                    v.write(_ofs);
+
+                    leaf._vertex_indices.x = _vertex_count;
+                    leaf._vertex_indices.y = _vertex_count;
+                    leaf._vertex_indices.z = _vertex_count;
+                    _vertex_count++;
                     continue;
                 }
 
                 // check if the 3 voxels in +x, +y and +z exist and contain a different sign
-                const auto leaf_x = leaves.find(MortonCode{ leaf_voxel + glm::ivec3(1, 0, 0) });
-                const auto leaf_y = leaves.find(MortonCode{ leaf_voxel + glm::ivec3(0, 1, 0) });
-                const auto leaf_z = leaves.find(MortonCode{ leaf_voxel + glm::ivec3(0, 0, 1) });
+                const auto leaf_x = leaves.find(leaf_voxel + glm::ivec3(1, 0, 0));
+                const auto leaf_y = leaves.find(leaf_voxel + glm::ivec3(0, 1, 0));
+                const auto leaf_z = leaves.find(leaf_voxel + glm::ivec3(0, 0, 1));
 
                 if (leaf_x != leaves.cend()) {
                     const float other_sd =  leaf_x->second._signed_distance;
-                    // ignore if the other leaf has a signed distance of 0
-                    if (other_sd == 0.0f) break;
-                    // check if the sign differs
+                    // check if the sign differs, also ignores other_sd of 0
                     if (leaf._signed_distance * other_sd < 0.0f) {
                         // calc vertex position
                         const float other_pos_x = leaf_pos.x + sdf_res;
@@ -87,39 +92,164 @@ namespace chad::detail {
                         Vertex v;
                         v._position = leaf_pos;
                         v._position.x = final_pos_x;
+                        v.write(_ofs);
                         
-                        leaf._vertex_indices.x = 99999999; // TODO
+                        leaf._vertex_indices.x = _vertex_count++;
                     }
                 }
                 if (leaf_y != leaves.cend()) {
-                    const float other_sd =  leaf_x->second._signed_distance;
-                    // ignore if the other leaf has a signed distance of 0
-                    if (other_sd == 0.0f) break;
-                    // check if the sign differs
+                    const float other_sd =  leaf_y->second._signed_distance;
+                    // check if the sign differs, also ignores other_sd of 0
                     if (leaf._signed_distance * other_sd < 0.0f) {
                         // calc vertex position
                         const float other_pos_y = leaf_pos.y + sdf_res;
-                        const float interpolation = other_pos_y - other_sd * (leaf_pos.x - other_pos_y) / (leaf._signed_distance - other_sd);
-                        fmt::println(" x: {} leaf_x: {} other_x: {}, leaf_sd: {}, other_sd: {}", interpolation, leaf_pos.x, other_pos_y, leaf._signed_distance, other_sd);
+                        const float final_pos_y = other_pos_y - other_sd * (leaf_pos.y - other_pos_y) / (leaf._signed_distance - other_sd);
+
+                        Vertex v;
+                        v._position = leaf_pos;
+                        v._position.y = final_pos_y;
+                        v.write(_ofs);
                         
-                        leaf._vertex_indices.y = 99999999;
+                        leaf._vertex_indices.y = _vertex_count++;
                     }
                 }
                 if (leaf_z != leaves.cend()) {
-                    const float other_sd =  leaf_x->second._signed_distance;
-                    // ignore if the other leaf has a signed distance of 0
-                    if (other_sd == 0.0f) break;
-                    // check if the sign differs
+                    const float other_sd =  leaf_z->second._signed_distance;
+                    // check if the sign differs, also ignores other_sd of 0
                     if (leaf._signed_distance * other_sd < 0.0f) {
                         // calc vertex position
                         const float other_pos_z = leaf_pos.z + sdf_res;
-                        const float interpolation = other_pos_z - other_sd * (leaf_pos.x - other_pos_z) / (leaf._signed_distance - other_sd);
-                        fmt::println(" x: {} leaf_x: {} other_x: {}, leaf_sd: {}, other_sd: {}", interpolation, leaf_pos.x, other_pos_z, leaf._signed_distance, other_sd);
-                        
-                        leaf._vertex_indices.z = 99999999;
+                        const float final_pos_z = other_pos_z - other_sd * (leaf_pos.z - other_pos_z) / (leaf._signed_distance - other_sd);
+
+                        Vertex v;
+                        v._position = leaf_pos;
+                        v._position.z = final_pos_z;
+                        v.write(_ofs);
+
+                        leaf._vertex_indices.z = _vertex_count++;
                     }
                 }
             }
+
+            // create indices as per marching cubes LUT
+            // TODO: handle SD of 0.0f
+            // TODO: handle missing corners (should still be able to create faces)
+            for (const auto& [mc000, leaf000]: leaves) {
+                const glm::ivec3 pos000 = mc000.decode();
+
+                // vertex and edge indexing:
+                // TODO: FIX
+                //          v7----e6-----v6
+                //        / |           / |
+                //     e11 e7        e10 e5
+                //   v3------e2----v2     |
+                //    |     v4---e4-+----v5
+                //   e3  e8        e1  e9
+                //    | /           | /
+                //   v0-----e0-----v1
+                //
+                // with v0 at (0, 0, 0) and v6 at (1, 1, 1)
+                
+                // the current leaf will be the [0, 0, 0] of this voxel
+                // fetch the other 6 leaves to get information on all 12 voxel edges
+                // for now just ignore cubes with missing corners
+                const auto it001 = leaves.find(pos000 + glm::ivec3(0, 0, 1));
+                if (it001 == leaves.cend()) continue;
+                const auto it100 = leaves.find(pos000 + glm::ivec3(1, 0, 0));
+                if (it100 == leaves.cend()) continue;
+                const auto it101 = leaves.find(pos000 + glm::ivec3(1, 0, 1));
+                if (it101 == leaves.cend()) continue;
+                const auto it010 = leaves.find(pos000 + glm::ivec3(0, 1, 0));
+                if (it010 == leaves.cend()) continue;
+                const auto it011 = leaves.find(pos000 + glm::ivec3(0, 1, 1));
+                if (it011 == leaves.cend()) continue;
+                const auto it110 = leaves.find(pos000 + glm::ivec3(1, 1, 0));
+                if (it110 == leaves.cend()) continue;
+                const auto it111 = leaves.find(pos000 + glm::ivec3(1, 1, 1));
+                if (it111 == leaves.cend()) continue;
+
+                // calling it corners to not confuse it with the actual mesh vertices
+                const std::array<LeafCopy, 8> corners {
+                    leaf000,       // 0
+                    it100->second, // 1
+                    it010->second, // 2
+                    it110->second, // 3
+                    it001->second, // 4
+                    it101->second, // 5
+                    it011->second, // 6
+                    it111->second, // 7
+                };
+
+                // take vertex indices for every edge
+                const std::array<uint32_t, 12> edges {
+                    corners[0]._vertex_indices.x,
+                    corners[1]._vertex_indices.y,
+                    corners[2]._vertex_indices.x,
+                    corners[0]._vertex_indices.y,
+
+                    corners[4]._vertex_indices.x,
+                    corners[5]._vertex_indices.y,
+                    corners[6]._vertex_indices.x,
+                    corners[4]._vertex_indices.y,
+
+                    corners[0]._vertex_indices.z,
+                    corners[1]._vertex_indices.z,
+                    corners[3]._vertex_indices.z,
+                    corners[2]._vertex_indices.z,
+                };
+
+                // DEBUG: TEMPORARILY DISABLE CUBES WITH SD OF 0.0f
+                bool breaking = false;
+                for (uint32_t i = 0; i < 8; i++) {
+                    if (corners[i]._signed_distance == 0.0f)  breaking = true;
+                }
+                if (breaking) continue;
+
+                // create the lookup index for the marching cubes table
+                uint32_t marching_cubes_index = 0;
+                for (uint32_t i = 0; i < 8; i++) {
+                    if (corners[i]._signed_distance > 0.0f) {
+                        marching_cubes_index |= 1 << i;
+                    }
+                }
+                const std::array<uint32_t, 13>& table_entry = MC_TABLE[marching_cubes_index];
+                
+                // find out how many vertices are needed
+                uint32_t table_entry_length = 0;
+                for (uint32_t i = 0; i < table_entry.size(); i++) {
+                    if (table_entry[i] == chad::detail::NO) {
+                        table_entry_length = i;
+                        break;
+                    }
+                }
+                
+                // create the faces
+                for (uint32_t i = 0; i < table_entry_length; i += 3) {
+                    Face face;
+
+                    // fetch the correct vertices
+                    face._indices[0] = edges[table_entry[i + 0]];
+                    face._indices[1] = edges[table_entry[i + 1]];
+                    face._indices[2] = edges[table_entry[i + 2]];
+
+                    // usually happens when a face is formed around SD of 0.0f
+                    if (face._indices[0] == face._indices[1] == face._indices[2]) {
+                        continue;
+                    }
+
+                    // write to ply file
+                    face.write(_ofs);
+                    _face_count++;
+                }
+            }
+        }
+        void finalize() { // just don't look inside
+            // write vertex and face counts into header
+            _ofs.seekp(60  + COMMENT.size());
+            _ofs << _vertex_count;
+            _ofs.seekp(271 + COMMENT.size());
+            _ofs << _face_count;
+            _ofs.close();
         }
 
         private:
@@ -196,37 +326,10 @@ namespace chad::detail {
             return leaves;
         }
 
-        void dothings() {
-            struct Vertex {
-                void write(std::ofstream& ofs) const {
-                    ofs.write(reinterpret_cast<const char*>(&_position), sizeof(_position));
-                    ofs.write(reinterpret_cast<const char*>(&_normal), sizeof(_normal));
-                    ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
-                }
-                glm::f32vec3 _position{ 0, 0, 0 };
-                glm::f32vec3 _normal{ 0, 1, 0 };
-                glm::u8vec3 _color{ 255, 0, 0 };
-            } v;
-            struct Face {
-                void write(std::ofstream& ofs) const {
-                    const uint8_t vertcount = 3;
-                    ofs.write(reinterpret_cast<const char*>(&vertcount), sizeof(vertcount));
-                    ofs.write(reinterpret_cast<const char*>(&_indices), sizeof(_indices));
-                }
-                glm::u32vec3 _indices{ 0, 1, 2 };
-            } face;
-
-            v._position = { 0, 0, 0 };
-            v.write(_ofs);
-            v._position = { 1.124, 0, 0 };
-            v.write(_ofs);
-            v._position = { 0, 1.6713, 0 };
-            v.write(_ofs);
-            face.write(_ofs);
-        }
-
         private:
         static constexpr std::string_view COMMENT = "Mesh reconstructed by CHAD TSDF";
         std::ofstream _ofs;
+        uint32_t _vertex_count; // offset by +1 as index 0 is reserved
+        uint32_t _face_count;
     };
 }

@@ -274,10 +274,12 @@ namespace chad {
         reconstruct(filename, merged_index);
     }
     void TSDFMap::reconstruct(const std::string& filename, SubmapIndex submap_index) {
-        fmt::println("[CHAD] >> Reconstructing a submap");
+        auto beg = std::chrono::high_resolution_clock::now();
         detail::Ply mesh{ filename };
         RootIndex tsdf_root = _map_optimizer_p->_submaps[submap_index]._root_indices._tsdfs;
         mesh.reconstruct(*_dag_storage_p, tsdf_root, _sdf_res, _sdf_trunc);
+        mesh.finalize();
+        MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", filename));
         return;
 
         std::vector<std::array<uint8_t, 3>> colors {
