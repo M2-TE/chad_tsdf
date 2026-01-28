@@ -23,6 +23,5 @@
 #include <glm/gtc/type_aligned.hpp>
 #include <gtl/phmap.hpp>
 #include <libmorton/morton.h>
-#include <opencv2/opencv.hpp>
 #include <fmt/base.h>
 #include <fmt/format.h>

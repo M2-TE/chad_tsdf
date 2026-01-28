@@ -2,7 +2,7 @@
 #include "chad/tsdf_map.hpp"
 #include "chad/detail/ndd.hpp"
 #include "chad/detail/ply.hpp"
-#include "chad/detail/lvr2.hpp"
+// #include "chad/detail/lvr2.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
@@ -204,7 +204,7 @@ namespace chad {
                     else {
                         const auto& leaf = octree.get_leaf(leaf_addr);
                         // weight can be above 255, so we cap it at the uint8_t limit
-                        uint8_t weight = std::min<uint8_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
+                        uint8_t weight = std::min<uint32_t>(leaf._weight, std::numeric_limits<uint8_t>::max());
                         lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_recip);
                         lc_weigh._weigh.set(leaf_i, weight);
                     }
@@ -226,7 +226,7 @@ namespace chad {
         // start new submap with a fresh octree and new pose indices
         _active_octree_p->clear();
         _active_scan_beg = ++_active_scan_end;
-        if (_debug_outputs) MEASURE_TIME(beg, "++ Finalizing submap");
+        MEASURE_TIME(beg, "++ Finalizing submap");
     }
 
     void TSDFMap::reconstruct(const std::string& filename) {
@@ -283,16 +283,16 @@ namespace chad {
         MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", filename));
         return;
 
-        std::vector<std::array<uint8_t, 3>> colors {
-            {255, 0, 0},
-            {0, 255, 0},
-            {0, 0, 255},
-            {255, 255, 0},
-            {0, 255, 255},
-            {255, 0, 255},
-            {255, 255, 255},
-        };
-        // reconstruct 3D mesh using LVR2
-        detail::reconstruct(*_dag_storage_p, _map_optimizer_p->_submaps[submap_index]._root_indices, _sdf_res, _sdf_trunc, filename, colors[submap_index % colors.size()]);
+        // std::vector<std::array<uint8_t, 3>> colors {
+        //     {255, 0, 0},
+        //     {0, 255, 0},
+        //     {0, 0, 255},
+        //     {255, 255, 0},
+        //     {0, 255, 255},
+        //     {255, 0, 255},
+        //     {255, 255, 255},
+        // };
+        // // reconstruct 3D mesh using LVR2
+        // detail::reconstruct(*_dag_storage_p, _map_optimizer_p->_submaps[submap_index]._root_indices, _sdf_res, _sdf_trunc, filename, colors[submap_index % colors.size()]);
     }
 }

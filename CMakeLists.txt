@@ -12,10 +12,9 @@ include("cmake/options_compiler.cmake")
 # create chad tsdf library
 add_library(${PROJECT_NAME} 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf_map.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/lvr2.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/virtual_array.cpp")
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS}) # may not be needed anymore
+target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include/chad/detail/pch.hpp")
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -24,10 +23,12 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/i
 include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
-# include("cmake/gtsam.cmake")
-include("cmake/eigen.cmake") # only needed to test eigen api (lvr2 also needs it due to dep leak)
 include("cmake/morton.cmake")
-include("cmake/lvr2.cmake")
+# include("cmake/gtsam.cmake")
+
+# target_sources(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/lvr2.cpp")
+# include("cmake/eigen.cmake") # only needed to test eigen api (lvr2 also needs it due to dep leak)
+# include("cmake/lvr2.cmake")
 
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)
