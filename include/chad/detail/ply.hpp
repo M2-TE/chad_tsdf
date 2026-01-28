@@ -42,7 +42,7 @@ namespace chad::detail {
 
             _ofs << std::string("ply\n");
             _ofs << std::string("format binary_little_endian 1.0\n");
-            _ofs << std::format("comment {}\n", COMMENT);
+            _ofs << fmt::format("comment {}\n", COMMENT);
             _ofs << std::string("element vertex                     \n");
             _ofs << std::string("property float32 x\n");
             _ofs << std::string("property float32 y\n");
