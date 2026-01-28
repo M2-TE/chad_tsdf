@@ -111,6 +111,7 @@ namespace chad {
             const Pose& final_pose = _map_optimizer_p->_scan_poses[_active_scan_end];
             float distance = glm::distance(first_pose._position, final_pose._position);
             if (distance > _submap_fin_delta) finalize_active_submap();
+            else _active_scan_end++; // include current scan in active submap
         }
         else _active_scan_end++; // include current scan in active submap
 

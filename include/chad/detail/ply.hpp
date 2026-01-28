@@ -10,8 +10,8 @@ namespace chad::detail {
         struct Vertex {
             void write(std::ofstream& ofs) const {
                 ofs.write(reinterpret_cast<const char*>(&_position), sizeof(_position));
-                ofs.write(reinterpret_cast<const char*>(&_normal), sizeof(_normal));
-                ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
+                // ofs.write(reinterpret_cast<const char*>(&_normal), sizeof(_normal));
+                // ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
             }
             glm::f32vec3 _position{ 0, 0, 0 };
             glm::f32vec3 _normal{ 0, 0, 0 };
@@ -44,15 +44,7 @@ namespace chad::detail {
             _ofs << std::string("format binary_little_endian 1.0\n");
             _ofs << fmt::format("comment {}\n", COMMENT);
             _ofs << std::string("element vertex                     \n");
-            _ofs << std::string("property float32 x\n");
-            _ofs << std::string("property float32 y\n");
-            _ofs << std::string("property float32 z\n");
-            _ofs << std::string("property float32 nx\n");
-            _ofs << std::string("property float32 ny\n");
-            _ofs << std::string("property float32 nz\n");
-            _ofs << std::string("property uint8 red\n");
-            _ofs << std::string("property uint8 green\n");
-            _ofs << std::string("property uint8 blue\n");
+            _ofs << PROPERTIES;
             _ofs << std::string("element face                     \n");
             _ofs << std::string("property list uint8 uint32 vertex_indices\n");
             _ofs << std::string("end_header\n");
@@ -261,7 +253,7 @@ namespace chad::detail {
             // write vertex and face counts into header
             _ofs.seekp(60  + COMMENT.size());
             _ofs << _vertex_count;
-            _ofs.seekp(271 + COMMENT.size());
+            _ofs.seekp(94 + COMMENT.size() + PROPERTIES.size());
             _ofs << _face_count;
             _ofs.close();
         }
@@ -361,9 +353,27 @@ namespace chad::detail {
         }
 
         private:
-        static constexpr std::string_view COMMENT = "Mesh reconstructed by CHAD TSDF";
         std::ofstream _ofs;
         uint32_t _vertex_count; // offset by +1 as index 0 is reserved
         uint32_t _face_count;
+
+        static constexpr std::string_view COMMENT = "Mesh reconstructed by CHAD TSDF";
+        static constexpr std::string_view PROPERTIES = \
+"\
+property float32 x\n\
+property float32 y\n\
+property float32 z\n\
+";
+// "\
+// property float32 x\n\
+// property float32 y\n\
+// property float32 z\n\
+// property float32 nx\n\
+// property float32 ny\n\
+// property float32 nz\n\
+// property uint8 red\n\
+// property uint8 green\n\
+// property uint8 blue\n\
+// ";
     };
 }
