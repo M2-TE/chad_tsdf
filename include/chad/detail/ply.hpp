@@ -11,7 +11,7 @@ namespace chad::detail {
             void write(std::ofstream& ofs) const {
                 ofs.write(reinterpret_cast<const char*>(&_position), sizeof(_position));
                 // ofs.write(reinterpret_cast<const char*>(&_normal), sizeof(_normal));
-                // ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
+                ofs.write(reinterpret_cast<const char*>(&_color), sizeof(_color));
             }
             glm::f32vec3 _position{ 0, 0, 0 };
             glm::f32vec3 _normal{ 0, 0, 0 };
@@ -363,6 +363,9 @@ namespace chad::detail {
 property float32 x\n\
 property float32 y\n\
 property float32 z\n\
+property uint8 red\n\
+property uint8 green\n\
+property uint8 blue\n\
 ";
 // "\
 // property float32 x\n\
