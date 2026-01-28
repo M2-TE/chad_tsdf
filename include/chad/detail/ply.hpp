@@ -26,9 +26,11 @@ namespace chad::detail {
             glm::u32vec3 _indices{ 0, 0, 0 };
         };
         struct LeafCopy {
-            LeafCopy(float sd): _signed_distance(sd) {}
+            LeafCopy(float sd, uint32_t weight): _signed_distance(sd), _weight(weight) {}
             // simple raw signed distance from a leaf in f32
             const float _signed_distance;
+            // keep track of weight simply for coloration
+            const uint32_t _weight;
             // every leaf will have a maximum of 3 vertices placed on +x, +y or +z
             glm::u32vec3 _vertex_indices{ 0, 0, 0 };
         };
@@ -55,8 +57,8 @@ namespace chad::detail {
             _ofs << std::string("property list uint8 uint32 vertex_indices\n");
             _ofs << std::string("end_header\n");
         }
-        void reconstruct(const DAGStorage& dag, RootIndex tsdf_root, float sdf_res, float sdf_trunc) {
-            gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves = create_hashmap(dag, tsdf_root, sdf_trunc);
+        void reconstruct(const DAGStorage& dag, RootIndices roots, float sdf_res, float sdf_trunc) {
+            gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves = create_hashmap(dag, roots, sdf_trunc);
 
             // create vertices at flipping signs
             for (auto& [mc, leaf]: leaves) {
@@ -67,6 +69,7 @@ namespace chad::detail {
                 if (leaf._signed_distance == 0.0f) {
                     Vertex v;
                     v._position = leaf_pos;
+                    v._color = get_gradient_color(leaf._weight);
                     v.write(_ofs);
 
                     leaf._vertex_indices.x = _vertex_count;
@@ -76,58 +79,37 @@ namespace chad::detail {
                     continue;
                 }
 
-                // check if the 3 voxels in +x, +y and +z exist and contain a different sign
-                const auto leaf_x = leaves.find(leaf_voxel + glm::ivec3(1, 0, 0));
-                const auto leaf_y = leaves.find(leaf_voxel + glm::ivec3(0, 1, 0));
-                const auto leaf_z = leaves.find(leaf_voxel + glm::ivec3(0, 0, 1));
+                for (uint32_t dimension_i = 0; dimension_i < 3; dimension_i++) {
+                    // offset by 1 in each dimension
+                    glm::ivec3 offset{ 0, 0, 0 };
+                    offset[dimension_i] = 1;
 
-                if (leaf_x != leaves.cend()) {
-                    const float other_sd =  leaf_x->second._signed_distance;
-                    // check if the sign differs, also ignores other_sd of 0
-                    if (leaf._signed_distance * other_sd < 0.0f) {
-                        // calc vertex position
-                        const float other_pos_x = leaf_pos.x + sdf_res;
-                        const float final_pos_x = other_pos_x - other_sd * (leaf_pos.x - other_pos_x) / (leaf._signed_distance - other_sd);
-                        
-                        Vertex v;
-                        v._position = leaf_pos;
-                        v._position.x = final_pos_x;
-                        v.write(_ofs);
-                        
-                        leaf._vertex_indices.x = _vertex_count++;
-                    }
-                }
-                if (leaf_y != leaves.cend()) {
-                    const float other_sd =  leaf_y->second._signed_distance;
-                    // check if the sign differs, also ignores other_sd of 0
-                    if (leaf._signed_distance * other_sd < 0.0f) {
-                        // calc vertex position
-                        const float other_pos_y = leaf_pos.y + sdf_res;
-                        const float final_pos_y = other_pos_y - other_sd * (leaf_pos.y - other_pos_y) / (leaf._signed_distance - other_sd);
+                    // check if that leaf exists
+                    const auto other_it = leaves.find(leaf_voxel + offset);
+                    if (other_it == leaves.cend()) continue;
+                    // check for flipping sign
+                    const float leaf_sd = leaf._signed_distance;
+                    const float other_sd = other_it->second._signed_distance;
+                    if (other_sd * leaf_sd >= 0.0f) continue;
+                    
+                    const float leaf_weight = float(leaf._weight);
+                    const float other_weight = float(other_it->second._weight);
 
-                        Vertex v;
-                        v._position = leaf_pos;
-                        v._position.y = final_pos_y;
-                        v.write(_ofs);
-                        
-                        leaf._vertex_indices.y = _vertex_count++;
-                    }
-                }
-                if (leaf_z != leaves.cend()) {
-                    const float other_sd =  leaf_z->second._signed_distance;
-                    // check if the sign differs, also ignores other_sd of 0
-                    if (leaf._signed_distance * other_sd < 0.0f) {
-                        // calc vertex position
-                        const float other_pos_z = leaf_pos.z + sdf_res;
-                        const float final_pos_z = other_pos_z - other_sd * (leaf_pos.z - other_pos_z) / (leaf._signed_distance - other_sd);
+                    const float leaf_pos_n = leaf_pos[dimension_i];
+                    const float other_pos_n = leaf_pos[dimension_i] + sdf_res;
 
-                        Vertex v;
-                        v._position = leaf_pos;
-                        v._position.z = final_pos_z;
-                        v.write(_ofs);
+                    // interpolate position and weight based on signed distances
+                    const float pos_n = other_pos_n - other_sd * (leaf_pos_n - other_pos_n) / (leaf_sd - other_sd);
+                    const float weight = other_weight - other_sd * (leaf_weight - other_weight) / (leaf_sd - other_sd);
 
-                        leaf._vertex_indices.z = _vertex_count++;
-                    }
+                    // create a single vertex at the interpolated position
+                    Vertex v;
+                    v._position = leaf_pos;
+                    v._position[dimension_i] = pos_n;
+                    v._color = get_gradient_color(uint32_t(weight)); // heatmap color
+                    v.write(_ofs);
+
+                    leaf._vertex_indices[dimension_i] = _vertex_count++;
                 }
             }
 
@@ -223,6 +205,7 @@ namespace chad::detail {
                     }
                 }
 
+                // TODO: move this somewhere else
                 static constexpr std::array<std::pair<uint32_t, uint32_t>, 12> edge_indices = {
                     std::pair<uint32_t, uint32_t>{ 0, 1 },
                     std::pair<uint32_t, uint32_t>{ 1, 3 },
@@ -284,77 +267,97 @@ namespace chad::detail {
         }
 
         private:
-        auto create_hashmap(const DAGStorage& dag, RootIndex tsdf_root, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
-            // track node traversal
+        auto create_hashmap(const DAGStorage& dag, RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
+            // read-only trackers for submap
             gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
-            std::array<uint32_t, DAGStorage::MAX_DEPTH + 1> path_addrs;
-            std::array<uint8_t,  DAGStorage::MAX_DEPTH + 1> path_child_indices;
-            path_child_indices.fill(0);
-            path_addrs.fill(0);
-            // use the root address of the TSDF tree (do not care about weights for reconstruction)
-            path_addrs[0] = tsdf_root;
-    
+            std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
+            path_child.fill(0);
+            addr_tsdf.fill(0);
+            addr_wght.fill(0);
+            addr_tsdf[0] = roots._tsdfs;
+            addr_wght[0] = roots._weights;
+
+            // iterate both trees to build separate octrees
             uint32_t depth = 0;
             while (true) {
-                uint8_t child_i = path_child_indices[depth]++;
-    
+                uint8_t child_i = path_child[depth]++;
+
                 // when all children at this depth were iterated
                 if (child_i >= 8) {
                     if (depth > 0) depth--;
                     else break; // exit main loop
                 }
-    
                 // node contains node children
                 else if (depth < DAGStorage::MAX_DEPTH - 1) {
                     // try to find the child in current node
-                    uint32_t addr = path_addrs[depth];
-                    uint32_t child_addr = dag.get_child_addr(depth, addr, child_i);
-                    // check if child address is valid
-                    if (child_addr > 0) {
+                    uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
+
+                    // check if child address is valid (only need to check one)
+                    if (child_addr_tsdf > 0) {
+                        // no need to verify
+                        uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+
                         depth++;
-                        path_child_indices[depth] = 0; // reset child index for new depth
-                        path_addrs[depth] = child_addr;
+                        path_child[depth] = 0; // reset child index for new depth
+                        addr_tsdf[depth] = child_addr_tsdf;
+                        addr_wght[depth] = child_addr_wght;
                     }
                 }
-    
                 // node contains leaf children
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
-                    uint32_t child_addr = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, path_addrs[depth], child_i);
-                    if (child_addr == 0) continue;
-    
+                    uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                    if (child_addr_tsdf == 0) continue; // only need to check one
+                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
+
                     // fetch actual leaf cluster
-                    const auto& cluster = dag.get_lc(child_addr);
-    
+                    const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
+                    const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+
                     // reconstruct morton code from path
                     uint64_t code = 0;
                     for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                        uint64_t part = path_child_indices[k] - 1;
+                        uint64_t part = path_child[k] - 1;
                         code |= part << uint64_t(60 - k*3);
                     }
-                    MortonCode mc { code };
-                    glm::ivec3 cluster_chunk = mc.decode();
-    
-                    // iterate over all the leaves in the cluster
+                    MortonCode mc{ code };
+
+                    // get the actual leaves
                     uint32_t leaf_i = 0;
                     for (int32_t z = 0; z <= 1; z++) {
                     for (int32_t y = 0; y <= 1; y++) {
                     for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-                        // signed distance within leaf
-                        auto [signed_distance, leaf_exists] = cluster._tsdfs.try_get(leaf_i, sdf_trunc);
+                        // signed distance and weight within leaf
+                        auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
                         if (!leaf_exists) continue;
-    
-                        // leaf position
-                        glm::ivec3 leaf_chunk = cluster_chunk + glm::ivec3(x, y, z);
-                        MortonCode mc_leaf{ leaf_chunk };
-                        
+                        uint8_t weight = cluster_wght._weigh.get(leaf_i);
+
+                        // leaf index will set the 3 LSB
+                        uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
+
                         // add it to the hash map with no vertices yet
-                        leaves.emplace(mc_leaf, signed_distance);
+                        leaves.emplace(mc_leaf, LeafCopy{ signed_distance, uint32_t(weight) });
                     }}}
                 }
             }
 
             return leaves;
+        }
+        // very cheap heatmap color calculation based on cell weights
+        auto get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
+            glm::u8vec3 color{ 0, 0, 0 };
+            cell_weight = std::min<uint32_t>(254, cell_weight * 4); // DEBUG
+            if (cell_weight <= 127) {
+                color.b = (127 - cell_weight) * 2;
+                color.g = (      cell_weight) * 2;
+            }
+            else {
+                color.g = (127 - (cell_weight - 128)) * 2;
+                color.r = (      (cell_weight - 128)) * 2;
+            }
+            return color;
         }
 
         private:

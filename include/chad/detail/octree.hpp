@@ -171,7 +171,6 @@ namespace chad::detail {
         // insert TSDFs from compressed DAG octree submap
         void insert(const DAGStorage& dag, RootIndices roots, float sdf_trunc) {
             // read-only trackers for submap
-            MortonCode path_mc{ 0 };
             std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
             std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
             std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
@@ -195,10 +194,12 @@ namespace chad::detail {
                 else if (depth < DAGStorage::MAX_DEPTH - 1) {
                     // try to find the child in current node
                     uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
-                    uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
-
+                    
                     // check if child address is valid (only need to check one)
                     if (child_addr_tsdf > 0) {
+                        // no need to verify
+                        uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+                        
                         depth++;
                         path_child[depth] = 0; // reset child index for new depth
                         addr_tsdf[depth] = child_addr_tsdf;
@@ -209,8 +210,8 @@ namespace chad::detail {
                 else {
                     // try to get the leaf cluster, skip if it doesn't exist
                     uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
-                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
                     if (child_addr_tsdf == 0) continue; // only need to check one
+                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
 
                     // fetch actual leaf cluster
                     const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
@@ -232,7 +233,7 @@ namespace chad::detail {
                         // signed distance and weight within leaf
                         auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
                         if (!leaf_exists) continue;
-                        auto weight = cluster_wght._weigh.get(leaf_i);
+                        uint8_t weight = cluster_wght._weigh.get(leaf_i);
 
                         // leaf index will set the 3 LSB
                         uint64_t mc_leaf = mc._value | uint64_t(leaf_i);

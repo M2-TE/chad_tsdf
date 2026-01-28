@@ -276,8 +276,8 @@ namespace chad {
     void TSDFMap::reconstruct(const std::string& filename, SubmapIndex submap_index) {
         auto beg = std::chrono::high_resolution_clock::now();
         detail::Ply mesh{ filename };
-        RootIndex tsdf_root = _map_optimizer_p->_submaps[submap_index]._root_indices._tsdfs;
-        mesh.reconstruct(*_dag_storage_p, tsdf_root, _sdf_res, _sdf_trunc);
+        RootIndices roots = _map_optimizer_p->_submaps[submap_index]._root_indices;
+        mesh.reconstruct(*_dag_storage_p, roots, _sdf_res, _sdf_trunc);
         mesh.finalize();
         MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", filename));
         return;
