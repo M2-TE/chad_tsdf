@@ -348,7 +348,7 @@ namespace chad::detail {
         // very cheap heatmap color calculation based on cell weights
         auto get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
             glm::u8vec3 color{ 0, 0, 0 };
-            cell_weight = std::min<uint32_t>(254, cell_weight * 4); // DEBUG
+            // cell_weight = std::min<uint32_t>(254, cell_weight * 4); // DEBUG
             if (cell_weight <= 127) {
                 color.b = (127 - cell_weight) * 2;
                 color.g = (      cell_weight) * 2;
