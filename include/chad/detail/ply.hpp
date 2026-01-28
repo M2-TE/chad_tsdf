@@ -199,11 +199,11 @@ namespace chad::detail {
                 };
 
                 // DEBUG: TEMPORARILY DISABLE CUBES WITH SD OF 0.0f
-                bool breaking = false;
-                for (uint32_t i = 0; i < 8; i++) {
-                    if (corners[i]._signed_distance == 0.0f)  breaking = true;
-                }
-                if (breaking) continue;
+                // bool breaking = false;
+                // for (uint32_t i = 0; i < 8; i++) {
+                //     if (corners[i]._signed_distance == 0.0f)  breaking = true;
+                // }
+                // if (breaking) continue;
 
                 // create the lookup index for the marching cubes table
                 uint32_t marching_cubes_index = 0;
@@ -222,18 +222,49 @@ namespace chad::detail {
                         break;
                     }
                 }
+
+                static constexpr std::array<std::pair<uint32_t, uint32_t>, 12> edge_indices = {
+                    std::pair<uint32_t, uint32_t>{ 0, 1 },
+                    std::pair<uint32_t, uint32_t>{ 1, 3 },
+                    std::pair<uint32_t, uint32_t>{ 3, 2 },
+                    std::pair<uint32_t, uint32_t>{ 2, 0 },
+                    std::pair<uint32_t, uint32_t>{ 4, 5 },
+                    std::pair<uint32_t, uint32_t>{ 5, 7 },
+                    std::pair<uint32_t, uint32_t>{ 7, 6 },
+                    std::pair<uint32_t, uint32_t>{ 6, 4 },
+                    std::pair<uint32_t, uint32_t>{ 0, 4 },
+                    std::pair<uint32_t, uint32_t>{ 1, 5 },
+                    std::pair<uint32_t, uint32_t>{ 3, 7 },
+                    std::pair<uint32_t, uint32_t>{ 2, 6 },
+                };
                 
                 // create the faces
                 for (uint32_t i = 0; i < table_entry_length; i += 3) {
                     Face face;
 
                     // fetch the correct vertices
-                    face._indices[0] = edges[table_entry[i + 0]];
-                    face._indices[1] = edges[table_entry[i + 1]];
-                    face._indices[2] = edges[table_entry[i + 2]];
+                    for (uint32_t vertex_i = 0; vertex_i < 3; vertex_i++) {
+                        uint32_t edge_i = table_entry[i + vertex_i];
 
-                    // usually happens when a face is formed around SD of 0.0f
-                    if (face._indices[0] == face._indices[1] == face._indices[2]) {
+                        // check if any corner connected to chosen edge has a SD of 0.0f
+                        auto& corner_0 = corners[edge_indices[edge_i].first];
+                        auto& corner_1 = corners[edge_indices[edge_i].second];
+
+                        if (corner_0._signed_distance == 0.0f) {
+                            face._indices[vertex_i] = corner_0._vertex_indices[0];
+                        }
+                        else if (corner_1._signed_distance == 0.0f) {
+                            face._indices[vertex_i] = corner_1._vertex_indices[0];
+                        }
+                        else {
+                            face._indices[vertex_i] = edges[table_entry[i + vertex_i]];
+                        }
+                    }
+
+                    // filter out invisible faces
+                    if (face._indices[0] == face._indices[1] || 
+                        face._indices[0] == face._indices[2] || 
+                        face._indices[1] == face._indices[2]) {
                         continue;
                     }
 
