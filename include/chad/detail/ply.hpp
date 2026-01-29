@@ -50,9 +50,101 @@ namespace chad::detail {
             _ofs << std::string("end_header\n");
         }
         void reconstruct(const DAGStorage& dag, RootIndices roots, float sdf_res, float sdf_trunc) {
-            gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves = create_hashmap(dag, roots, sdf_trunc);
+            auto leaves = create_hashmap(dag, roots, sdf_trunc);
+            create_vertices(leaves, sdf_res);
+            create_faces(leaves);
+        }
+        void finalize() { // just don't look inside
+            // write vertex and face counts into header
+            _ofs.seekp(60  + COMMENT.size());
+            _ofs << _vertex_count;
+            _ofs.seekp(94 + COMMENT.size() + PROPERTIES.size());
+            _ofs << _face_count;
+            _ofs.close();
+        }
 
-            // create vertices at flipping signs
+        private:
+        // Step 1: create a hashmap that is used to perform more efficient neighbour lookups later
+        auto create_hashmap(const DAGStorage& dag, RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
+            // read-only trackers for submap
+            gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
+            std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
+            path_child.fill(0);
+            addr_tsdf.fill(0);
+            addr_wght.fill(0);
+            addr_tsdf[0] = roots._tsdfs;
+            addr_wght[0] = roots._weights;
+
+            // iterate both trees to build separate octrees
+            uint32_t depth = 0;
+            while (true) {
+                uint8_t child_i = path_child[depth]++;
+
+                // when all children at this depth were iterated
+                if (child_i >= 8) {
+                    if (depth > 0) depth--;
+                    else break; // exit main loop
+                }
+                // node contains node children
+                else if (depth < DAGStorage::MAX_DEPTH - 1) {
+                    // try to find the child in current node
+                    uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
+
+                    // check if child address is valid (only need to check one)
+                    if (child_addr_tsdf > 0) {
+                        // no need to verify
+                        uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+
+                        depth++;
+                        path_child[depth] = 0; // reset child index for new depth
+                        addr_tsdf[depth] = child_addr_tsdf;
+                        addr_wght[depth] = child_addr_wght;
+                    }
+                }
+                // node contains leaf children
+                else {
+                    // try to get the leaf cluster, skip if it doesn't exist
+                    uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                    if (child_addr_tsdf == 0) continue; // only need to check one
+                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
+
+                    // fetch actual leaf cluster
+                    const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
+                    const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+
+                    // reconstruct morton code from path
+                    uint64_t code = 0;
+                    for (uint64_t k = 0; k < 63/3 - 1; k++) {
+                        uint64_t part = path_child[k] - 1;
+                        code |= part << uint64_t(60 - k*3);
+                    }
+                    MortonCode mc{ code };
+
+                    // get the actual leaves
+                    uint32_t leaf_i = 0;
+                    for (int32_t z = 0; z <= 1; z++) {
+                    for (int32_t y = 0; y <= 1; y++) {
+                    for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                        // signed distance and weight within leaf
+                        auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
+                        if (!leaf_exists) continue;
+                        uint8_t weight = cluster_wght._weigh.get(leaf_i);
+
+                        // leaf index will set the 3 LSB
+                        uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
+
+                        // add it to the hash map with no vertices yet
+                        leaves.emplace(mc_leaf, LeafCopy{ signed_distance, uint32_t(weight) });
+                    }}}
+                }
+            }
+
+            return leaves;
+        }
+        // Step 2: create vertices at flipping signs
+        void create_vertices(gtl::parallel_flat_hash_map<MortonCode, LeafCopy>& leaves, float sdf_res) {
             for (auto& [mc, leaf]: leaves) {
                 const glm::ivec3 leaf_voxel = mc.decode();
                 const glm::vec3 leaf_pos = glm::vec3(leaf_voxel) * sdf_res;
@@ -104,10 +196,11 @@ namespace chad::detail {
                     leaf._vertex_indices[dimension_i] = _vertex_count++;
                 }
             }
-
-            // create indices as per marching cubes LUT
-            // TODO: handle SD of 0.0f
-            // TODO: handle missing corners (should still be able to create faces)
+        }
+        // Step 3: create faces with marching cubes lookup table
+        // TODO: handle SD of 0.0f properly
+        // TODO: handle missing corners (should still be able to create faces)
+        void create_faces(gtl::parallel_flat_hash_map<MortonCode, LeafCopy>& leaves) {
             for (const auto& [mc000, leaf000]: leaves) {
                 const glm::ivec3 pos000 = mc000.decode();
 
@@ -249,98 +342,9 @@ namespace chad::detail {
                 }
             }
         }
-        void finalize() { // just don't look inside
-            // write vertex and face counts into header
-            _ofs.seekp(60  + COMMENT.size());
-            _ofs << _vertex_count;
-            _ofs.seekp(94 + COMMENT.size() + PROPERTIES.size());
-            _ofs << _face_count;
-            _ofs.close();
-        }
-
-        private:
-        auto create_hashmap(const DAGStorage& dag, RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
-            // read-only trackers for submap
-            gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
-            std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
-            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
-            std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
-            path_child.fill(0);
-            addr_tsdf.fill(0);
-            addr_wght.fill(0);
-            addr_tsdf[0] = roots._tsdfs;
-            addr_wght[0] = roots._weights;
-
-            // iterate both trees to build separate octrees
-            uint32_t depth = 0;
-            while (true) {
-                uint8_t child_i = path_child[depth]++;
-
-                // when all children at this depth were iterated
-                if (child_i >= 8) {
-                    if (depth > 0) depth--;
-                    else break; // exit main loop
-                }
-                // node contains node children
-                else if (depth < DAGStorage::MAX_DEPTH - 1) {
-                    // try to find the child in current node
-                    uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
-
-                    // check if child address is valid (only need to check one)
-                    if (child_addr_tsdf > 0) {
-                        // no need to verify
-                        uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
-
-                        depth++;
-                        path_child[depth] = 0; // reset child index for new depth
-                        addr_tsdf[depth] = child_addr_tsdf;
-                        addr_wght[depth] = child_addr_wght;
-                    }
-                }
-                // node contains leaf children
-                else {
-                    // try to get the leaf cluster, skip if it doesn't exist
-                    uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
-                    if (child_addr_tsdf == 0) continue; // only need to check one
-                    uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
-
-                    // fetch actual leaf cluster
-                    const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
-                    const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
-
-                    // reconstruct morton code from path
-                    uint64_t code = 0;
-                    for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                        uint64_t part = path_child[k] - 1;
-                        code |= part << uint64_t(60 - k*3);
-                    }
-                    MortonCode mc{ code };
-
-                    // get the actual leaves
-                    uint32_t leaf_i = 0;
-                    for (int32_t z = 0; z <= 1; z++) {
-                    for (int32_t y = 0; y <= 1; y++) {
-                    for (int32_t x = 0; x <= 1; x++, leaf_i++) {
-                        // signed distance and weight within leaf
-                        auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
-                        if (!leaf_exists) continue;
-                        uint8_t weight = cluster_wght._weigh.get(leaf_i);
-
-                        // leaf index will set the 3 LSB
-                        uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
-
-                        // add it to the hash map with no vertices yet
-                        leaves.emplace(mc_leaf, LeafCopy{ signed_distance, uint32_t(weight) });
-                    }}}
-                }
-            }
-
-            return leaves;
-        }
-        // very cheap heatmap color calculation based on cell weights
-        auto get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
+        // cheap heatmap color calculation based on cell weights
+        auto inline get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
             glm::u8vec3 color{ 0, 0, 0 };
-            // cell_weight = std::min<uint32_t>(254, cell_weight * 8); // DEBUG
             if (cell_weight <= 127) {
                 color.b = (127 - cell_weight) * 2;
                 color.g = (      cell_weight) * 2;
@@ -354,7 +358,7 @@ namespace chad::detail {
 
         private:
         std::ofstream _ofs;
-        uint32_t _vertex_count; // offset by +1 as index 0 is reserved
+        uint32_t _vertex_count;
         uint32_t _face_count;
 
         static constexpr std::string_view COMMENT = "Mesh reconstructed by CHAD TSDF";
@@ -367,16 +371,9 @@ property uint8 red\n\
 property uint8 green\n\
 property uint8 blue\n\
 ";
-// "\
-// property float32 x\n\
-// property float32 y\n\
-// property float32 z\n\
 // property float32 nx\n\
 // property float32 ny\n\
 // property float32 nz\n\
-// property uint8 red\n\
-// property uint8 green\n\
-// property uint8 blue\n\
-// ";
+//
     };
 }
