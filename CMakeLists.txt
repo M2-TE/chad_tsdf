@@ -12,7 +12,7 @@ include("cmake/options_compiler.cmake")
 # create chad tsdf library
 add_library(${PROJECT_NAME} 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf_map.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/virtual_array.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/virtual_array.cpp")
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
