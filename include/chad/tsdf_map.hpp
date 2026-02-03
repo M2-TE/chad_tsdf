@@ -26,7 +26,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_fin_delta = 5.0f);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_pos_threshhold = 5.0f);
         // destructor to free allocations
         ~TSDFMap();
 
@@ -91,15 +91,18 @@ namespace chad {
 
         // finalize current active submap and octree
         void finalize_active_submap();
-        // reconstruct 3D mesh and write it to disk
+        // reconstruct 3D mesh(es) from all submaps and write it to disk
         void reconstruct(const std::string& filename);
-        // reconstruct 3D mesh and write it to disk
-        void reconstruct(const std::string& filename, SubmapIndex submap_handle);
+        // reconstruct 3D mesh from specific submap and write it to disk
+        void reconstruct(const std::string& filename, SubmapIndex submap_handle); // TODO: deprecate?
 
         // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
-        void release_hashes() { throw std::logic_error("Function not yet implemented"); }
+        void release_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::release_hashes()"); }
         // rebuild all hash structures to allow insertion of new data
-        void rebuild_hashes() { throw std::logic_error("Function not yet implemented"); }
+        void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
+        
+        // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
+        bool is_submap_active() const { return _active_scan_end != _active_scan_beg; }
 
     private:
         // insert points into currently active octree (internal function used by all insert(...) funcs)
@@ -110,13 +113,13 @@ namespace chad {
     public:
         const float _sdf_res;
         const float _sdf_trunc;
-        const float _submap_fin_delta;
-        bool _debug_outputs = true;
+        const float _submap_pos_threshhold;
+        bool _debug_outputs = false;
 
     private:
         // transient
-        ScanIndex _active_scan_beg = 0; // first scan index of active submap
-        ScanIndex _active_scan_end = 0; // final scan index of active submap
+        ScanIndex _active_scan_beg = 0; // index of first scan for active submap
+        ScanIndex _active_scan_end = 0; // past-the-end index of final scan for active submap
         detail::Octree* _active_octree_p; // currently active octree storing TSDF voxels
         // persistent
         detail::DAGStorage*   _dag_storage_p; // storage for all hashed nodes

@@ -79,7 +79,6 @@ namespace chad::detail {
         void inline insert(MortonCode mc, Leaf leaf) {
             insert(mc) = leaf;
         }
-
         // insert TSDFs via points and normals
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
             const float sdf_res_recip = float(1.0 / double(sdf_res));
@@ -168,7 +167,7 @@ namespace chad::detail {
                 traversed_voxels.clear();
             }
         }
-        // insert TSDFs from compressed DAG octree submap
+        // insert TSDFs from compressed DAG submap
         void insert(const DAGStorage& dag, RootIndices roots, float sdf_trunc) {
             // read-only trackers for submap
             std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
@@ -244,8 +243,9 @@ namespace chad::detail {
                 }
             }
         }
-        // insert TSDFs from another octree via trilinear interpolation
-        void insert(const Octree& octree_b, glm::vec3 delta_b_to_a, float sdf_res) {
+
+        // merge TSDFs from another octree via trilinear interpolation
+        void merge(const Octree& octree_b, glm::vec3 delta_b_to_a, float sdf_res) {
             // track node traversal
             std::array<const Octree::Node*, DAGStorage::MAX_DEPTH + 1> path_nodes;
             std::array<uint8_t, DAGStorage::MAX_DEPTH + 1> path_child_indices;

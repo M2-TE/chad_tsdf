@@ -26,10 +26,6 @@ include("cmake/glm.cmake")
 include("cmake/morton.cmake")
 # include("cmake/gtsam.cmake")
 
-# target_sources(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/detail/lvr2.cpp")
-# include("cmake/eigen.cmake") # only needed to test eigen api (lvr2 also needs it due to dep leak)
-# include("cmake/lvr2.cmake")
-
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)
     add_executable(chad_executable "src/chad/main.cpp")

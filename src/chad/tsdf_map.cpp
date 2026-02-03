@@ -9,21 +9,30 @@
 #include "chad/detail/normals.hpp"
 #include "chad/detail/dag_storage.hpp"
 
-#define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count());
+#define CHAD_MESSAGE(message) fmt::println("[CHAD] {}", message)
+#define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count())
 
 namespace chad::detail {
     struct Submap {
-        Submap(const Pose& pose, const Pose& pose_error, const RootIndices& root_indices, ScanIndex scan_start_i, ScanIndex scan_final_i):
-            _pose(pose), _pose_error(pose_error), _root_indices(root_indices), _scan_start_i(scan_start_i), _scan_final_i(scan_final_i) {}
-        Pose _pose;
-        Pose _pose_error;
-        RootIndices _root_indices;
-        ScanIndex _scan_start_i; // start index into vectors of scan data
-        ScanIndex _scan_final_i; // final index into vectors of scan data
-    };
-}
+        Submap(const Pose& pose_avg,
+                const Pose& pose_err, 
+                const RootIndices& root_indices,
+                ScanIndex scan_beg,
+                ScanIndex scan_end):
+            _pose_avg(pose_avg),
+            _pose_err(pose_err), 
+            _root_indices(root_indices), 
+            _scan_beg(scan_beg),
+            _scan_end(scan_end) {
+        }
 
-namespace chad::detail {
+        Pose _pose_avg;
+        Pose _pose_err;
+        RootIndices _root_indices;
+        ScanIndex _scan_beg; // index of first scan
+        ScanIndex _scan_end; // past-the-end index of scan
+    };
+
     struct MapOptimizer {
         MapOptimizer() = default;
         ~MapOptimizer() = default;
@@ -35,33 +44,35 @@ namespace chad::detail {
             _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
         }
 
-        // finalizes and adds a submap
-        auto add_submap(RootIndices roots, ScanIndex scan_start_i, ScanIndex scan_final_i) -> const Submap& {
+        // finalizes and adds a submap (TODO: validate)
+        auto add_submap(RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const Submap& {
             // avg of positions as submap center
             glm::dvec3 position;
-            for (ScanIndex scan_i = scan_start_i; scan_i <= scan_final_i; scan_i++) {
-                position += glm::dvec3(_scan_poses[scan_i]._position);
+            for (ScanIndex scan_i = scan_beg; scan_i < scan_end; scan_i++) {
+                const Pose& pose = _scan_poses[scan_i];
+                position += glm::dvec3(pose._position);
             }
-            position /= float(scan_final_i - scan_start_i + 1);
+            position /= float(scan_end - scan_beg);
 
             // just go ahead and create submap
             Submap submap{
                 Pose{ glm::vec3(position), glm::quat() },
                 Pose{},
                 roots,
-                scan_start_i,
-                scan_final_i,
+                scan_beg,
+                scan_end,
             };
             _submaps.push_back(submap);
             return _submaps.back();
         }
 
-        bool is_submap_done(const detail::Pose& pose, float submap_distance) {
-            if (_submaps.size() > 0) {
-                // finalize active submap once traversed far enough
-                detail::Pose first_pose = _scan_poses[_submaps.back()._scan_start_i];
-                return glm::distance(first_pose._position, pose._position) > submap_distance;
-            }
+        // check if the current active submap has crossed the position delta threshhold
+        bool is_active_submap_done(ScanIndex submap_beg, float threshhold) {
+            const Pose& pose_new = _scan_poses.back();
+            const Pose& pose_prev = _scan_poses[submap_beg];
+            float distance = glm::distance(pose_prev._position, pose_new._position);
+            // if our submap threshhold is crossed, finalize the active submap before inserting new points
+            if (distance > threshhold) return true;
             else return false;
         }
 
@@ -77,7 +88,7 @@ namespace chad::detail {
 };
 
 namespace chad {
-    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_fin_delta): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc), _submap_fin_delta(submap_fin_delta) {
+    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_pos_threshhold): _sdf_res(sdf_res), _sdf_trunc(sdf_trunc), _submap_pos_threshhold(submap_pos_threshhold) {
         _dag_storage_p = new detail::DAGStorage();
         _map_optimizer_p = new detail::MapOptimizer();
         _active_octree_p = new detail::Octree();
@@ -93,7 +104,6 @@ namespace chad {
         auto beg = std::chrono::high_resolution_clock::now();
 
         // sort points by their morton code, discretized to the voxel resolution
-
         auto beg_intermediate = std::chrono::high_resolution_clock::now();
         MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
@@ -105,15 +115,14 @@ namespace chad {
         _map_optimizer_p->add_scan(points_sorted, pose);
         if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
 
-        // check if a new submap should be created
-        if (_active_scan_beg != _active_scan_end) {
-            const Pose& first_pose = _map_optimizer_p->_scan_poses[_active_scan_beg];
-            const Pose& final_pose = _map_optimizer_p->_scan_poses[_active_scan_end];
-            float distance = glm::distance(first_pose._position, final_pose._position);
-            if (distance > _submap_fin_delta) finalize_active_submap();
-            else _active_scan_end++; // include current scan in active submap
+        // check if an active submap should be finalized
+        if (is_submap_active()) {
+            if (_map_optimizer_p->is_active_submap_done(_active_scan_beg, _submap_pos_threshhold)) {
+                finalize_active_submap();
+            }
         }
-        else _active_scan_end++; // include current scan in active submap
+        // either way, increment our scan index
+        _active_scan_end++;
 
         // estimate the normal of every point
         beg_intermediate = std::chrono::high_resolution_clock::now();
@@ -217,6 +226,7 @@ namespace chad {
 
         return roots;
     }
+    
     void TSDFMap::finalize_active_submap() {
         auto beg = std::chrono::high_resolution_clock::now();
         // create persistent octree with DAG nodes
@@ -225,19 +235,36 @@ namespace chad {
 
         // start new submap with a fresh octree and new pose indices
         _active_octree_p->clear();
-        _active_scan_beg = ++_active_scan_end;
+        _active_scan_beg = _active_scan_end;
         MEASURE_TIME(beg, "++ Finalizing submap");
     }
-
     void TSDFMap::reconstruct(const std::string& filename) {
-        // finalize current active submap
-        if (_active_scan_beg != _active_scan_end) {
-            finalize_active_submap();
-        }
-        else if (_map_optimizer_p->_scan_poses.size() == 0) {
-            fmt::println("There are no submaps to reconstruct yet");
+        // need at least one inserted scan for reconstruction
+        if (_map_optimizer_p->_scan_poses.empty()) {
+            CHAD_MESSAGE("There are no submaps to reconstruct yet");
             return;
         }
+        // finalize current active submap if needed
+        if (is_submap_active()) {
+            CHAD_MESSAGE("Forcefully finalizing submap for reconstruction");
+            finalize_active_submap();
+        }
+        else {
+            fmt::println("no need");
+        }
+
+        std::exit(0);
+
+        // TODO: create chunks of submeshes for reconstruction
+        RootIndices roots_a = _map_optimizer_p->_submaps.front()._root_indices;
+
+        // create temporary octrees for faster memory access
+        detail::Octree octree_a, octree_b;
+        octree_a.insert(*_dag_storage_p, roots_a, _sdf_trunc);
+
+
+
+        // DEPRECATED
 
         SubmapIndex merged_index;
         // merge all submaps
@@ -258,8 +285,8 @@ namespace chad {
 
                 // invert error to get delta from b to a
                 // assumes a is global coordinate frame
-                glm::vec3 error_delta_b_to_a = -submap_b._pose_error._position;
-                octree_a.insert(octree_b, error_delta_b_to_a, _sdf_res);
+                glm::vec3 error_delta_b_to_a = -submap_b._pose_err._position;
+                octree_a.merge(octree_b, error_delta_b_to_a, _sdf_res);
                 octree_b.clear();
             }
 
