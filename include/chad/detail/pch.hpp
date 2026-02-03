@@ -12,6 +12,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <algorithm>
+#include <filesystem>
 #include <functional>
 #include <string_view>
 

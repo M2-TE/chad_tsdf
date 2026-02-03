@@ -2,7 +2,7 @@
 
 [[maybe_unused]] void static do_sphere_thing() {
     // generate random point data
-    std::vector<glm::vec3> points { 10'000'000 };
+    std::vector<glm::vec3> points { 1'000'000 };
     std::random_device rd;
     std::mt19937 gen(420);
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
@@ -13,8 +13,8 @@
 
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
-        { -3, 0, 0 },
-        { +3, 0, 0 },
+        { +0, 0, 0 },
+        { +5, 0, 0 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
@@ -28,7 +28,7 @@
         }
         map.insert(points, positions[i]);
     }
-    map.reconstruct("mesh.ply");
+    map.reconstruct("mesh");
 }
 int main() {
     do_sphere_thing();

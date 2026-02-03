@@ -26,7 +26,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_pos_threshhold = 5.0f);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_threshhold = 5.0f, uint32_t submaps_per_chunk = 5);
         // destructor to free allocations
         ~TSDFMap();
 
@@ -88,21 +88,21 @@ namespace chad {
             const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
             insert_pointcloud(points, { x, y, z });
         }
-
-        // reconstruct 3D mesh(es) from all submaps and write it to disk
-        void reconstruct(const std::string& filename);
-        // reconstruct 3D mesh from specific submap and write it to disk
-        void reconstruct(const std::string& filename, SubmapIndex submap_handle); // TODO: deprecate
-
-        // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
-        void release_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::release_hashes()"); }
-        // rebuild all hash structures to allow insertion of new data
-        void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
         
         // finalize current active submap
         void finalize_active_submap();
         // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
         bool inline is_submap_active() const { return _active_scan_end != _active_scan_beg; }
+
+        // clear all data and release memory
+        void clear() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::clear()"); }
+        // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
+        void release_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::release_hashes()"); }
+        // rebuild all hash structures to allow insertion of new data
+        void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
+
+        // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
+        void reconstruct(const std::string& foldername);
 
     private:
         // insert points into currently active octree (internal function used by all insert(...) funcs)
@@ -113,7 +113,8 @@ namespace chad {
     public:
         const float _sdf_res;
         const float _sdf_trunc;
-        const float _submap_pos_threshhold;
+        const float _submap_threshhold;
+        const uint32_t _submaps_per_chunk;
         bool _debug_outputs = false;
 
     private:
