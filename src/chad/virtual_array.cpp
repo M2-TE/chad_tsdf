@@ -30,5 +30,5 @@ namespace chad::detail {
 #elif defined(_WIN32) || defined(_WIN64)
 #   error "Windows is not yet supported. Implement chad::detail::allocate_virtual(size_t)->void* and chad::detail::deallocate_virtual(void*, size_t)->void."
 #elif
-#   error "Unknown platform. Implement chad::detail::allocate_virtual(size_t)->void* and chad::detail::deallocate_virtual(void*, size_t)->void.
+#   error "Unknown platform. Implement chad::detail::allocate_virtual(size_t)->void* and chad::detail::deallocate_virtual(void*, size_t)->void."
 #endif
