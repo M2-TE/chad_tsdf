@@ -376,7 +376,7 @@ namespace chad::detail {
                     Octree::Leaf& leaf_a = insert(glm::ivec3(leaf_voxel_a_coord_a));
                     leaf_a._signed_distance = leaf_a._signed_distance * float(leaf_a._weight) + tsdf_XYZ; // tsdf_XYZ is already weighted
                     leaf_a._signed_distance /= float(leaf_a._weight) + wght_XYZ;
-                    leaf_a._weight = (leaf_a._weight + uint32_t(wght_XYZ)) / 2;
+                    leaf_a._weight = leaf_a._weight + uint32_t(wght_XYZ);
                 }
             }
         }
