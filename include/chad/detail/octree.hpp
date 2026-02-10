@@ -79,85 +79,78 @@ namespace chad::detail {
         void inline insert(MortonCode mc, Leaf leaf) {
             insert(mc) = leaf;
         }
-        // insert TSDFs via points and normals
+        // insert TSDFs using points and normals (raycasting with DDA)
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
-            const float sdf_res_recip = float(1.0 / double(sdf_res));
-            const glm::aligned_vec3 position_aligned = position;
+            const double sdf_res_recip = 1.0 / double(sdf_res);
+            const glm::aligned_dvec3 position_aligned = position;
 
             std::vector<MortonCode> traversed_voxels;
             for (size_t i = 0; i < points.size(); i++) {
-                const glm::aligned_vec3 point = points[i];
-                const glm::aligned_vec3 normal = normals[i];
+                const glm::aligned_dvec3 point = points[i];
+                const glm::aligned_dvec3 normal = normals[i];
 
-                // get all voxels along ray within truncation distance via variant of DDA line algorithm (-> "A fast voxel traversal algorithm for ray tracing")
-                // as Bresehnham's line algorithm misses some voxels
-                const glm::aligned_vec3 direction = glm::normalize(point - position_aligned);
-                const glm::aligned_vec3 direction_recip = 1.0f / direction;
-                const glm::aligned_vec3 start = point - direction * sdf_trunc;
-                const glm::aligned_vec3 final = point + direction * sdf_trunc;
-                const glm::aligned_ivec3 voxel_start = glm::aligned_ivec3(glm::floor(start * sdf_res_recip));
-                const glm::aligned_ivec3 voxel_final = glm::aligned_ivec3(glm::floor(final * sdf_res_recip));
+                // calculate ray properties within truncation distance
+                const glm::aligned_dvec3 ray_dir = glm::normalize(point - position_aligned);
+                const glm::aligned_dvec3 ray_pos = point - ray_dir * double(sdf_trunc);
+                const glm::aligned_dvec3 ray_end = point + ray_dir * double(sdf_trunc);
+                glm::aligned_ivec3 ray_pos_vox = glm::aligned_ivec3(glm::floor(ray_pos * sdf_res_recip));
+                const glm::aligned_ivec3 ray_end_vox = glm::aligned_ivec3(glm::floor(ray_end * sdf_res_recip));
 
-                // stepN: direction of increment for each dimension
-                const glm::aligned_ivec3 voxel_step_direction = glm::sign(voxel_final - voxel_start);
-                // tDeltaN: portion of "direction" needed to traverse full voxel
-                const glm::aligned_vec3 voxel_step_delta = glm::abs(sdf_res * direction_recip);
-                // tMaxN: portion of "direction" needed to traverse current voxel
-                glm::aligned_vec3 voxel_step_max;
-                // for x
-                if      (voxel_step_direction.x < 0) voxel_step_max.x = sdf_res * std::floor(start.x * sdf_res_recip);
-                else if (voxel_step_direction.x > 0) voxel_step_max.x = sdf_res * std::ceil (start.x * sdf_res_recip);
-                else /*voxel_step_direction.x == 0*/ voxel_step_max.x = std::numeric_limits<float>::max();
-                // for y
-                if      (voxel_step_direction.y < 0) voxel_step_max.y = sdf_res * std::floor(start.y * sdf_res_recip);
-                else if (voxel_step_direction.y > 0) voxel_step_max.y = sdf_res * std::ceil (start.y * sdf_res_recip);
-                else /*voxel_step_direction.y == 0*/ voxel_step_max.y = std::numeric_limits<float>::max();
-                // for z
-                if      (voxel_step_direction.z < 0) voxel_step_max.z = sdf_res * std::floor(start.z * sdf_res_recip);
-                else if (voxel_step_direction.z > 0) voxel_step_max.z = sdf_res * std::ceil (start.z * sdf_res_recip);
-                else /*voxel_step_direction.z == 0*/ voxel_step_max.z = std::numeric_limits<float>::max();
-                voxel_step_max = voxel_step_max - start; // distance to voxel boundaries
-                voxel_step_max = glm::abs(voxel_step_max * direction_recip); // portion of "direction" needed to cross voxel boundaries
+                // the step direction corresponding to ray direction
+                const glm::aligned_dvec3 ray_step = glm::sign(ray_dir);
+                const glm::aligned_ivec3 ray_step_vox = glm::aligned_ivec3(ray_step);
 
-                // current voxel during traversal
-                glm::ivec3 voxel_current = voxel_start;
-                traversed_voxels.emplace_back(voxel_current);
+                // the step distance to reach the next voxel in each dimension
+                const glm::aligned_dvec3 ray_delta = glm::abs(double(sdf_res) / ray_dir);
+                
+                // the step distance needed to reach the next voxel from current ray_pos
+                glm::aligned_dvec3 dim_step = ray_step * (glm::aligned_dvec3(ray_pos_vox) * double(sdf_res) - ray_pos);
+                dim_step += (ray_step * 0.5 + 0.5) * double(sdf_res);
+                dim_step *= ray_delta * double(sdf_res_recip);
+                
+                // can already add the first voxel
+                traversed_voxels.emplace_back(ray_pos_vox);
 
-                // traverse ray within truncation distance
-                while (true) {
-                    if (voxel_step_max.x < voxel_step_max.y) {
-                        if (voxel_step_max.x < voxel_step_max.z) {
-                            voxel_current.x += voxel_step_direction.x; // step in x direction
-                            voxel_step_max.x += voxel_step_delta.x; // update for next voxel boundary
-                            if (voxel_current.x == voxel_final.x + voxel_step_direction.x) break;
+                // 1 bit for each completed dimension
+                uint32_t completion_mask = 0b000;
+                if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
+                if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
+                if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
+
+                while (completion_mask != 0b111) {
+                    if (dim_step.x < dim_step.y) {
+                        if (dim_step.x < dim_step.z) {
+                            dim_step.x += ray_delta.x;
+                            ray_pos_vox.x += ray_step_vox.x;
+                            if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
                         }
                         else {
-                            voxel_current.z += voxel_step_direction.z; // step in z direction
-                            voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                            if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
+                            dim_step.z += ray_delta.z;
+                            ray_pos_vox.z += ray_step_vox.z;
+                            if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
                         }
                     }
                     else {
-                        if (voxel_step_max.y < voxel_step_max.z) {
-
-                            voxel_current.y += voxel_step_direction.y; // step in y direction
-                            voxel_step_max.y += voxel_step_delta.y; // update for next voxel boundary
-                            if (voxel_current.y == voxel_final.y + voxel_step_direction.y) break;
+                        if (dim_step.y < dim_step.z) {
+                            dim_step.y += ray_delta.y;
+                            ray_pos_vox.y += ray_step_vox.y;
+                            if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
                         }
                         else {
-                            voxel_current.z += voxel_step_direction.z; // step in z direction
-                            voxel_step_max.z += voxel_step_delta.z; // update for next voxel boundary
-                            if (voxel_current.z == voxel_final.z + voxel_step_direction.z) break;
+                            dim_step.z += ray_delta.z;
+                            ray_pos_vox.z += ray_step_vox.z;
+                            if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
                         }
                     }
-                    traversed_voxels.emplace_back(voxel_current);
+                    traversed_voxels.emplace_back(ray_pos_vox);
                 }
+
                 for (const MortonCode& voxel_mc: traversed_voxels) {
                     auto& leaf = insert(voxel_mc);
 
                     // compute signed distance
-                    glm::aligned_vec3 point_to_voxel = glm::aligned_vec3(voxel_mc.decode()) * sdf_res - point;
-                    float signed_distance = glm::dot(normal, point_to_voxel);
+                    glm::aligned_dvec3 point_to_voxel = glm::aligned_dvec3(voxel_mc.decode()) * double(sdf_res) - point;
+                    float signed_distance = float(glm::dot(normal, point_to_voxel));
                     signed_distance = std::clamp(signed_distance, -sdf_trunc, +sdf_trunc);
                     // weighted average with incremented weight
                     leaf._signed_distance = leaf._signed_distance * float(leaf._weight) + signed_distance;
