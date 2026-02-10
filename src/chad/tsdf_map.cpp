@@ -258,7 +258,8 @@ namespace chad {
             finalize_active_submap();
         }
 
-        // make sure the folder exists
+        // make sure the folder is clean
+        std::filesystem::remove_all(foldername);
         std::filesystem::create_directory(foldername);
 
         // recontruct multiple submaps as single mesh chunks
