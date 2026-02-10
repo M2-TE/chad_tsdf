@@ -79,7 +79,7 @@ namespace chad::detail {
         void inline insert(MortonCode mc, Leaf leaf) {
             insert(mc) = leaf;
         }
-        // insert TSDFs using points and normals (raycasting with DDA)
+        // insert TSDFs using points and normals (raycasting with DDA in double precision)
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
             const double sdf_res_recip = 1.0 / double(sdf_res);
             const glm::aligned_dvec3 position_aligned = position;
@@ -145,6 +145,17 @@ namespace chad::detail {
                     traversed_voxels.emplace_back(ray_pos_vox);
                 }
 
+                // add all voxels adjacent to point (fills holes quite well without introducing noise)
+                const glm::aligned_ivec3 point_vox = glm::aligned_ivec3(glm::floor(point * sdf_res_recip));
+                for (uint32_t x = 0; x < 2; x++) {
+                    for (uint32_t y = 0; y < 2; y++) {
+                        for (uint32_t z = 0; z < 2; z++) {
+                            traversed_voxels.emplace_back(point_vox + glm::aligned_ivec3(x, y, z));
+                        }
+                    }
+                }
+
+                // update the traversed octree leaves
                 for (const MortonCode& voxel_mc: traversed_voxels) {
                     auto& leaf = insert(voxel_mc);
 

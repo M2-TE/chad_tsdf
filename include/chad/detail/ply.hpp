@@ -270,7 +270,6 @@ namespace chad::detail::ply {
 
     // Step 3: create faces with marching cubes lookup table
     // TODO: handle SD of 0.0f properly
-    // TODO: handle missing corners (should still be able to create faces)
     auto inline create_faces(std::ofstream& ofs, gtl::parallel_flat_hash_map<MortonCode, LeafCopy>& leaves) -> uint32_t {
         uint32_t face_count = 0;
         for (const auto& [mc000, leaf000]: leaves) {
@@ -336,13 +335,6 @@ namespace chad::detail::ply {
                 corners[3]._vertex_indices.z,
                 corners[2]._vertex_indices.z,
             };
-
-            // DEBUG: TEMPORARILY DISABLE CUBES WITH SD OF 0.0f
-            // bool breaking = false;
-            // for (uint32_t i = 0; i < 8; i++) {
-            //     if (corners[i]._signed_distance == 0.0f)  breaking = true;
-            // }
-            // if (breaking) continue;
 
             // create the lookup index for the marching cubes table
             uint32_t marching_cubes_index = 0;
