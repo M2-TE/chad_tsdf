@@ -169,7 +169,7 @@ namespace chad {
 
         // check for loop closure using all descriptors within finalized submap
         beg = std::chrono::high_resolution_clock::now();
-        detail::Pose error = _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
+        _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
         if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
     }
     void TSDFMap::reconstruct(const std::string& foldername, bool clean_first) {
@@ -184,6 +184,18 @@ namespace chad {
             CHAD_MESSAGE(">> Forcefully finalizing submap for reconstruction");
             finalize_active_submap();
         }
+
+        // DEBUG GTSAM OUTPUT
+        gtsam::Values result = _map_optimizer_p->_isam.calculateEstimate();
+        std::cout << "Final optimized poses:\n";
+        for (uint32_t i = 0; i < result.size(); ++i) {
+            auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
+            auto rot = res.rotation().xyz();
+            auto pos = res.translation();
+            fmt::println("translation: {} {} {}", pos.x(), pos.y(), pos.z());
+            fmt::println("rot: {} {} {}", rot.x(), rot.y(), rot.z());
+        }
+        fmt::println("TODO: apply the optimized poses");
 
         // make sure the folder is clean
         if (clean_first) std::filesystem::remove_all(foldername);

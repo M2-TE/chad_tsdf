@@ -3,7 +3,7 @@ project(chad_tsdf LANGUAGES CXX)
 
 # settings
 option(CHAD_PREFER_MOLD "Prefer to use mold linker (Linux only)" ON)
-option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
+# option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
 option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # option(CHAD_USE_HUGE_PAGES "Allocate huge pages (~2MiB) instead of the standard size (~4KiB)" OFF)
 include("cmake/options_global.cmake")
@@ -24,7 +24,7 @@ include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
 include("cmake/morton.cmake")
-# include("cmake/gtsam.cmake")
+include("cmake/gtsam.cmake")
 
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)

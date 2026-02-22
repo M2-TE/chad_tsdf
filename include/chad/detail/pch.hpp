@@ -26,3 +26,13 @@
 #include <libmorton/morton.h>
 #include <fmt/base.h>
 #include <fmt/format.h>
+
+// all the gtsam headers, mostly taken from their example
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/ISAM2.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Rot3.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/slam/PriorFactor.h>
+#include <gtsam/inference/Symbol.h>

@@ -26,7 +26,7 @@ elseif (UNIX)
         "-Wpedantic"
         "-mbmi2")
     if (CHAD_USE_FAST_MATH)
-        add_compile_options("-ffast-math")
+        # add_compile_options("-ffast-math") # currently broken due to gtsam
     endif()
     if (CHAD_USE_STRICT_COMPILATION)
         add_compile_options("-Werror")

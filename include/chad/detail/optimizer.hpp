@@ -17,7 +17,7 @@ namespace chad::detail {
         }
 
         // find loop closure for multiple descriptors of same submap, returning pose error estimate if found
-        auto detect_loop_closure(SubmapIndex submap_i) -> Pose {
+        void detect_loop_closure(SubmapIndex submap_i) {
             using namespace ndd;
 
             // indices for descriptors are within submap
@@ -79,31 +79,84 @@ namespace chad::detail {
                         descriptor_i, max_candidate,
                         error._position.x, error._position.y, error._position.z,
                         angle_degr, max_correlation);
-                    return error; // TODO: should average found matches instead?
+
+                    // figure out submap index of the descriptor
+                    bool submap_found = false;
+                    SubmapIndex submap_other_i = 0;
+                    for (uint32_t i = 0; i < uint32_t(_submaps.size()); i++) {
+                        if (max_candidate >= _submaps[i]._scan_beg && max_candidate < _submaps[i]._scan_end) {
+                            submap_other_i = i;
+                            submap_found = true;
+                            break;
+                        }
+                    }
+
+                    // DEBUG: this is really just an assert atm
+                    if (!submap_found) {
+                        fmt::println("CORRESPONDING SUBMAP NOT FOUND");
+                        std::exit(0);
+                    }
+
+                    // add new constraint to gtsam as per loop closure (TODO: needs more accurate tsdf to tsdf matching!)
+                    gtsam::Pose3 loop_measurement{
+                        gtsam::Rot3::RzRyRx(0, 0, 0),
+                        gtsam::Point3{ error._position.x, error._position.y, error._position.z }
+                    };
+                    gtsam::NonlinearFactorGraph factors;
+                    factors.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::symbol_shorthand::X(submap_i), gtsam::symbol_shorthand::X(submap_other_i), loop_measurement, _loop_noise));
+                    _isam.update(factors);
+
                 }
                 else fmt::println("loop not found (corr {:.2f})", max_correlation);
             }
-            return {};
         }
 
         // adds a finalized submap
         auto add_submap(RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const Submap& {
             // avg of positions as submap center
-            glm::dvec3 position;
+            glm::dvec3 position{ 0, 0, 0 };
             for (ScanIndex scan_i = scan_beg; scan_i < scan_end; scan_i++) {
                 const Pose& pose = _scan_poses[scan_i];
                 position += glm::dvec3(pose._position);
             }
             position /= float(scan_end - scan_beg);
 
-            // just go ahead and create submap
+            // go ahead and create submap based on avg pose
             Submap submap{
-                Pose{ glm::vec3(position), glm::quat() },
-                Pose{},
+                Pose{ position, glm::identity<glm::quat>() },
+                Pose{}, // error
                 roots,
                 scan_beg,
                 scan_end,
             };
+
+            // add pose to gtsam
+            using gtsam::symbol_shorthand::X;
+            gtsam::Values values;
+            gtsam::NonlinearFactorGraph factors;
+            if (_submaps.size() == 0) {
+                // anchor first submap pose
+                gtsam::Pose3 prior_pose(gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3(position.x, position.y, position.z));
+                factors.add(gtsam::PriorFactor<gtsam::Pose3>(X(0), prior_pose, _prior_noise));
+                values.insert(X(0), prior_pose);
+                _isam.update(factors, values);
+            }
+            else {
+                const Pose& pose_prev = _submaps.back()._pose_avg;
+                const Pose& pose_curr = submap._pose_avg;
+
+                // add new pose to pose graph
+                gtsam::Pose3 pose{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3(position.x, position.y, position.z) };
+                values.insert(X(_submaps.size()), pose);
+
+                // add delta to previous pose as new factor
+                const glm::vec3 pose_delta = pose_curr._position - pose_prev._position;
+                gtsam::Pose3 pose_delta_gtsam{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3(pose_delta.x, pose_delta.y, pose_delta.z) };
+                factors.add(gtsam::BetweenFactor<gtsam::Pose3>{ X(_submaps.size() - 1), X(_submaps.size()), pose_delta_gtsam, _odom_noise });
+
+                _isam.update(factors, values);
+            }
+
             _submaps.push_back(submap);
             return _submaps.back();
         }
@@ -126,7 +179,12 @@ namespace chad::detail {
         std::vector<ndd::Descriptor>            _scan_descriptors;
         std::vector<ndd::Descriptor::LookupKey> _scan_lookup_keys;
 
-        // keep track of current global pose to transform new incoming pointclouds
-        Pose _global_pose;
+        // GTSAM pose graph
+        gtsam::SharedDiagonal _prior_noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.1, 0.1, 0.1).finished());
+        gtsam::SharedDiagonal _odom_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.05, 0.05, 0.05, 0.2, 0.2, 0.2).finished());
+        gtsam::SharedDiagonal _loop_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.02, 0.02, 0.02, 0.1, 0.1, 0.1).finished());
+        static constexpr int _relinearize_skip = 1;
+        static constexpr float _relinearize_threshold = 0.01;
+        gtsam::ISAM2 _isam{ gtsam::ISAM2Params{ gtsam::ISAM2GaussNewtonParams(), _relinearize_threshold, _relinearize_skip }};
     };
 }

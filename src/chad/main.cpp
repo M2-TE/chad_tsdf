@@ -1,6 +1,6 @@
 #include "chad/tsdf_map.hpp"
 
-[[maybe_unused]] void static do_sphere_thing() {
+[[maybe_unused]] void inline do_sphere_thing() {
     // generate random point data
     std::vector<glm::vec3> points { 1'000'000 };
     std::random_device rd;
@@ -14,7 +14,7 @@
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
         { +0, 0, 0 },
-        // { +5, 0, 0 },
+        { +3.5, 0, 0 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         for (auto& point: points) {
@@ -32,6 +32,5 @@
 }
 int main() {
     do_sphere_thing();
-
     return 0;
 }
