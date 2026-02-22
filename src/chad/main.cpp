@@ -28,7 +28,7 @@
         }
         map.insert(points, positions[i]);
     }
-    map.reconstruct("mesh");
+    map.reconstruct("mesh", true);
 }
 int main() {
     do_sphere_thing();

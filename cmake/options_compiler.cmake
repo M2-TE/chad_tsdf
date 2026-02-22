@@ -24,10 +24,9 @@ elseif (UNIX)
         "-Wall"
         "-Wextra"
         "-Wpedantic"
-        "-mbmi2"
-        )
+        "-mbmi2")
     if (CHAD_USE_FAST_MATH)
-        # add_compile_options("-ffast-math")
+        add_compile_options("-ffast-math")
     endif()
     if (CHAD_USE_STRICT_COMPILATION)
         add_compile_options("-Werror")
@@ -43,7 +42,5 @@ endif()
 if (MSVC)
     add_link_options("/SUBSYSTEM:CONSOLE")
 elseif (UNIX)
-    add_link_options(
-        "-pthread"
-        "-fopenmp") # required by lvr2
+    add_link_options("-pthread")
 endif()

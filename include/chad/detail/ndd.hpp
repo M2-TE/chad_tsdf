@@ -1,8 +1,6 @@
 #pragma once
 #include <fmt/base.h>
-#include "chad/detail/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
-// temporarily putting all configuration vars into anonymous namespace (TODO: templating instead?)
 namespace ndd {
     struct Descriptor {
         static constexpr uint32_t N_RINGS = 20;
@@ -253,56 +251,4 @@ namespace ndd {
         CellMatrix _cells;
         AlignmentKey _alignment_key;
     };
-
-    // find loop closure match for descriptor of given index with other (externally managed) descriptors
-    [[maybe_unused]]
-    void inline detect_loop_closure(
-            const std::vector<Descriptor>& descriptors,
-            const std::vector<Descriptor::LookupKey>& lookup_keys,
-            uint32_t descriptor_i) {
-        auto& curr_desc = descriptors[descriptor_i];
-        auto& curr_key = lookup_keys[descriptor_i];
-
-        // construct full KD tree with given keys
-        auto tree = KDTreeVectorOfVectorsAdaptor<decltype(lookup_keys), float>{ Descriptor::N_RINGS, lookup_keys, 10 };
-
-        // knn search within tree
-        const uint32_t candidate_n = std::min<uint32_t>(20, lookup_keys.size()); // find max of 20 matching descriptors
-        std::vector<std::size_t> candidate_indices;
-        std::vector<float> out_dists_sqr;
-        candidate_indices.resize(candidate_n);
-        out_dists_sqr.resize(candidate_n);
-
-        nanoflann::KNNResultSet<float> knnsearch_result(candidate_n);
-        knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
-        tree.index->findNeighbors(knnsearch_result, curr_key.data(), nanoflann::SearchParameters(10));
-
-        // find descriptor with highest correlation
-        double max_correlation = 0.0;
-        uint32_t max_candidate = 0;
-        uint32_t max_shift = 0;
-        for (const auto& candidate_i: candidate_indices) {
-            // ignore self-match
-            if (candidate_i == lookup_keys.size() - 1) continue;
-
-            const Descriptor& candidate = descriptors[candidate_i];
-            auto [correlation, shift] = curr_desc.estimate_correlation(candidate);
-
-            if (correlation > max_correlation) {
-                max_correlation = correlation;
-                max_candidate = candidate_i;
-                max_shift = shift;
-            }
-        }
-
-        // threshhold for correlation to count as a valid loop closure
-        constexpr static double CORRELATION_THRESHHOLD = 0.65;
-        fmt::println("max_correlation: {}", max_correlation);
-        if (max_correlation > CORRELATION_THRESHHOLD) {
-            static constexpr double SECTOR_ANGLE = 360.0 / double(Descriptor::N_SECTORS);
-            double angle_degr = double(max_shift) * SECTOR_ANGLE;
-            fmt::println("loop found: NDD_{} matches NDD_{} with {}° yaw", descriptor_i, max_candidate, angle_degr);
-        }
-        else fmt::println("loop not found");
-    }
 };

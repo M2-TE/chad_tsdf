@@ -1,92 +1,16 @@
 #include "chad/indices.hpp"
 #include "chad/tsdf_map.hpp"
-#include "chad/detail/ndd.hpp"
 #include "chad/detail/ply.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
 #include "chad/detail/normals.hpp"
+#include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"
 
 // TODO: turn these into normal functions
 #define CHAD_MESSAGE(message) fmt::println("[CHAD] {}", message)
 #define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count())
-
-// TODO: move these into detail headers
-namespace chad::detail {
-    struct Submap {
-        Submap(const Pose& pose_avg,
-                const Pose& pose_err, 
-                const RootIndices& root_indices,
-                ScanIndex scan_beg,
-                ScanIndex scan_end):
-            _pose_avg(pose_avg),
-            _pose_err(pose_err), 
-            _root_indices(root_indices), 
-            _scan_beg(scan_beg),
-            _scan_end(scan_end) {
-        }
-
-        Pose _pose_avg;
-        Pose _pose_err;
-        RootIndices _root_indices;
-        ScanIndex _scan_beg; // index of first scan
-        ScanIndex _scan_end; // past-the-end index of scan
-    };
-
-    struct MapOptimizer {
-        MapOptimizer() = default;
-        ~MapOptimizer() = default;
-
-        // adds a new scan and creates a descriptor + lookup key for it
-        void add_scan(const std::vector<glm::vec3>& points, const Pose& pose) {
-            _scan_poses.push_back(pose);
-            _scan_descriptors.emplace_back(points, pose._position);
-            _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
-        }
-
-        // finalizes and adds a submap (TODO: validate)
-        auto add_submap(RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const Submap& {
-            // avg of positions as submap center
-            glm::dvec3 position;
-            for (ScanIndex scan_i = scan_beg; scan_i < scan_end; scan_i++) {
-                const Pose& pose = _scan_poses[scan_i];
-                position += glm::dvec3(pose._position);
-            }
-            position /= float(scan_end - scan_beg);
-
-            // just go ahead and create submap
-            Submap submap{
-                Pose{ glm::vec3(position), glm::quat() },
-                Pose{},
-                roots,
-                scan_beg,
-                scan_end,
-            };
-            _submaps.push_back(submap);
-            return _submaps.back();
-        }
-
-        // check if the current active submap has crossed the position delta threshhold
-        bool is_active_submap_done(ScanIndex submap_beg, float threshhold) {
-            const Pose& pose_new = _scan_poses.back();
-            const Pose& pose_prev = _scan_poses[submap_beg];
-            float distance = glm::distance(pose_prev._position, pose_new._position);
-            // if our submap threshhold is crossed, finalize the active submap before inserting new points
-            if (distance > threshhold) return true;
-            else return false;
-        }
-
-        // persistent data per submap
-        std::vector<Submap>      _submaps;
-        std::vector<SubmapIndex> _merged_submaps;
-
-        // persistent data per scan
-        std::vector<Pose>                       _scan_poses;
-        std::vector<ndd::Descriptor>            _scan_descriptors;
-        std::vector<ndd::Descriptor::LookupKey> _scan_lookup_keys;
-    };
-};
 
 namespace chad {
     TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_threshhold, uint32_t submaps_per_chunk):
@@ -108,26 +32,24 @@ namespace chad {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
+        // check if an active submap should be finalized
+        const Pose pose{ position, {} };
+        if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
+            finalize_active_submap();
+        }
+        // either way, increment scan index
+        _active_scan_end++;
+
         // sort points by their morton code, discretized to the voxel resolution
         auto beg_intermediate = std::chrono::high_resolution_clock::now();
         MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
         if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
 
-        // add pose and create descriptor for current scan
+        // add pose and create descriptor for current scan (TODO: can do this on separate thread)
         beg_intermediate = std::chrono::high_resolution_clock::now();
-        const Pose pose{ position, {} };
-        _map_optimizer_p->add_scan(points_sorted, pose);
+        _map_optimizer_p->add_scan_descriptor(points_sorted, pose);
         if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
-
-        // check if an active submap should be finalized
-        if (is_submap_active()) {
-            if (_map_optimizer_p->is_active_submap_done(_active_scan_beg, _submap_threshhold)) {
-                finalize_active_submap();
-            }
-        }
-        // either way, increment our scan index
-        _active_scan_end++;
 
         // estimate the normal of every point
         beg_intermediate = std::chrono::high_resolution_clock::now();
@@ -244,8 +166,13 @@ namespace chad {
         _active_octree_p->clear();
         _active_scan_beg = _active_scan_end;
         MEASURE_TIME(beg, "++ Finalizing submap");
+
+        // check for loop closure using all descriptors within finalized submap
+        beg = std::chrono::high_resolution_clock::now();
+        detail::Pose error = _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
+        if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
     }
-    void TSDFMap::reconstruct(const std::string& foldername) {
+    void TSDFMap::reconstruct(const std::string& foldername, bool clean_first) {
         using namespace chad::detail;
         // need at least one inserted scan for reconstruction
         if (_map_optimizer_p->_scan_poses.empty()) {
@@ -259,7 +186,7 @@ namespace chad {
         }
 
         // make sure the folder is clean
-        std::filesystem::remove_all(foldername);
+        if (clean_first) std::filesystem::remove_all(foldername);
         std::filesystem::create_directory(foldername);
 
         // recontruct multiple submaps as single mesh chunks
@@ -270,7 +197,7 @@ namespace chad {
             octree_a.insert(*_dag_storage_p, submap_a._root_indices, _sdf_trunc);
 
             // other_i as an offset from submap_i
-            for (SubmapIndex other_i = 0; other_i < _submaps_per_chunk; other_i++) {
+            for (SubmapIndex other_i = 0; other_i < _submaps_per_chunk && other_i < _map_optimizer_p->_submaps.size(); other_i++) {
                 const Submap& submap_b = _map_optimizer_p->_submaps[submap_i + other_i];
                 octree_b.insert(*_dag_storage_p, submap_b._root_indices, _sdf_trunc);
                 

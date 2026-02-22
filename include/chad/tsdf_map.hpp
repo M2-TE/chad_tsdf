@@ -102,7 +102,7 @@ namespace chad {
         void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
 
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
-        void reconstruct(const std::string& foldername);
+        void reconstruct(const std::string& foldername, bool clean_first = false);
 
     private:
         // insert points into currently active octree (internal function used by all insert(...) funcs)
