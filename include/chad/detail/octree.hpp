@@ -150,7 +150,8 @@ namespace chad::detail {
                     auto& leaf = insert(voxel_mc);
 
                     // compute signed distance
-                    glm::aligned_dvec3 point_to_voxel = glm::aligned_dvec3(voxel_mc.decode()) * double(sdf_res) - point;
+                    glm::aligned_dvec3 voxel_pos = glm::aligned_dvec3(voxel_mc.decode()) + glm::aligned_dvec3(0.5, 0.5, 0.5);
+                    glm::aligned_dvec3 point_to_voxel = voxel_pos * double(sdf_res) - point;
                     float signed_distance = float(glm::dot(normal, point_to_voxel));
                     signed_distance = std::clamp(signed_distance, -sdf_trunc, +sdf_trunc);
                     // weighted average with incremented weight
