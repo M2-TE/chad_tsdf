@@ -195,7 +195,10 @@ namespace chad {
             fmt::println("translation: {} {} {}", pos.x(), pos.y(), pos.z());
             fmt::println("rot: {} {} {}", rot.x(), rot.y(), rot.z());
             // adjust poses as per gtsam graph
-            Pose& pose_err = { pos.x(), pos.y(), pos.z() };
+            _map_optimizer_p->_submaps[i]._pose_err = Pose{
+                glm::dvec3(pos.x(), pos.y(), pos.z()),
+                glm::dquat(glm::dvec3(rot.x(), rot.y(), rot.z()))
+            };
         }
 
         // make sure the folder is clean
