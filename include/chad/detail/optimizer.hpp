@@ -32,7 +32,17 @@ namespace chad::detail {
             const uint32_t max_matches = 20 + descriptor_end - descriptor_beg; // allow finding matches with descriptors of same submap (will end up ignoring them)
             const uint32_t candidate_n = std::min<uint32_t>(max_matches, _scan_lookup_keys.size());
 
+            // store each match above correlation threshhold
+            struct Correlation {
+                float confidence = 0.0f;
+                uint32_t descriptor_self_i = 0;
+                uint32_t descriptor_other_i = 0;
+                uint32_t sector_shift = 0;
+            };
+            std::vector<Correlation> correlations;
+            correlations.reserve(descriptor_end - descriptor_beg);
 
+            // for every descriptor within submap, try to find correlations with other submaps
             for (uint32_t descriptor_i = descriptor_beg; descriptor_i < descriptor_end; descriptor_i++) {
                 const Descriptor::LookupKey& key = _scan_lookup_keys[descriptor_i];
                 const Descriptor& descriptor = _scan_descriptors[descriptor_i];
@@ -63,49 +73,69 @@ namespace chad::detail {
                     }
                 }
 
-                // threshhold for correlation to count as a valid loop closure
-                constexpr static double CORRELATION_THRESHHOLD = 0.65;
+                // threshhold for correlation to even be considered as a loop closure candidate
+                constexpr static double CORRELATION_THRESHHOLD = 0.95; // TODO: move to TSDFMap as parameter
                 if (max_correlation > CORRELATION_THRESHHOLD) {
-                    static constexpr double SECTOR_ANGLE = 360.0 / double(Descriptor::N_SECTORS);
-                    const float angle_degr = double(max_shift) * SECTOR_ANGLE;
-                    // use pose delta as initial error estimate
-                    const Pose& candidate_pose = _scan_poses[max_candidate];
-                    const Pose& descriptor_pose = _scan_poses[descriptor_i];
-                    Pose error = {
-                        descriptor_pose._position - candidate_pose._position,
-                        glm::quat(glm::vec3(0, glm::radians(angle_degr), 0))
-                    };
-                    fmt::println("loop found: NDD_{} matches NDD_{}. Error of ({:.2f},{:.2f},{:.2f}) with {:.2f}° yaw (corr {:.2f})",
-                        descriptor_i, max_candidate,
-                        error._position.x, error._position.y, error._position.z,
-                        angle_degr, max_correlation);
-
-                    // figure out submap index of the descriptor (TODO: just add a var for this in descriptors/poses)
-                    bool submap_found = false;
-                    SubmapIndex submap_other_i = 0;
-                    for (uint32_t i = 0; i < uint32_t(_submaps.size()); i++) {
-                        if (max_candidate >= _submaps[i]._scan_beg && max_candidate < _submaps[i]._scan_end) {
-                            submap_other_i = i;
-                            submap_found = true;
-                            break;
-                        }
-                    }
-
-                    // DEBUG: this is really just an assert atm
-                    if (!submap_found) {
-                        fmt::println("CORRESPONDING SUBMAP NOT FOUND");
-                        std::exit(0);
-                    }
-
-                    // add new constraint to gtsam as per loop closure (TODO: needs more accurate tsdf to tsdf matching first!)
-                    gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
-                    gtsam::NonlinearFactorGraph factors;
-                    factors.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::symbol_shorthand::X(submap_i), gtsam::symbol_shorthand::X(submap_other_i), loop_measurement, _loop_noise));
-                    _isam.update(factors);
-
+                    correlations.push_back({
+                        max_correlation,
+                        descriptor_i,
+                        max_candidate,
+                        max_shift,
+                    });
                 }
-                else fmt::println("loop not found (corr {:.2f})", max_correlation);
             }
+            
+            // TODO:
+            if (correlations.size() < 6) {
+                fmt::println("Insufficient NDD correlations found ({})", correlations.size());
+                return;
+            }
+
+            // find the most common shift values as an easy way to detect outliers
+            for (const auto& correlation: correlations) {
+
+            }
+
+            // now go over all the correlations and determine whether it is a loop closure or false positives
+            double shift_avg = 0.0;
+            for (const auto& correlation: correlations) {
+
+            }
+
+            // {
+            //     static constexpr double SECTOR_ANGLE = 360.0 / double(Descriptor::N_SECTORS);
+            //     const float angle_degr = double(max_shift) * SECTOR_ANGLE;
+            //     // use pose delta as initial error estimate
+            //     const Pose& candidate_pose = _scan_poses[max_candidate];
+            //     const Pose& descriptor_pose = _scan_poses[descriptor_i];
+            //     Pose error = {
+            //         descriptor_pose._position - candidate_pose._position,
+            //         glm::quat(glm::vec3(0, glm::radians(angle_degr), 0))
+            //     };
+            //     fmt::println("loop found: NDD_{} matches NDD_{}. Error of ({:.2f},{:.2f},{:.2f}) with {:.2f}° yaw (corr {:.2f})",
+            //         descriptor_i, max_candidate,
+            //         error._position.x, error._position.y, error._position.z,
+            //         angle_degr, max_correlation);
+
+            //     // figure out submap index of the descriptor (TODO: just add a var for this in descriptors/poses)
+            //     bool submap_found = false;
+            //     SubmapIndex submap_other_i = 0;
+            //     for (uint32_t i = 0; i < uint32_t(_submaps.size()); i++) {
+            //         if (max_candidate >= _submaps[i]._scan_beg && max_candidate < _submaps[i]._scan_end) {
+            //             submap_other_i = i;
+            //             submap_found = true;
+            //             break;
+            //         }
+            //     }
+
+            //     // add new constraint to gtsam as per loop closure (TODO: needs more accurate tsdf to tsdf matching first!)
+            //     gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
+            //     gtsam::NonlinearFactorGraph factors;
+            //     factors.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::symbol_shorthand::X(submap_i), gtsam::symbol_shorthand::X(submap_other_i), loop_measurement, _loop_noise));
+            //     _isam.update(factors);
+            // }
+
+            // else fmt::println("loop not found (corr {:.2f})", max_correlation);
         }
 
         // adds a finalized submap
