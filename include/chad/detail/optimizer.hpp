@@ -80,7 +80,7 @@ namespace chad::detail {
                         error._position.x, error._position.y, error._position.z,
                         angle_degr, max_correlation);
 
-                    // figure out submap index of the descriptor
+                    // figure out submap index of the descriptor (TODO: just add a var for this in descriptors/poses)
                     bool submap_found = false;
                     SubmapIndex submap_other_i = 0;
                     for (uint32_t i = 0; i < uint32_t(_submaps.size()); i++) {
@@ -97,11 +97,8 @@ namespace chad::detail {
                         std::exit(0);
                     }
 
-                    // add new constraint to gtsam as per loop closure (TODO: needs more accurate tsdf to tsdf matching!)
-                    gtsam::Pose3 loop_measurement{
-                        gtsam::Rot3::RzRyRx(0, 0, 0),
-                        gtsam::Point3{ error._position.x, error._position.y, error._position.z }
-                    };
+                    // add new constraint to gtsam as per loop closure (TODO: needs more accurate tsdf to tsdf matching first!)
+                    gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
                     gtsam::NonlinearFactorGraph factors;
                     factors.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::symbol_shorthand::X(submap_i), gtsam::symbol_shorthand::X(submap_other_i), loop_measurement, _loop_noise));
                     _isam.update(factors);

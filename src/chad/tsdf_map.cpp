@@ -194,8 +194,10 @@ namespace chad {
             auto pos = res.translation();
             fmt::println("translation: {} {} {}", pos.x(), pos.y(), pos.z());
             fmt::println("rot: {} {} {}", rot.x(), rot.y(), rot.z());
+            // TODO: instead of overwriting pose, adjust pose_err
+            Pose& pose = _map_optimizer_p->_submaps[i]._pose_avg;
+            pose._position = { pos.x(), pos.y(), pos.z() };
         }
-        fmt::println("TODO: apply the optimized poses");
 
         // make sure the folder is clean
         if (clean_first) std::filesystem::remove_all(foldername);
