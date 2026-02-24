@@ -102,7 +102,7 @@ namespace chad::detail {
             for (const auto& [submap_other_i, correlation_vector]: correlations) {
 
                 // TODO: increase to 6 or something
-                if (correlation_count < 6) {
+                if (correlation_vector.size() < 3) {
                     fmt::println("Insufficient NDD correlations with submap {} to proceed ({})", submap_other_i, correlation_count);
                     return;
                 }
@@ -116,15 +116,15 @@ namespace chad::detail {
                     mean_translation += glm::dvec3(pose_self._position - pose_other._position);
                     mean_shift += correlation.sector_shift;
                 }
-                mean_translation /= double(correlations.size());
-                mean_shift /= correlations.size();
+                mean_translation /= double(correlation_vector.size());
+                mean_shift /= correlation_vector.size();
 
                 static constexpr double SECTOR_ANGLE = 360.0 / double(Descriptor::N_SECTORS);
                 const float angle_degr = double(mean_shift) * SECTOR_ANGLE;
                 Pose error{ mean_translation, glm::dvec3{ 0, angle_degr, 0 }};
 
                 fmt::println("Detected loop closure with submap {} ({} correlations). Error of ({:.2f},{:.2f},{:.2f}) with {:.2f}° yaw",
-                    submap_other_i, correlations.size(), error._position.x, error._position.y, error._position.z, angle_degr);
+                    submap_other_i, correlation_vector.size(), error._position.x, error._position.y, error._position.z, angle_degr);
 
                 // add new constraint to gtsam as per loop closure (TODO: needs more accurate matching between the two submaps)
                 gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
