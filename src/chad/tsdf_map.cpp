@@ -192,14 +192,22 @@ namespace chad {
             auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
             auto rot = res.rotation().xyz();
             auto pos = res.translation();
-            fmt::println("translation: {} {} {}", pos.x(), pos.y(), pos.z());
-            fmt::println("rot: {} {} {}", rot.x(), rot.y(), rot.z());
-            // adjust poses as per gtsam graph
-            _map_optimizer_p->_submaps[i]._pose_err = Pose{
-                // glm::dvec3(pos.x(), pos.y(), pos.z()),
-                glm::dvec3(3, 3, 3), // DEBUG
-                glm::dquat(glm::dvec3(rot.x(), rot.y(), rot.z()))
+
+            const Pose& pose = _map_optimizer_p->_submaps[i]._pose_avg;
+            const Pose pose_true{
+                glm::dvec3(pos.x(), pos.y(), pos.z()),
+                glm::dvec3(rot.x(), rot.y(), rot.z())
             };
+            // adjust pose error as per gtsam graph
+            _map_optimizer_p->_submaps[i]._pose_err = {
+                pose._position - pose_true._position,
+                pose_true._rotation
+            };
+            fmt::println("position was ({:.2f},{:.2f},{:.2f}) and should be ({:.2f},{:.2f},{:.2f})",
+                pose._position.x, pose._position.y, pose._position.z,
+                pos.x(), pos.y(), pos.z()
+            );
+
         }
 
         // make sure the folder is clean
