@@ -196,7 +196,8 @@ namespace chad {
             fmt::println("rot: {} {} {}", rot.x(), rot.y(), rot.z());
             // adjust poses as per gtsam graph
             _map_optimizer_p->_submaps[i]._pose_err = Pose{
-                glm::dvec3(pos.x(), pos.y(), pos.z()),
+                // glm::dvec3(pos.x(), pos.y(), pos.z()),
+                glm::dvec3(3, 3, 3), // DEBUG
                 glm::dquat(glm::dvec3(rot.x(), rot.y(), rot.z()))
             };
         }
@@ -206,28 +207,25 @@ namespace chad {
         std::filesystem::create_directory(foldername);
 
         // recontruct multiple submaps as single mesh chunks
-        Octree octree_a, octree_b;
-        for (SubmapIndex submap_i = 0; submap_i < _map_optimizer_p->_submaps.size(); submap_i += _submaps_per_chunk) {
+        Octree octree_base, octree;
+        const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
+        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += _submaps_per_chunk) {
             auto beg = std::chrono::high_resolution_clock::now();
-            const Submap& submap_a = _map_optimizer_p->_submaps[submap_i];
-            octree_a.insert(*_dag_storage_p, submap_a._root_indices, _sdf_trunc);
-
-            // other_i as an offset from submap_i
-            for (SubmapIndex other_i = 0; other_i < _submaps_per_chunk && other_i < _map_optimizer_p->_submaps.size(); other_i++) {
-                const Submap& submap_b = _map_optimizer_p->_submaps[submap_i + other_i];
-                octree_b.insert(*_dag_storage_p, submap_b._root_indices, _sdf_trunc);
+            // go over all submaps within this chunk
+            for (SubmapIndex submap_offset = 0; submap_offset < _submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+                const Submap& submap = submaps[chunk_i + submap_offset];
+                octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
                 
-                // invert error to get delta from b to a
-                // assumes a is global coordinate frame
-                glm::vec3 error_b_to_a = -submap_b._pose_err._position;
-                octree_a.merge(octree_b, error_b_to_a, _sdf_res);
-                octree_b.clear();
+                // invert error to get delta from octree to global coordinate frame (octree_base)
+                glm::vec3 octree_error = -submap._pose_err._position;
+                octree_base.merge(octree, octree_error, _sdf_res);
+                octree.clear();
             }
 
             // reconstruct 3D mesh from the merged octree
-            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, submap_i / _submaps_per_chunk);
-            ply::reconstruct(full_file, octree_a, _sdf_res);
-            octree_a.clear();
+            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / _submaps_per_chunk);
+            ply::reconstruct(full_file, octree_base, _sdf_res);
+            octree_base.clear();
             MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
         }
     }
