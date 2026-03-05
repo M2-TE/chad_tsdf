@@ -46,7 +46,6 @@ namespace chad::detail {
         auto friend operator&(MortonCode lhs, const uint64_t& rhs) -> MortonCode {
             return lhs._value & rhs;
         }
-        
 
         uint64_t _value;
     };

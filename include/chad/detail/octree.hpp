@@ -75,10 +75,6 @@ namespace chad::detail {
 
             return _leaves[leaf_addr];
         }
-        // insert single leaf
-        void inline insert(MortonCode mc, Leaf leaf) {
-            insert(mc) = leaf;
-        }
         // insert TSDFs using points and normals (raycasting with DDA in double precision)
         void insert(const std::vector<glm::vec3>& points, const std::vector<glm::vec3>& normals, const glm::vec3 position, float sdf_res, float sdf_trunc) {
             const double sdf_res_recip = 1.0 / double(sdf_res);
@@ -233,7 +229,7 @@ namespace chad::detail {
                         uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
 
                         // now just add it
-                        insert(mc_leaf, Leaf{ signed_distance, weight });
+                        insert(mc_leaf) = Leaf{ signed_distance, weight };
                     }}}
                 }
             }
@@ -416,6 +412,6 @@ namespace chad::detail {
         static constexpr uint32_t ROOT = 0;
         VirtualArray<Node> _nodes;
         VirtualArray<Leaf> _leaves;
-        gtl::flat_hash_map<MortonCode, Node*> _node_lookup; // depth 18
+        gtl::parallel_flat_hash_map<MortonCode, Node*> _node_lookup; // depth 18
     };
 }

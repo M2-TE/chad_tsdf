@@ -259,8 +259,8 @@ namespace chad::detail::ply {
                 Vertex v;
                 v._position = leaf_pos;
                 v._position[dimension_i] = pos_n;
-                // v._color = get_gradient_color(uint32_t(weight)); // heatmap color
-                v._color = glm::u8vec3(0, 255, 0); // DEBUG COLOR
+                v._color = get_gradient_color(uint32_t(weight)); // heatmap color
+                // v._color = glm::u8vec3(0, 255, 0); // DEBUG COLOR
                 v.write(ofs);
 
                 leaf._vertex_indices[dimension_i] = vertex_count++;
