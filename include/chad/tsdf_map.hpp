@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <stdexcept>
 #include "chad/indices.hpp"
 
 #if __has_include(<glm/vec3.hpp>)
@@ -26,7 +27,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_threshhold = 5.0f, uint32_t submaps_per_chunk = 5);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_threshhold = 5.0f);
         // destructor to free allocations
         ~TSDFMap();
 
@@ -102,7 +103,7 @@ namespace chad {
         void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
 
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
-        void reconstruct(const std::string& foldername, bool clean_first = false);
+        void reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first = false);
 
     private:
         // insert points into currently active octree (internal function used by all insert(...) funcs)
@@ -114,7 +115,6 @@ namespace chad {
         const float _sdf_res;
         const float _sdf_trunc;
         const float _submap_threshhold;
-        const uint32_t _submaps_per_chunk;
         bool _debug_outputs = false;
 
     private:

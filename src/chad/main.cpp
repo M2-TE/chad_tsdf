@@ -1,3 +1,5 @@
+#include <random>
+#include <glm/glm.hpp>
 #include "chad/tsdf_map.hpp"
 
 [[maybe_unused]] void inline do_sphere_thing() {

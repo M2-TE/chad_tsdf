@@ -15,11 +15,10 @@
 #define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count())
 
 namespace chad {
-    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_threshhold, uint32_t submaps_per_chunk):
+    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_threshhold):
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
         _submap_threshhold(submap_threshhold),
-        _submaps_per_chunk(submaps_per_chunk),
         _active_octree_p(new detail::Octree()),
         _dag_storage_p(new detail::DAGStorage()),
         _map_optimizer_p(new detail::MapOptimizer()) {
@@ -174,7 +173,7 @@ namespace chad {
         _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
         if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
     }
-    void TSDFMap::reconstruct(const std::string& foldername, bool clean_first) {
+    void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
         using namespace chad::detail;
         // need at least one inserted scan for reconstruction
         if (_map_optimizer_p->_scan_poses.empty()) {
@@ -219,10 +218,10 @@ namespace chad {
         // recontruct multiple submaps as single mesh chunks
         Octree octree_base, octree;
         const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
-        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += _submaps_per_chunk) {
+        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
             auto beg = std::chrono::high_resolution_clock::now();
             // go over all submaps within this chunk
-            for (SubmapIndex submap_offset = 0; submap_offset < _submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+            for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
                 const Submap& submap = submaps[chunk_i + submap_offset];
                 octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
                 
@@ -233,7 +232,7 @@ namespace chad {
             }
 
             // reconstruct 3D mesh from the merged octree
-            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / _submaps_per_chunk);
+            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / submaps_per_chunk);
             ply::reconstruct(full_file, octree_base, _sdf_res);
             octree_base.clear();
             MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
