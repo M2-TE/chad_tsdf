@@ -147,7 +147,7 @@ namespace chad::detail {
 
             // go ahead and create submap based on avg pose
             Submap submap{
-                Pose{ position, glm::identity<glm::quat>() },
+                Pose{ glm::dvec3(position), glm::identity<glm::quat>() },
                 Pose{}, // error
                 roots,
                 scan_beg,

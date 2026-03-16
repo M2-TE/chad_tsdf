@@ -21,6 +21,7 @@
 #define GLM_FORCE_INLINE
 #define GLM_FORCE_INTRINSICS
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_aligned.hpp>
 #include <gtl/phmap.hpp>
 #include <libmorton/morton.h>
