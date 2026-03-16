@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 3.21)
 project(chad_tsdf LANGUAGES CXX)
 
 # settings
+include("cmake/settings.cmake")
 option(CHAD_PREFER_MOLD "Prefer to use mold linker (Linux only)" ON)
-# option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
+option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
 option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # option(CHAD_USE_HUGE_PAGES "Allocate huge pages (~2MiB) instead of the standard size (~4KiB)" OFF)
-include("cmake/options_global.cmake")
-include("cmake/options_compiler.cmake")
 
 # create chad tsdf library
 add_library(${PROJECT_NAME} 
@@ -18,6 +17,26 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include/chad/detail/pch.hpp")
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+
+# compiler/linker options across different vendors
+target_compile_options(${PROJECT_NAME} PRIVATE
+    # warnings
+    $<$<CXX_COMPILER_ID:MSVC>: /W4>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic>
+    # warning errors
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: /WX>
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: -Werror>
+    # fast math optimizations
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_FAST_MATH}>>: /fp:fast>
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_FAST_MATH}>>: -ffast-math>
+    # SIMD instruction set (BMI2)
+    $<$<CXX_COMPILER_ID:MSVC>: /arch:AVX2>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -mbmi2>
+    # misc
+    $<$<CXX_COMPILER_ID:MSVC>: /diagnostics:classic /Zc:__cplusplus /Zc:inline /fp:except- /FC /Gm- /MP /nologo>)
+target_link_options(${PROJECT_NAME} PRIVATE 
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -pthread>
+    $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>)
 
 # handle dependencies
 include("cmake/fmt.cmake")
@@ -33,7 +52,4 @@ if (PROJECT_IS_TOP_LEVEL)
     target_link_libraries(chad_executable PRIVATE fmt::fmt)
     target_link_libraries(chad_executable PRIVATE glm::glm-header-only)
     target_compile_features(chad_executable PRIVATE cxx_std_20)
-    target_precompile_headers(chad_executable REUSE_FROM ${PROJECT_NAME})
-
-    # target_link_libraries(chad_executable PRIVATE Eigen3::Eigen) # Debug only
 endif()
