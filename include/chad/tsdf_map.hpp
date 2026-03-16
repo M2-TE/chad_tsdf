@@ -90,8 +90,6 @@ namespace chad {
             insert_pointcloud(points, { x, y, z });
         }
         
-        // finalize current active submap
-        void finalize_active_submap();
         // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
         bool inline is_submap_active() const { return _active_scan_end != _active_scan_beg; }
 
@@ -101,7 +99,11 @@ namespace chad {
         void release_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::release_hashes()"); }
         // rebuild all hash structures to allow insertion of new data
         void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
+        // print full memory footprint of different components
+        void print_memory_usage();
 
+        // finalize current active submap
+        void finalize_active_submap();
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
         void reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first = false);
 

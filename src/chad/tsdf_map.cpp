@@ -29,6 +29,97 @@ namespace chad {
         delete _dag_storage_p;
     }
 
+    // void TSDFMap::clear() {}
+    // void TSDFMap::release_hashes() {}
+    // void TSDFMap::rebuild_hashes() {}
+    void TSDFMap::print_memory_usage() {
+        CHAD_MESSAGE("just a test");
+    }
+
+    void TSDFMap::finalize_active_submap() {
+        if (!is_submap_active()) CHAD_MESSAGE("There is no active submap yet");
+
+        auto beg = std::chrono::high_resolution_clock::now();
+        // create persistent octree with DAG nodes
+        RootIndices roots = insert_octree(_active_octree_p);
+        _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
+
+        // start new submap with a fresh octree and new pose indices
+        _active_octree_p->clear();
+        _active_scan_beg = _active_scan_end;
+        MEASURE_TIME(beg, "++ Finalizing submap");
+
+        // check for loop closure using all descriptors within finalized submap
+        beg = std::chrono::high_resolution_clock::now();
+        _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
+        if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
+    }
+    void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
+        using namespace chad::detail;
+        // need at least one inserted scan for reconstruction
+        if (_map_optimizer_p->_scan_poses.empty()) {
+            CHAD_MESSAGE("There are no submaps to reconstruct yet");
+            return;
+        }
+        // finalize current active submap if needed
+        if (is_submap_active()) {
+            CHAD_MESSAGE(">> Forcefully finalizing submap for reconstruction");
+            finalize_active_submap();
+        }
+
+        // DEBUG GTSAM OUTPUT
+        gtsam::Values result = _map_optimizer_p->_isam.calculateEstimate();
+        std::cout << "Final optimized poses:\n";
+        for (uint32_t i = 0; i < result.size(); ++i) {
+            auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
+            auto rot = res.rotation().xyz();
+            auto pos = res.translation();
+
+            const Pose& pose = _map_optimizer_p->_submaps[i]._pose_avg;
+            const Pose pose_true{
+                glm::dvec3(pos.x(), pos.y(), pos.z()),
+                glm::dvec3(rot.x(), rot.y(), rot.z())
+            };
+            // adjust pose error as per gtsam graph
+            _map_optimizer_p->_submaps[i]._pose_err = {
+                pose._position - pose_true._position,
+                pose_true._rotation
+            };
+            fmt::println("position was ({:.2f},{:.2f},{:.2f}) and should be ({:.2f},{:.2f},{:.2f})",
+                pose._position.x, pose._position.y, pose._position.z,
+                pos.x(), pos.y(), pos.z()
+            );
+
+        }
+
+        // make sure the folder is clean
+        if (clean_first) std::filesystem::remove_all(foldername);
+        std::filesystem::create_directory(foldername);
+
+        // recontruct multiple submaps as single mesh chunks
+        Octree octree_base, octree;
+        const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
+        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
+            auto beg = std::chrono::high_resolution_clock::now();
+            // go over all submaps within this chunk
+            for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+                const Submap& submap = submaps[chunk_i + submap_offset];
+                octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
+                
+                // invert error to get delta from octree to global coordinate frame (octree_base)
+                glm::vec3 octree_error = -submap._pose_err._position;
+                octree_base.merge(octree, octree_error, _sdf_res);
+                octree.clear();
+            }
+
+            // reconstruct 3D mesh from the merged octree
+            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / submaps_per_chunk);
+            ply::reconstruct(full_file, octree_base, _sdf_res);
+            octree_base.clear();
+            MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
+        }
+    }
+
     void TSDFMap::insert_pointcloud(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
@@ -153,89 +244,5 @@ namespace chad {
         }
 
         return roots;
-    }
-
-    void TSDFMap::finalize_active_submap() {
-        if (!is_submap_active()) CHAD_MESSAGE("There is no active submap yet");
-
-        auto beg = std::chrono::high_resolution_clock::now();
-        // create persistent octree with DAG nodes
-        RootIndices roots = insert_octree(_active_octree_p);
-        _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
-
-        // start new submap with a fresh octree and new pose indices
-        _active_octree_p->clear();
-        _active_scan_beg = _active_scan_end;
-        MEASURE_TIME(beg, "++ Finalizing submap");
-
-        // check for loop closure using all descriptors within finalized submap
-        beg = std::chrono::high_resolution_clock::now();
-        _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
-        if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
-    }
-    void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
-        using namespace chad::detail;
-        // need at least one inserted scan for reconstruction
-        if (_map_optimizer_p->_scan_poses.empty()) {
-            CHAD_MESSAGE("There are no submaps to reconstruct yet");
-            return;
-        }
-        // finalize current active submap if needed
-        if (is_submap_active()) {
-            CHAD_MESSAGE(">> Forcefully finalizing submap for reconstruction");
-            finalize_active_submap();
-        }
-
-        // DEBUG GTSAM OUTPUT
-        gtsam::Values result = _map_optimizer_p->_isam.calculateEstimate();
-        std::cout << "Final optimized poses:\n";
-        for (uint32_t i = 0; i < result.size(); ++i) {
-            auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
-            auto rot = res.rotation().xyz();
-            auto pos = res.translation();
-
-            const Pose& pose = _map_optimizer_p->_submaps[i]._pose_avg;
-            const Pose pose_true{
-                glm::dvec3(pos.x(), pos.y(), pos.z()),
-                glm::dvec3(rot.x(), rot.y(), rot.z())
-            };
-            // adjust pose error as per gtsam graph
-            _map_optimizer_p->_submaps[i]._pose_err = {
-                pose._position - pose_true._position,
-                pose_true._rotation
-            };
-            fmt::println("position was ({:.2f},{:.2f},{:.2f}) and should be ({:.2f},{:.2f},{:.2f})",
-                pose._position.x, pose._position.y, pose._position.z,
-                pos.x(), pos.y(), pos.z()
-            );
-
-        }
-
-        // make sure the folder is clean
-        if (clean_first) std::filesystem::remove_all(foldername);
-        std::filesystem::create_directory(foldername);
-
-        // recontruct multiple submaps as single mesh chunks
-        Octree octree_base, octree;
-        const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
-        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
-            auto beg = std::chrono::high_resolution_clock::now();
-            // go over all submaps within this chunk
-            for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
-                const Submap& submap = submaps[chunk_i + submap_offset];
-                octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
-                
-                // invert error to get delta from octree to global coordinate frame (octree_base)
-                glm::vec3 octree_error = -submap._pose_err._position;
-                octree_base.merge(octree, octree_error, _sdf_res);
-                octree.clear();
-            }
-
-            // reconstruct 3D mesh from the merged octree
-            std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / submaps_per_chunk);
-            ply::reconstruct(full_file, octree_base, _sdf_res);
-            octree_base.clear();
-            MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
-        }
     }
 }

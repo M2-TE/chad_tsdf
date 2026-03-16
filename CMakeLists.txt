@@ -9,7 +9,7 @@ option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # option(CHAD_USE_HUGE_PAGES "Allocate huge pages (~2MiB) instead of the standard size (~4KiB)" OFF)
 
 # create chad tsdf library
-add_library(${PROJECT_NAME} 
+add_library(${PROJECT_NAME}
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf_map.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/virtual_array.cpp")
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
@@ -35,8 +35,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     # misc
     $<$<CXX_COMPILER_ID:MSVC>: /diagnostics:classic /Zc:__cplusplus /Zc:inline /fp:except- /FC /Gm- /MP /nologo>)
 target_link_options(${PROJECT_NAME} PRIVATE 
-    $<$<CXX_COMPILER_ID:GNU,Clang>: -pthread>
-    $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>)
+    $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -pthread>)
 
 # handle dependencies
 include("cmake/fmt.cmake")

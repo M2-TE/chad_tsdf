@@ -11,15 +11,15 @@ include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_INTERPROCEDURAL_OPTIMIZATION LANGUAGES CXX)
 message(STATUS "IPO/LTO enabled: ${CMAKE_INTERPROCEDURAL_OPTIMIZATION}")
 
-# platform-specific
+# enable mold linker if possible
+find_program(MOLD_FOUND mold)
+if (CHAD_PREFER_MOLD AND MOLD_FOUND)
+    message(STATUS "Using mold linker")
+    set(CMAKE_LINKER_TYPE MOLD)
+endif()
+
+# some windows things
 if (MSVC)
     set(CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE "x64")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>") # static msvc runtime lib
-elseif (UNIX)
-    # enable mold linker if present
-    find_program(MOLD_FOUND mold)
-    if (CHAD_PREFER_MOLD AND MOLD_FOUND)
-        message(STATUS "Using mold linker")
-        set(CMAKE_LINKER_TYPE MOLD)
-    endif()
 endif()

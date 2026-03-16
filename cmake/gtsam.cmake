@@ -1,7 +1,7 @@
-set(GTSAM_ENABLE_BOOST_SERIALIZATION OFF)
-set(GTSAM_USE_BOOST_FEATURES OFF)
-
-include(FetchContent)
+# use either system or FetchContent package
+find_package(gtsam QUIET)
+if (NOT gtsam_FOUND)
+    include(FetchContent)
     set(GTSAM_BUILD_DOCS OFF)
     set(GTSAM_BUILD_TESTS OFF)
     set(GTSAM_ENABLE_ASAN OFF)
@@ -11,7 +11,7 @@ include(FetchContent)
     # general options
     set(GTSAM_BUILD_EXAMPLES_ALWAYS OFF)
     set(GTSAM_BUILD_TYPE_POSTFIXES OFF)
-    set(GTSAM_BUILD_WITH_MARCH_NATIVE OFF) # TODO: this would clash with pch, should be fixable
+    set(GTSAM_BUILD_WITH_MARCH_NATIVE ON)
     set(GTSAM_BUILD_WITH_PRECOMPILED_HEADERS ON)
     set(GTSAM_BUILD_UNSTABLE OFF)
     set(GTSAM_UNSTABLE_BUILD_PYTHON OFF)
@@ -27,5 +27,7 @@ include(FetchContent)
         GIT_SHALLOW ON
         OVERRIDE_FIND_PACKAGE
         EXCLUDE_FROM_ALL)
-FetchContent_MakeAvailable(gtsam)
-target_link_libraries(${PROJECT_NAME} PRIVATE gtsam)
+    FetchContent_MakeAvailable(gtsam)
+    target_link_libraries(${PROJECT_NAME} PRIVATE gtsam)
+endif()
+target_link_libraries(${PROJECT_NAME} PRIVATE gtl)

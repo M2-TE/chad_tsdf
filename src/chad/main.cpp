@@ -2,7 +2,8 @@
 #include <glm/glm.hpp>
 #include "chad/tsdf_map.hpp"
 
-[[maybe_unused]] void inline do_sphere_thing() {
+[[maybe_unused]]
+void inline do_sphere_thing() {
     // generate random point data
     std::vector<glm::vec3> points { 1'000'000 };
     std::random_device rd;
@@ -30,7 +31,8 @@
         }
         map.insert(points, positions[i]);
     }
-    map.reconstruct("mesh", true);
+    map.print_memory_usage();
+    // map.reconstruct("mesh", true);
 }
 int main() {
     do_sphere_thing();
