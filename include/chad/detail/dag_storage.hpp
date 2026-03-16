@@ -217,8 +217,6 @@ namespace chad::detail {
         public:
         // 21 levels total
         static constexpr uint64_t MAX_DEPTH = 20;
-
-        private:
         // 20 levels of standard nodes
         std::array<NodeLevel, MAX_DEPTH> _node_levels;
         // 1 level of leaf clusters

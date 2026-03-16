@@ -1,11 +1,12 @@
+#include "chad/detail/ndd.hpp"
 #include "chad/indices.hpp"
 #include "chad/tsdf_map.hpp"
 #include "chad/detail/ply.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/octree2.hpp"
-#include "chad/detail/octree3.hpp"
+#include "chad/detail/octree2.hpp" // WIP
+#include "chad/detail/octree3.hpp" // WIP
 #include "chad/detail/normals.hpp"
 #include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"
@@ -33,7 +34,36 @@ namespace chad {
     // void TSDFMap::release_hashes() {}
     // void TSDFMap::rebuild_hashes() {}
     void TSDFMap::print_memory_usage() {
-        CHAD_MESSAGE("just a test");
+        using namespace chad::detail;
+        double mem_dag_nodes = 0;
+        double mem_dag_hashes = 0;
+        [[maybe_unused]] double mem_active_octree = 0;
+        [[maybe_unused]] double mem_gtsam = 0;
+        double mem_ndd = 0;
+
+        // first go over everything stored in DAG (node and hash structures)
+        DAGStorage& dag = *_dag_storage_p;
+        for (const auto& level: dag._node_levels) {
+            mem_dag_nodes += double(level._raw_data.size() * sizeof(NodeSegment));
+            // calculated as per https://github.com/greg7mdp/parallel-hashmap?tab=readme-ov-file#memory-usage
+            mem_dag_hashes += double(level._addr_set.size()) / double(level._addr_set.load_factor()) * double(sizeof(decltype(level._addr_set)::size_type) + 1);
+        }
+        mem_dag_nodes += double(dag._leaf_clusters._raw_data.size() * sizeof(LeafCluster));
+        mem_dag_hashes += double(dag._leaf_clusters._addr_set.size()) / double(dag._leaf_clusters._addr_set.load_factor()) * double(sizeof(decltype(dag._leaf_clusters._addr_set)::size_type) + 1);
+
+        // active octree should have its "reserved" memory be counted, it is preserved across submaps for performance reasons
+        const auto& active_octree = *_active_octree_p;
+        mem_active_octree += double(active_octree._nodes.size() * sizeof(Octree::Node));
+        mem_active_octree += double(active_octree._leaves.size() * sizeof(Octree::Leaf));
+        mem_active_octree += double(active_octree._node_lookup.size()) / double(active_octree._node_lookup.load_factor()) * double(sizeof(decltype(active_octree._node_lookup)::size_type) + 1);
+        // CHAD_MESSAGE(fmt::format("\tActive Octree: {:.4f}", mem_active_octree / 1024 / 1024));
+
+        // NDD descriptors and their lookup keys
+        const auto& optimizer = *_map_optimizer_p;
+        mem_ndd += double(optimizer._scan_descriptors.size() * sizeof(ndd::Descriptor));
+        mem_ndd += double(optimizer._scan_lookup_keys.size() * sizeof(ndd::Descriptor::LookupKey));
+        
+        CHAD_MESSAGE(fmt::format("Memory footprint in MiB. Nodes: {:.4f} Hashes: {:.4f} NDDs: {:.4f}", mem_dag_nodes / 1024 / 1024, mem_dag_hashes / 1024 / 1024, mem_ndd / 1024 / 1024));
     }
 
     void TSDFMap::finalize_active_submap() {
