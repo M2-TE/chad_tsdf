@@ -32,7 +32,7 @@ void inline do_sphere_thing() {
         map.insert(points, positions[i]);
     }
     map.finalize_active_submap();
-    map.print_memory_usage();
+    // map.print_memory_usage();
     // map.reconstruct("mesh", true);
 }
 int main() {

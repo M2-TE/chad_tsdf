@@ -5,8 +5,8 @@
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/octree2.hpp" // WIP
-#include "chad/detail/octree3.hpp" // WIP
+// #include "chad/detail/octree2.hpp" // WIP
+// #include "chad/detail/octree3.hpp" // WIP
 #include "chad/detail/normals.hpp"
 #include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"

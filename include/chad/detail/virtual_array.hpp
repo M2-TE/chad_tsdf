@@ -1,102 +1,114 @@
 #pragma once
 
 namespace chad::detail {
-    auto allocate_virtual(size_t virtual_capacity) -> void*;
-    void deallocate_virtual(void* virt_mem_p, size_t virtual_capacity);
+    auto allocate_virtual(size_t bytes) -> void*;
+    void deallocate_virtual(void* virtual_p, size_t bytes);
+    void prefault_virtual(void* virtual_p, size_t bytes);
 }
 
 namespace chad::detail {
+    static constexpr std::size_t KiB = 1024;
+    static constexpr std::size_t MiB = 1024 * KiB;
+    static constexpr std::size_t GiB = 1024 * MiB;
+
     template<typename T> struct VirtualArray {
         using const_iterator = const T*;
         using iterator = T*;
 
-        VirtualArray(size_t virtual_capacity = 0xffffffff) {
-            _virt_mem_p = reinterpret_cast<T*>(allocate_virtual(virtual_capacity));
-            _size = 0;
-            _capacity = virtual_capacity;
+        VirtualArray(std::size_t virtual_capacity = 0xffffffff):
+            _virtual_p(static_cast<T*>(allocate_virtual(virtual_capacity))),
+            _size(0),
+            _capacity(virtual_capacity) {
         }
         ~VirtualArray() {
-            deallocate_virtual(_virt_mem_p, _capacity);
+            deallocate_virtual(_virtual_p, _capacity);
         }
 
-        auto operator[](size_t index) -> T& {
-            return _virt_mem_p[index];
+        auto operator[](std::size_t index) const -> const T& {
+            return _virtual_p[index];
         }
-        auto operator[](size_t index) const -> const T& {
-            return _virt_mem_p[index];
+        auto operator[](std::size_t index) -> T& {
+            return _virtual_p[index];
         }
         auto inline push_back(const T& value) -> T& {
-            _virt_mem_p[_size] = value;
-            return _virt_mem_p[_size++];
+            _virtual_p[_size] = value;
+            return _virtual_p[_size++];
         }
         auto inline push_back(T&& value) -> T& {
-            _virt_mem_p[_size] = std::move(value);
-            return _virt_mem_p[_size++];
+            _virtual_p[_size] = std::move(value);
+            return _virtual_p[_size++];
         }
 
         template<class InputIt>
         void inline insert_back(InputIt first, InputIt last) {
-            auto cur = first;
+            InputIt cur = first;
             while(cur != last) {
-                _virt_mem_p = *cur;
-                _size++;
+                _virtual_p = *cur;
+                std::next(cur);
             }
+            _size += std::distance(first, last);
         }
         void inline insert_back(std::initializer_list<T> ilist) {
-            std::memcpy(_virt_mem_p + _size, ilist.begin(), ilist.size());
+            std::memcpy(_virtual_p + _size, ilist.begin(), ilist.size());
             _size += ilist.size();
         }
 
         auto inline front() const -> const T& {
-            return _virt_mem_p[0];
+            return _virtual_p[0];
         }
         auto inline front() -> T& {
-            return _virt_mem_p[0];
+            return _virtual_p[0];
         }
         auto inline back() const -> const T& {
-            return _virt_mem_p[_size - 1];
+            return _virtual_p[_size - 1];
         }
         auto inline back() -> T& {
-            return _virt_mem_p[_size - 1];
+            return _virtual_p[_size - 1];
         }
         auto inline data() const -> const T* {
-            return _virt_mem_p;
+            return _virtual_p;
         }
         auto inline data() -> T* {
-            return _virt_mem_p;
+            return _virtual_p;
         }
 
-        auto inline begin() const -> const_iterator {
-            return _virt_mem_p;
+        auto inline cbegin() const -> const_iterator {
+            return _virtual_p;
         }
         auto inline begin() -> iterator {
-            return _virt_mem_p;
+            return _virtual_p;
         }
-        auto inline end() const -> const_iterator {
-            return _virt_mem_p + _size;
+        auto inline cend() const -> const_iterator {
+            return _virtual_p + _size;
         }
         auto inline end() -> iterator {
-            return _virt_mem_p + _size;
+            return _virtual_p + _size;
         }
 
-        auto inline size() const -> size_t {
+        auto inline size() const -> std::size_t {
             return _size;
         }
-        auto inline capacity() const -> size_t {
+        auto inline capacity() const -> std::size_t {
             return _capacity;
         }
-        void inline resize(size_t new_size) {
-            // no need to worry about de-/reallocation
+        // TODO: actually free the pages if smaller than before?
+        // TODO: prefault pages if larger than capacity?
+        void inline resize(std::size_t new_size) {
             _size = new_size;
         }
+        // TODO
+        void inline reserve(std::size_t new_capacity) {
+
+        }
+        // TODO: actually free the pages?
         void inline clear() {
-            // do not deallocate or wipe data
+            // MADV_FREE stuff
             _size = 0;
         }
         
     private:
-        T* _virt_mem_p;
-        size_t _size;
-        size_t _capacity;
+        T* const _virtual_p;
+        std::size_t _size;
+        const std::size_t _capacity;
     };
 }
