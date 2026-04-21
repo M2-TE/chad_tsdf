@@ -1,9 +1,9 @@
 #pragma once
 #include "chad/indices.hpp"
-#include "chad/detail/mc.hpp"
 #include "chad/detail/octree.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/dag_storage.hpp"
+#include "chad/detail/marching_cubes.hpp"
 
 // helpers
 namespace {
@@ -344,16 +344,7 @@ namespace chad::detail::ply {
                     marching_cubes_index |= 1 << i;
                 }
             }
-            const std::array<uint32_t, 13>& table_entry = MC_TABLE[marching_cubes_index];
-            
-            // find out how many vertices are needed
-            uint32_t table_entry_length = 0;
-            for (uint32_t i = 0; i < table_entry.size(); i++) {
-                if (table_entry[i] == chad::detail::NO) {
-                    table_entry_length = i;
-                    break;
-                }
-            }
+            const auto& table_entry = MC_TABLE[marching_cubes_index];
 
             // TODO: move this somewhere else
             static constexpr std::array<std::pair<uint32_t, uint32_t>, 12> edge_indices = {
@@ -372,7 +363,7 @@ namespace chad::detail::ply {
             };
             
             // create the faces
-            for (uint32_t i = 0; i < table_entry_length; i += 3) {
+            for (uint32_t i = 0; i < table_entry.size(); i += 3) {
                 Face face;
 
                 // fetch the correct vertices
