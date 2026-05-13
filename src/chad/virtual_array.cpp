@@ -1,15 +1,12 @@
-namespace chad::detail {
-    auto allocate_virtual(size_t bytes) -> void*;
-    void deallocate_virtual(void* virtual_p, size_t bytes);
-    void prefault_virtual(void* virtual_p, size_t bytes);
-}
-
 #if defined (__unix__)
 #   include <sys/mman.h>
 #   include <unistd.h>
 #   include <errno.h>
     namespace chad::detail {
-        auto allocate_virtual(size_t bytes) -> void* {
+        auto get_page_size() -> std::size_t {
+            return sysconf(_SC_PAGESIZE);
+        }
+        auto allocate_virtual(std::size_t bytes) -> void* {
             // allocate memory pages without file-backing via mmap, but do not populate them
             int prot = PROT_READ | PROT_WRITE;
             int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE /*| MAP_HUGETLB*/;
@@ -19,9 +16,8 @@ namespace chad::detail {
                 err_message += std::strerror(errno);
                 throw std::runtime_error(err_message);
             }
-            // MADV_DONTDUMP: these gigantic memory regions should not be included in core dumps
-            // MADV_HUGEPAGE: allow use of transparent huge pages
-            int res = madvise(virtual_p, bytes, MADV_DONTDUMP | MADV_HUGEPAGE); // TODO: benchmark MADV_SEQUENTIAL against MADV_RANDOM
+            // these gigantic memory regions should not be included in core dumps
+            int res = madvise(virtual_p, bytes, MADV_DONTDUMP); // TODO: benchmark MADV_SEQUENTIAL against MADV_RANDOM, maybe add MADV_HUGEPAGE
             if (res == -1) {
                 std::string err_message = "chad::detail::allocate_virtual -> madvise with MADV_DONTDUMP and MADV_HUGEPAGE failed: ";
                 err_message += std::strerror(errno);
@@ -29,7 +25,7 @@ namespace chad::detail {
             }
             return virtual_p;
         }
-        void deallocate_virtual(void* virtual_p, size_t bytes) {
+        void deallocate_virtual(void* virtual_p, std::size_t bytes) {
             int res = munmap(virtual_p, bytes);
             if (res == -1) {
                 std::string err_message = "chad::detail::deallocate_virtual -> munmap failed: ";
@@ -37,10 +33,10 @@ namespace chad::detail {
                 throw std::runtime_error(err_message);
             }
         }
-        void prefault_virtual(void* virtual_p, size_t bytes) {
-            int res = madvise(virtual_p, bytes, MADV_POPULATE_READ | MADV_POPULATE_WRITE);
+        void prefault_virtual(void* virtual_p, std::size_t bytes) {
+            int res = madvise(virtual_p, bytes, MADV_POPULATE_WRITE);
             if (res == -1) {
-                std::string err_message = "chad::detail::prefault_virtual -> madvise with MADV_POPULATE_* failed: ";
+                std::string err_message = "chad::detail::prefault_virtual -> madvise with MADV_POPULATE_WRITE failed: ";
                 err_message += std::strerror(errno);
                 throw std::runtime_error(err_message);
             }

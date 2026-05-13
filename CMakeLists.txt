@@ -3,7 +3,7 @@ project(chad_tsdf LANGUAGES CXX)
 
 # settings
 include("cmake/settings.cmake")
-option(CHAD_PREFER_MOLD "Prefer to use mold linker (Linux only)" ON)
+option(CHAD_PREFER_MOLD "Prefer to use mold linker" ON)
 option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
 option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # option(CHAD_USE_HUGE_PAGES "Allocate huge pages (~2MiB) instead of the standard size (~4KiB)" OFF)
@@ -34,7 +34,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>: -mbmi2>
     # misc
     $<$<CXX_COMPILER_ID:MSVC>: /diagnostics:classic /Zc:__cplusplus /Zc:inline /fp:except- /FC /Gm- /MP /nologo>)
-target_link_options(${PROJECT_NAME} PRIVATE 
+target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>
     $<$<CXX_COMPILER_ID:GNU,Clang>: -pthread>)
 
@@ -47,9 +47,9 @@ include("cmake/gtsam.cmake")
 
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)
-    add_executable(chad_executable "src/chad/main.cpp")
-    target_link_libraries(chad_executable PRIVATE chad::tsdf)
-    target_link_libraries(chad_executable PRIVATE fmt::fmt)
-    target_link_libraries(chad_executable PRIVATE glm::glm-header-only)
-    target_compile_features(chad_executable PRIVATE cxx_std_20)
+  add_executable(chad_executable "src/chad/main.cpp")
+  target_link_libraries(chad_executable PRIVATE chad::tsdf)
+  target_link_libraries(chad_executable PRIVATE fmt::fmt)
+  target_link_libraries(chad_executable PRIVATE glm::glm-header-only)
+  target_compile_features(chad_executable PRIVATE cxx_std_20)
 endif()

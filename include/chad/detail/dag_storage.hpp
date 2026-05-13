@@ -1,5 +1,6 @@
 #pragma once
 #include "chad/cluster.hpp"
+#include "chad/detail/morton.hpp"
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {
@@ -35,7 +36,7 @@ namespace chad::detail {
             auto inline operator()(const uint32_t addr) const -> uint64_t {
                 // get node
                 const void* raw_addr_p = &_node_data[addr];
-                const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
+                const Node& node = *static_cast<const Node*>(raw_addr_p);
                 // count children
                 uint32_t child_count = std::popcount(node.head.child_mask);
                 // hash entire node
@@ -156,7 +157,7 @@ namespace chad::detail {
             // write placerholder node into raw data vector
             uint32_t placeholder_addr = nodes._occupied_n;
             void* raw_addr_p = &nodes._raw_data[placeholder_addr];
-            Node& placeholder = *reinterpret_cast<Node*>(raw_addr_p);
+            Node& placeholder = *static_cast<Node*>(raw_addr_p);
             placeholder.head.child_mask = 0; // first element is child mask
             placeholder.head.ref_count = 1;
 
@@ -191,14 +192,14 @@ namespace chad::detail {
         // get node via its address
         auto inline get_node(uint32_t depth, uint32_t addr) const -> const Node& {
             const void* raw_addr_p = &_node_levels[depth]._raw_data[addr];
-            const Node& node = *reinterpret_cast<const Node*>(raw_addr_p);
+            const Node& node = *static_cast<const Node*>(raw_addr_p);
             return node;
         }
         // get child address of given node; returns 0 if none is found
         auto inline get_child_addr(uint32_t parent_depth, uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
             // fetch node data
             const void* raw_addr_p = &_node_levels[parent_depth]._raw_data[parent_addr];
-            const Node& parent = *reinterpret_cast<const Node*>(raw_addr_p);
+            const Node& parent = *static_cast<const Node*>(raw_addr_p);
             uint32_t child_bit = 1 << child_i;
 
             // check if the child exists
@@ -212,6 +213,26 @@ namespace chad::detail {
                 return child_addr;
             }
             else return 0;
+        }
+
+        // get TSDF leaf (not cluster!) via MortonCode index
+        auto inline get_tsdf(uint32_t root_addr, float sdf_trunc, MortonCode mc) const -> std::pair<float, bool> {
+            uint32_t node_addr = root_addr;
+            for (uint32_t depth = 0; depth <= MAX_DEPTH; depth++) {
+                uint8_t child_i = (mc._value >> (20 - depth) * 3) & 0b111;
+
+                if (depth < MAX_DEPTH) {
+                    node_addr = get_child_addr(depth, node_addr, child_i);
+                    if (node_addr == 0) return { 0, false };
+                    continue;
+                }
+                else {
+                    const LeafCluster& lc = get_lc(node_addr);
+                    return lc._tsdfs.try_get(child_i, sdf_trunc);
+                }
+            }
+
+            throw std::runtime_error("This should be unreachable (chad::detail::get_lc_tsdf)");
         }
 
         public:

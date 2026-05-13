@@ -5,15 +5,17 @@
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
-// #include "chad/detail/octree2.hpp" // WIP
-// #include "chad/detail/octree3.hpp" // WIP
 #include "chad/detail/normals.hpp"
 #include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"
 
-// TODO: turn these into normal functions
-#define CHAD_MESSAGE(message) fmt::println("[CHAD] {}", message)
-#define MEASURE_TIME(beg, message) fmt::println("[CHAD] {}: {:.2f}ms", message, std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count())
+void inline CHAD_MESSAGE(std::string_view message) {
+    fmt::println("[CHAD] {}", message);
+}
+void inline MEASURE_TIME(std::chrono::high_resolution_clock::time_point beg, std::string_view message) {
+    double dur = std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count();
+    fmt::println("[CHAD] {}: {:.2f}ms", message, dur);
+}
 
 namespace chad {
     TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_threshhold):
@@ -25,14 +27,16 @@ namespace chad {
         _map_optimizer_p(new detail::MapOptimizer()) {
     }
     TSDFMap::~TSDFMap() {
-        delete _active_octree_p;
         delete _map_optimizer_p;
+        delete _active_octree_p;
         delete _dag_storage_p;
     }
-
-    // void TSDFMap::clear() {}
-    // void TSDFMap::release_hashes() {}
-    // void TSDFMap::rebuild_hashes() {}
+    // void TSDFMap::clear() {
+    // }
+    // void TSDFMap::release_hashes() {
+    // }
+    // void TSDFMap::rebuild_hashes() {
+    // }
     void TSDFMap::print_memory_usage() {
         using namespace chad::detail;
         double mem_dag_nodes = 0;
@@ -62,10 +66,9 @@ namespace chad {
         const auto& optimizer = *_map_optimizer_p;
         mem_ndd += double(optimizer._scan_descriptors.size() * sizeof(ndd::Descriptor));
         mem_ndd += double(optimizer._scan_lookup_keys.size() * sizeof(ndd::Descriptor::LookupKey));
-        
+
         CHAD_MESSAGE(fmt::format("Memory footprint in MiB. Nodes: {:.4f} Hashes: {:.4f} NDDs: {:.4f}", mem_dag_nodes / 1024 / 1024, mem_dag_hashes / 1024 / 1024, mem_ndd / 1024 / 1024));
     }
-
     void TSDFMap::finalize_active_submap() {
         if (!is_submap_active()) CHAD_MESSAGE("There is no active submap yet");
 
@@ -135,7 +138,7 @@ namespace chad {
             for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
                 const Submap& submap = submaps[chunk_i + submap_offset];
                 octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
-                
+
                 // invert error to get delta from octree to global coordinate frame (octree_base)
                 glm::vec3 octree_error = -submap._pose_err._position;
                 octree_base.merge(octree, octree_error, _sdf_res);
@@ -274,5 +277,128 @@ namespace chad {
         }
 
         return roots;
+    }
+
+    // pilfered from HATSDF
+    void lu_decomposition(std::array<std::array<double, 6>, 6>& H) {
+        for (int i = 0; i < 6 - 1; i++) {
+            for (int k = i + 1; k < 6; k++) {
+                H[k][i] /= H[i][i];
+                for (int j = i + 1; j < 6; j++) {
+                    H[k][j] -= H[k][i] * H[i][j];
+                }
+            }
+        }
+    }
+    // pilfered from HATSDF
+    auto lu_solve(const std::array<std::array<double, 6>, 6>& H, const std::array<double, 6>& g) -> std::array<double,6> {
+        std::array<double, 6> x;
+        for (int i = 0; i < 6; i++) {
+            x[i] = g[i];
+            for (int k = 0; k < i; k++) {
+                x[i] -= H[i][k] * x[k];
+            }
+        }
+        for (int i = 6 - 1; i >= 0; i--) {
+            for (int k = i + 1; k < 6; k++) {
+                x[i] -= H[i][k] * x[k];
+            }
+            x[i] /= H[i][i];
+        }
+        return x;
+    }
+    // prototype for point-to-tsdf
+    void TSDFMap::dothingy(std::vector<glm::vec3>& points, glm::vec3& position) {
+        using namespace chad::detail;
+
+        // TEMPORARY
+        RootIndex tsdf_root = _map_optimizer_p->_submaps.back()._root_indices._tsdfs;
+
+        // accumulate count of valid comparisons and total error estimate
+        float error = 0.0f;
+        std::size_t count = 0;
+
+        std::array<std::array<double, 6>, 6> H;
+        for (auto& h: H) h.fill(0);
+        std::array<double, 6> g;
+        g.fill(0);
+
+        // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
+        const float voxel_reciprocal = float(1.0 / double(_sdf_res));
+        for (const auto& point_raw: points) {
+
+            // get tsdf voxel at current point
+            const glm::ivec3 voxel_pos{ glm::floor(point_raw * voxel_reciprocal) };
+            const auto [tsdf, exists] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ voxel_pos });
+            if (!exists) continue;
+            // fmt::println("cur {}", tsdf);
+
+
+            // build gradients along each axis
+            glm::vec3 gradient{ 0, 0, 0 };
+            for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+                glm::ivec3 neigh_pos = voxel_pos;
+
+                // get first neighbour
+                neigh_pos[axis_i] -= 1;
+                const auto [tsdf_a, exists_a] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
+                if (!exists_a) continue;
+
+                // get second neighbour
+                neigh_pos[axis_i] += 2;
+                const auto [tsdf_b, exists_b] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
+                if (!exists_b) continue;
+
+
+                if ((tsdf_a > 0) == (tsdf_b > 0)) {
+                    gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
+                }
+                // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+            }
+            // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
+
+            // TODO: ignoring all previous gradient calcs
+            // should just calc gradient from current point to TSDF surface estimation
+
+
+            // make sure points are centered around (0, 0, 0)
+            const glm::vec3 point = point_raw - position;
+            // fmt::println("{} {} {}", point.x, point.y, point.z);
+
+            // cross product point x gradient
+            std::array<double, 6> jacobian;
+            jacobian[0] = point[1] * gradient[2] - point[2] * gradient[1];
+            jacobian[1] = point[2] * gradient[0] - point[0] * gradient[2];
+            jacobian[2] = point[0] * gradient[1] - point[1] * gradient[0];
+            jacobian[3] = gradient[0];
+            jacobian[4] = gradient[1];
+            jacobian[5] = gradient[2];
+
+            // add multiplication result to h
+            for (uint8_t row = 0; row < 6; row++) {
+                for (uint8_t col = 0; col < 6; col++) {
+                    // H += jacobian * jacobian.transpose()
+                    H[row][col] += jacobian[row] * jacobian[col];
+                }
+                g[row] += jacobian[row] * tsdf;
+            }
+
+            // TODO: check if using floats with more prec dist is better?
+            error += std::abs(tsdf);
+            count++;
+        }
+
+        fmt::println("count: {} error: {}", count, error);
+
+        lu_decomposition(H);
+        auto xi = lu_solve(H, g);
+        fmt::println("rot_x {:.4f}", xi[0]);
+        fmt::println("rot_y {:.4f}", xi[1]);
+        fmt::println("rot_z {:.4f}", xi[2]);
+        fmt::println("lin_x {:.4f}", xi[3]);
+        fmt::println("lin_y {:.4f}", xi[4]);
+        fmt::println("lin_z {:.4f}", xi[5]);
+        // xi_to_transform(xi, next_transform, center);
+        // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
     }
 }
