@@ -22,14 +22,11 @@ namespace chad {
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
         _submap_threshhold(submap_threshhold),
-        _active_octree_p(new detail::Octree()),
-        _dag_storage_p(new detail::DAGStorage()),
-        _map_optimizer_p(new detail::MapOptimizer()) {
+        _active_octree_p(std::make_unique<detail::Octree>()),
+        _dag_storage_p(std::make_unique<detail::DAGStorage>()),
+        _map_optimizer_p(std::make_unique<detail::MapOptimizer>()) {
     }
     TSDFMap::~TSDFMap() {
-        delete _map_optimizer_p;
-        delete _active_octree_p;
-        delete _dag_storage_p;
     }
     // void TSDFMap::clear() {
     // }
@@ -187,7 +184,7 @@ namespace chad {
         if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
         MEASURE_TIME(beg, "-- Total insertion time");
     }
-    auto TSDFMap::insert_octree(detail::Octree* octree_p) -> RootIndices {
+    auto TSDFMap::insert_octree(const std::unique_ptr<detail::Octree>& octree_p) -> RootIndices {
         using namespace chad::detail;
         const Octree& octree = *octree_p;
 
