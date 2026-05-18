@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
-#include <string>
 #include <vector>
+#include <cstdint>
 #include <stdexcept>
 #include "chad/indices.hpp"
 
@@ -20,6 +20,21 @@ namespace chad {
         struct MapOptimizer;
     }
 
+    using PointFlags = std::uint64_t;
+    enum PointFlagBits: std::uint64_t {
+        eNone     = 0,
+        //
+        eXYZ_F32  = 0b0000'0001,
+        eXYZ_F64  = 0b0000'0010,
+        eXYZW_F32 = 0b0000'0100,
+        eXYZW_F64 = 0b0000'1000,
+        //
+        eRGB_U8   = 0b0001'0000,
+        eRGB_F32  = 0b0010'0000,
+        eRGBA_U8  = 0b0100'0000,
+        eRGBA_F32 = 0b1000'0000,
+    };
+
     class TSDFMap {
     public:
         TSDFMap(const TSDFMap&  other) = delete; // copy constructor
@@ -33,76 +48,44 @@ namespace chad {
         ~TSDFMap();
 
         #if __has_include(<glm/vec3.hpp>)
-        // // insert pointcloud alongside scanner position
-        // void inline insert(const std::vector<glm::vec3>& points, const glm::vec3& position) {
-        //     // when using unpadded vec3, we can avoid copies
-        //     if constexpr (sizeof(glm::vec3) == sizeof(float) * 3) {
-        //         const float* points_p = &points[0].x;
-        //         insert(points_p, points.size(), position.x, position.y, position.z);
-        //     }
-        //     else {
-        //         std::vector<std::array<float, 3>> points_vec;
-        //         points_vec.reserve(points.size());
-        //         for (const auto& point: points) {
-        //             points_vec.push_back({ point.x, point.y, point.z });
-        //         }
-        //         insert_pointcloud(points_vec, { position.x, position.y, position.z });
-        //     }
-        // }
+        // insert pointcloud alongside scanner position and (euler) rotation
+        void inline insert(const std::vector<glm::vec3>& points, const glm::dvec3& position, const glm::dvec3& rotation) {
+            // point layout may change according to alignment
+            PointFlags data_flags = PointFlagBits::eNone;
+            static_assert(sizeof(glm::vec3) <= sizeof(float) * 4); // just to be safe
+            if      constexpr (sizeof(glm::vec3) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
+            else if constexpr (sizeof(glm::vec3) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
+
+            // points will be passed as a raw byte array to avoid aliasing violations
+            const std::size_t data_bytes = points.size() * sizeof(glm::vec3);
+            const uint8_t* data_p = reinterpret_cast<const uint8_t*>(points.data());
+            const std::array<double, 3> position_arr{ position.x, position.y, position.z };
+            const std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
+            insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
+        }
         #endif
 
         #if __has_include(<Eigen/Eigen>)
-        // // insert pointcloud alongside scanner position
-        // void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position) {
-        //     // when using unpadded Vector3f, we can avoid copies
-        //     if constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 3 && false /*disable this temporarily*/) {
-        //         const float* points_p = points[0].data();
-        //         insert(points_p, points.size(), position.x(), position.y(), position.z());
-        //     }
-        //     else {
-        //         std::vector<std::array<float, 3>> points_vec;
-        //         points_vec.reserve(points.size());
-        //         for (const auto& point: points) {
-        //             points_vec.push_back({ point.x(), point.y(), point.z() });
-        //         }
-        //         insert_pointcloud(points_vec, { position.x(), position.y(), position.z() });
-        //     }
-        // }
+        // insert pointcloud alongside estimated scanner position and (euler) rotation
+        void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3d& position, const Eigen::Vector3d& rotation) {
+            // point layout may change according to alignment
+            PointFlags data_flags = PointFlagBits::eNone;
+            static_assert(sizeof(Eigen::Vector3f) <= sizeof(float) * 4); // just to be safe
+            if      constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
+            else if constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
+
+            // points will be passed as a raw byte array to avoid aliasing violations
+            const std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
+            const uint8_t* data_p = reinterpret_cast<const uint8_t*>(points.data());
+            const std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
+            const std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
+            insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
+        }
         #endif
 
-        // // insert pointcloud alongside scanner position
-        // void inline insert(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
-        //     insert_pointcloud(points, position);
-        // }
-        // // insert pointcloud as a raw array of repeating x,y,z coordinates
-        // void inline insert(const float* points_p, std::size_t points_count, const float* position_p) {
-        //     const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
-        //     // use points_p as the buffer for new vector (as vec_p), not requiring any copies
-        //     const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
-        //     // position_p should just be x y and z
-        //     const auto position = *reinterpret_cast<const std::array<float, 3>*>(position_p);
-        //     insert_pointcloud(points, position);
-        // }
-        // // insert pointcloud as a raw array of repeating x,y,z coordinates
-        // void inline insert(const float* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 3> rotation) {
-        //     const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
-        //     // use points_p as the buffer for new vector (as vec_p), not requiring any copies
-        //     const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
-        //     insert_internal(points, position, rotation);
-        // }
-        // // insert pointcloud as a raw array of repeating x,y,z,w coordinates (w is ignored)
-        // void inline insert(const float* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 3> rotation) {
-        //     const auto* vec_p = reinterpret_cast<const std::array<float, 3>*>(points_p);
-        //     // use points_p as the buffer for new vector (as vec_p), not requiring any copies
-        //     const auto points = std::vector<std::array<float, 3>>(vec_p, vec_p + points_count);
-        //     insert_internal(points, position, rotation);
-        // }
-
-        // insert pointcloud as a raw array of repeating x,y,z,w coordinates (w is ignored)
-        void inline insert(const float* points_p, std::size_t points_count, std::array<float, 3> position, std::array<float, 3> rotation) {
-            // insert_internal(static_cast<const std::byte*>(points_p), 5, position, rotation);
-            void* p = nullptr;
-            float* f = std::bit_cast<float*, void*>(p);
+        // insert pointcloud alongside estimated scanner position and (euler) rotation
+        void inline insert(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
+            insert_internal(data_p, data_bytes, data_flags, position, rotation);
         }
 
         // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
@@ -126,8 +109,8 @@ namespace chad {
         void dothingy(std::vector<glm::vec3>& points, glm::vec3& position);
 
     private:
-        // insert points into currently active octree (internal function used by all insert(...) funcs)
-        void insert_internal(const std::byte* points_p, std::size_t points_bytes, std::array<float, 3> position, std::array<float, 3> rotation);
+        // insert pointcloud (internal function used by all insert(...) calls)
+        void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation);
 
         // insert finalized octree as read-only tree of hashed nodes
         auto insert_octree(const std::unique_ptr<detail::Octree>& octree_p) -> RootIndices;

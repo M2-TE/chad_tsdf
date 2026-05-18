@@ -57,7 +57,7 @@ void inline do_thingy() {
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i]);
         // sample_cube(points, positions[i]);
-        map.insert(points, positions[i]);
+        map.insert(points, positions[i], {});
     }
     map.finalize_active_submap();
 

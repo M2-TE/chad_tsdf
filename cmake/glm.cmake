@@ -1,5 +1,5 @@
 # use either system or FetchContent package
-find_package(glm 1.0.1 QUIET)
+find_package(glm 1.0.3 QUIET)
 if (NOT glm_FOUND)
     set(GLM_BUILD_TEST OFF)
     set(GLM_BUILD_LIBRARY OFF)

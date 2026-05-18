@@ -9,6 +9,10 @@
 #include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"
 
+// TODO: isolate GTSAM related code (and its headers) into separate src file
+// TODO: isolate Eigen (used in GTSAM)
+// TODO: benchmark #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES and #define GLM_FORCE_SSE41
+
 void inline CHAD_MESSAGE(std::string_view message) {
     fmt::println("[CHAD] {}", message);
 }
@@ -150,38 +154,85 @@ namespace chad {
         }
     }
 
-    void TSDFMap::insert_pointcloud(const std::vector<std::array<float, 3>>& points, const std::array<float, 3>& position) {
+    // copy xyz values from input array into a std::vector of glm::vec3
+    template<std::size_t XYZ_BYTES = std::numeric_limits<std::size_t>::max(), std::size_t RGB_BYTES = std::numeric_limits<std::size_t>::max()>
+    auto copy_xyz(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags) -> std::vector<glm::aligned_vec3> {
+        // this function will call itself until all template parameters are filled.
+        if constexpr (XYZ_BYTES == std::numeric_limits<std::size_t>::max()) {
+            // ensure exactly one XYZ bit is set
+            constexpr PointFlags xyz_all = PointFlagBits::eXYZ_F32 | PointFlagBits::eXYZ_F64 | PointFlagBits::eXYZW_F32 | PointFlagBits::eXYZW_F64;
+            if (std::popcount(data_flags & xyz_all) != 1) throw std::runtime_error("TSDFMap: Exactly one XYZ(W) bit in PointFlags must be set");
+            // forward to next call
+            if      (data_flags & PointFlagBits::eXYZ_F32)  return copy_xyz<sizeof(float) * 3>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eXYZW_F32) return copy_xyz<sizeof(float) * 4>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eXYZ_F64)  return copy_xyz<sizeof(double) * 3>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eXYZW_F64) return copy_xyz<sizeof(double) * 4>(data_p, data_bytes, data_flags);
+            else throw std::logic_error("TSDFMap: Invalid branch in copy_xyz"); // return copy_xyz<0>(data_p, data_bytes, data_flags);
+        }
+        else if constexpr (RGB_BYTES == std::numeric_limits<std::size_t>::max()) {
+            // ensure that no RGB bit is set (not yet implemented)
+            constexpr PointFlags rgb_all = PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8;
+            if (std::popcount(data_flags & rgb_all) > 0) throw std::runtime_error("TSDFMap: RGB input is not yet supported");
+            // forward to next call
+            if      (data_flags & PointFlagBits::eRGB_U8)   return copy_xyz<XYZ_BYTES, sizeof(std::uint8_t) * 3>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eRGBA_U8)  return copy_xyz<XYZ_BYTES, sizeof(std::uint8_t) * 4>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eRGB_F32)  return copy_xyz<XYZ_BYTES, sizeof(float) * 3>(data_p, data_bytes, data_flags);
+            else if (data_flags & PointFlagBits::eRGBA_F32) return copy_xyz<XYZ_BYTES, sizeof(float) * 4>(data_p, data_bytes, data_flags);
+            else                                            return copy_xyz<XYZ_BYTES, 0>(data_p, data_bytes, data_flags);
+        }
+        else {
+            if      (data_flags & PointFlagBits::eXYZW_F32) throw std::logic_error("Not yet implemented");
+            else if (data_flags & PointFlagBits::eXYZ_F64)  throw std::logic_error("Not yet implemented");
+            else if (data_flags & PointFlagBits::eXYZW_F64) throw std::logic_error("Not yet implemented");
+
+            // constexpr byte sizes for SIMD leverage
+            constexpr std::size_t POINT_BYTES = XYZ_BYTES + RGB_BYTES;
+            std::vector<glm::aligned_vec3> points{ data_bytes / POINT_BYTES };
+            // perform safe bit-wise copy from point array to glm vector
+            for (std::size_t i = 0; i < points.size(); i++) {
+                glm::aligned_vec3* dst_p = std::next(points.data(), i);
+                const std::uint8_t* src_p = std::next(data_p, i * POINT_BYTES);
+                std::memcpy(dst_p, src_p, XYZ_BYTES);
+            }
+            return points;
+        }
+    }
+
+    void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
         using namespace chad::detail;
         auto beg = std::chrono::high_resolution_clock::now();
 
+        // use templating for SIMD leverage
+        std::vector<glm::aligned_vec3> points_xyz = copy_xyz(data_p, data_bytes, data_flags);
+
         // check if an active submap should be finalized
-        const Pose pose{ position, {} };
-        if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
-            finalize_active_submap();
-        }
-        // either way, increment scan index
-        _active_scan_end++;
+        const Pose pose{ position, rotation };
+        // if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
+        //     finalize_active_submap();
+        // }
+        // // either way, increment scan index
+        // _active_scan_end++;
 
-        // sort points by their morton code, discretized to the voxel resolution
-        auto beg_intermediate = std::chrono::high_resolution_clock::now();
-        MortonVector points_mc = calc_morton_vector(points, _sdf_res);
-        std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
-        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
+        // // sort points by their morton code, discretized to the voxel resolution
+        // auto beg_intermediate = std::chrono::high_resolution_clock::now();
+        // MortonVector points_mc = calc_morton_vector(points, _sdf_res);
+        // std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
+        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
 
-        // add pose and create descriptor for current scan (TODO: can do this on separate thread)
-        beg_intermediate = std::chrono::high_resolution_clock::now();
-        _map_optimizer_p->add_scan_descriptor(points_sorted, pose);
-        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
+        // // add pose and create descriptor for current scan (TODO: can do this on separate thread)
+        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // _map_optimizer_p->add_scan_descriptor(points_sorted, pose);
+        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
 
-        // estimate the normal of every point
-        beg_intermediate = std::chrono::high_resolution_clock::now();
-        std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
-        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Normal estimation");
+        // // estimate the normal of every point
+        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
+        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Normal estimation");
 
-        // insert points into active octree as signed distances
-        beg_intermediate = std::chrono::high_resolution_clock::now();
-        _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
-        if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
+        // // insert points into active octree as signed distances
+        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
+        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
         MEASURE_TIME(beg, "-- Total insertion time");
     }
     auto TSDFMap::insert_octree(const std::unique_ptr<detail::Octree>& octree_p) -> RootIndices {

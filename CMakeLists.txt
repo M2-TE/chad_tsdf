@@ -5,6 +5,7 @@ project(chad_tsdf LANGUAGES CXX)
 include("cmake/settings.cmake")
 option(CHAD_PREFER_MOLD "Prefer to use mold linker" ON)
 option(CHAD_USE_FAST_MATH "Enable aggressive math optimizations" ON)
+option(CHAD_USE_ARCH_NATIVE "Compile for the native CPU architecture" ON)
 option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # option(CHAD_USE_HUGE_PAGES "Allocate huge pages (~2MiB) instead of the standard size (~4KiB)" OFF)
 
@@ -29,15 +30,14 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     # fast math optimizations
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_FAST_MATH}>>: /fp:fast>
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_FAST_MATH}>>: -ffast-math>
-    # SIMD instruction set (BMI2)
+    # SIMD instruction set (native or BMI2)
     $<$<CXX_COMPILER_ID:MSVC>: /arch:AVX2>
-    $<$<CXX_COMPILER_ID:GNU,Clang>: -mbmi2>
+    $<$<CXX_COMPILER_ID:GNU,Clang>:$<IF:$<BOOL:${CHAD_USE_ARCH_NATIVE}>, -march=native, -mbmi2>> # TODO: -mfpmath=sse ?
     # misc
     $<$<CXX_COMPILER_ID:MSVC>: /diagnostics:classic /Zc:__cplusplus /Zc:inline /fp:except- /FC /Gm- /MP /nologo>)
 target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>
     $<$<CXX_COMPILER_ID:GNU,Clang>: -pthread>)
-
 # handle dependencies
 include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")

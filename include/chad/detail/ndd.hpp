@@ -1,4 +1,5 @@
 #pragma once
+#include <numbers>
 #include <fmt/base.h>
 
 namespace ndd {
@@ -51,7 +52,7 @@ namespace ndd {
                 for (uint32_t sector_i = 0; sector_i < N_SECTORS; sector_i++) {
                     // need at least 5 points
                     if (cell_points[ring_i][sector_i].size() < N_POINTS_THRESHHOLD) continue;
-                    
+
                     // retrieve cell containing all the points
                     std::vector<glm::vec3>& cell = cell_points[ring_i][sector_i];
 
@@ -117,7 +118,7 @@ namespace ndd {
             }
         }
         ~Descriptor() = default;
-        
+
         public:
         // construct the lookup key for this descriptor
         auto get_lookup_key() const -> LookupKey {

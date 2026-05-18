@@ -11,6 +11,9 @@ include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_INTERPROCEDURAL_OPTIMIZATION LANGUAGES CXX)
 message(STATUS "IPO/LTO enabled: ${CMAKE_INTERPROCEDURAL_OPTIMIZATION}")
 
+# LSP support
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # enable mold linker if possible
 find_program(MOLD_FOUND mold)
 if (CHAD_PREFER_MOLD AND MOLD_FOUND)
