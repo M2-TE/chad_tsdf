@@ -1,0 +1,94 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21
+  },
+  "configurePresets": [
+    {
+      "name": "release", "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug", "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "msvc", "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "clang", "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -lc++abi"
+      },
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "gcc", "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      },
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC - Release",
+      "inherits": [ "release", "msvc" ]
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC - Debug",
+      "inherits": [ "debug", "msvc" ]
+    },
+
+    {
+      "name": "clang-release",
+      "displayName": "Clang - Release",
+      "inherits": [ "release", "clang" ]
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Clang - Debug",
+      "inherits": [ "debug", "clang" ]
+    },
+
+    {
+      "name": "gcc-release",
+      "displayName": "GCC - Release",
+      "inherits": [ "release", "gcc" ]
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC - Debug",
+      "inherits": [ "debug", "gcc" ]
+    }
+  ]
+}
