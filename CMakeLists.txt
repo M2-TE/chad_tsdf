@@ -12,6 +12,7 @@ option(CHAD_USE_STRICT_COMPILATION "Force all warnings to emit errors" OFF)
 # create chad tsdf library
 add_library(${PROJECT_NAME}
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/tsdf_map.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/optimizer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/virtual_array.cpp")
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
@@ -23,7 +24,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/i
 target_compile_options(${PROJECT_NAME} PRIVATE
     # warnings
     $<$<CXX_COMPILER_ID:MSVC>: /W4>
-    $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic -Wno-deprecated-declarations> # TODO: disabled deprecated warnings during revamp
     # warning errors
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: /WX>
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: -Werror>
@@ -47,9 +48,9 @@ include("cmake/gtsam.cmake")
 
 # compile executable if top level project
 if (PROJECT_IS_TOP_LEVEL)
-  add_executable(chad_executable "src/chad/main.cpp")
-  target_link_libraries(chad_executable PRIVATE chad::tsdf)
-  target_link_libraries(chad_executable PRIVATE fmt::fmt)
-  target_link_libraries(chad_executable PRIVATE glm::glm-header-only)
-  target_compile_features(chad_executable PRIVATE cxx_std_20)
+    add_executable(chad_executable "src/chad/main.cpp")
+    target_link_libraries(chad_executable PRIVATE chad::tsdf)
+    target_link_libraries(chad_executable PRIVATE fmt::fmt)
+    target_link_libraries(chad_executable PRIVATE glm::glm-header-only)
+    target_compile_features(chad_executable PRIVATE cxx_std_20)
 endif()

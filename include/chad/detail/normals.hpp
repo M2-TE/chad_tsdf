@@ -1,13 +1,13 @@
 #pragma once
 #include "chad/detail/morton.hpp"
 
-namespace chad::detail {
+namespace chad::detail::normals {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
-    auto inline estimate_normal(const MortonVector::const_iterator beg, const MortonVector::const_iterator end) -> glm::vec3 {
+    auto inline estimate(std::vector<glm::aligned_vec3>::const_iterator beg, std::vector<glm::aligned_vec3>::const_iterator end) -> glm::aligned_vec3 {
         // calculate centroid by through coefficient average
-        glm::dvec3 centroid { 0, 0, 0 };
+        glm::aligned_dvec3 centroid { 0, 0, 0 };
         for (auto it = beg; it != end; it++) {
-            centroid += glm::dvec3(it->first);
+            centroid += glm::aligned_dvec3{ *it };
         }
         double recip = 1.0 / double(std::distance(beg, end));
         centroid *= recip;
@@ -16,7 +16,7 @@ namespace chad::detail {
         double xx = 0.0; double xy = 0.0; double xz = 0.0;
         double yy = 0.0; double yz = 0.0; double zz = 0.0;
         for (auto it = beg; it != end; it++) {
-            glm::dvec3 r = glm::dvec3(it->first) - centroid;
+            glm::aligned_dvec3 r = glm::aligned_dvec3{ *it } - centroid;
             xx += r.x * r.x;
             xy += r.x * r.y;
             xz += r.x * r.z;
@@ -32,12 +32,12 @@ namespace chad::detail {
         zz *= recip;
 
         // weighting linear regression based on square determinant
-        glm::dvec3 weighted_dir = { 0, 0, 0 };
+        glm::aligned_dvec3 weighted_dir = { 0, 0, 0 };
 
         // determinant x
         {
             double det_x = yy*zz - yz*yz;
-            glm::dvec3 axis_dir = {
+            glm::aligned_dvec3 axis_dir = {
                 det_x,
                 xz*yz - xy*zz,
                 xy*yz - xz*yy
@@ -49,7 +49,7 @@ namespace chad::detail {
         // determinant y
         {
             double det_y = xx*zz - xz*xz;
-            glm::dvec3 axis_dir = {
+            glm::aligned_dvec3 axis_dir = {
                 xz*yz - xy*zz,
                 det_y,
                 xy*xz - yz*xx
@@ -61,7 +61,7 @@ namespace chad::detail {
         // determinant z
         {
             double det_z = xx*yy - xy*xy;
-            glm::dvec3 axis_dir = {
+            glm::aligned_dvec3 axis_dir = {
                 xy*yz - xz*yy,
                 xy*xz - yz*xx,
                 det_z
@@ -72,15 +72,22 @@ namespace chad::detail {
         }
 
         // return normalized weighted direction as surface normal
-        return glm::vec3(glm::normalize(weighted_dir));
+        return glm::aligned_vec3(glm::normalize(weighted_dir));
     }
-    auto inline estimate_normals(const MortonVector& points_mc, const glm::vec3 position) -> std::vector<glm::vec3> {
-        std::vector<glm::vec3> normals;
-        normals.resize(points_mc.size());
-        for (auto it = points_mc.cbegin(); it != points_mc.cend();) {
+    // estimate normals for given vector of (sorted!) points
+    auto inline estimate(const std::vector<glm::aligned_vec3>& points, glm::aligned_vec3 position, float sdf_res) -> std::vector<glm::aligned_vec3> {
+        // min points per neighbourhood for valid normal estimation
+        constexpr std::uint32_t min_points = 8;
+        // reciprocal of voxel resolution for later
+        const float sdf_res_reciprocal = static_cast<float>(1.0 / double(sdf_res));
 
-            const uint32_t min_points = 8;
-            
+        // The idea here is to use points within the same discretized MortonCode group for normal estimation.
+        // Since the input vector is already sorted, we can simply increment our iterator until the MortonCode mismatches
+        // This makes it pretty cache friendly! Calculating the MortonCode on the fly is not too expensive.
+        std::vector<glm::aligned_vec3> normals;
+        normals.resize(points.size());
+        for (auto it = points.cbegin(); it != points.cend(); /* increment is handled inside */) {
+
             // TODO: check that neighbourhood is as box shaped as possible
             // check morton neighbourhoods for nearby points with increasing discretization
             auto it_neigh_beg = it;
@@ -88,11 +95,11 @@ namespace chad::detail {
             for (uint64_t depth = 0; depth < 3; depth++) {
                 // mask to strip the depth*3 LSBs of the morton code to match current discretization level
                 const uint64_t mc_mask = std::numeric_limits<uint64_t>::max() << uint64_t(depth * 3);
-                const MortonCode mc_neigh = mc_mask & it->second; // discretized morton code
+                const MortonCode mc_neigh = mc_mask & MortonCode{ *it, sdf_res_reciprocal }; // discretized morton code
 
-                // walk forward until morton code mismatches
-                while (it_neigh_end != points_mc.cend() - 1) /*bounds safety*/ {
-                    MortonCode mc_next = mc_mask & it_neigh_end->second;
+                // increment forward until discretized morton code mismatches
+                while (it_neigh_end != points.cend() - 1) /* bounds safety */ {
+                    MortonCode mc_next = mc_mask & MortonCode{ *it_neigh_end, sdf_res_reciprocal }; // discretized morton code
                     if (mc_next == mc_neigh) it_neigh_end++;
                     else break;
                 }
@@ -105,15 +112,15 @@ namespace chad::detail {
             uint32_t neigh_size = std::distance(it_neigh_beg, it_neigh_end);
             if (neigh_size >= min_points) {
                 // estimate via neighbourhood
-                glm::vec3 normal = estimate_normal(it_neigh_beg, it_neigh_end);
+                glm::aligned_vec3 normal = normals::estimate(it_neigh_beg, it_neigh_end);
 
                 // flip normal if needed (TODO: should this be moved into the it_neigh loop?)
-                float normal_dot = glm::dot(normal, glm::normalize(position - it->first));
+                float normal_dot = glm::dot(normal, glm::normalize(position - *it));
                 if (normal_dot < 0.0f) normal = -normal;
 
                 // assign normal to all points within neighbourhood
                 for (auto it_neigh = it_neigh_beg; it_neigh != it_neigh_end; it_neigh++) {
-                    size_t index = std::distance(points_mc.cbegin(), it_neigh);
+                    size_t index = std::distance(points.cbegin(), it_neigh);
                     normals[index] = normal;
                 }
             }
@@ -121,8 +128,8 @@ namespace chad::detail {
             else {
                 // assign normal to all points within neighbourhood
                 for (auto it_neigh = it_neigh_beg; it_neigh != it_neigh_end; it_neigh++) {
-                    glm::vec3 normal = glm::normalize(position - it_neigh->first);
-                    size_t index = std::distance(points_mc.cbegin(), it_neigh);
+                    glm::aligned_vec3 normal = glm::normalize(position - *it_neigh);
+                    size_t index = std::distance(points.cbegin(), it_neigh);
                     normals[index] = normal;
                 }
             }

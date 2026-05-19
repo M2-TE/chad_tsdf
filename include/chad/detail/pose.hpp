@@ -3,18 +3,18 @@
 namespace chad::detail {
     struct Pose {
         // default constructor with identity rotation
-        Pose(): _position(0, 0, 0), _rotation(glm::identity<decltype(_rotation)>()){}
+        Pose(): _position(0, 0, 0), _rotation(glm::identity<glm::dquat>()){}
         // standard constructor
-        Pose(glm::dvec3 position, glm::dquat rotation): _position(position), _rotation(rotation) {}
+        Pose(glm::aligned_dvec3 position, glm::aligned_dquat rotation): _position(position), _rotation(rotation) {}
         // standard constructor with euler rotation
-        Pose(glm::dvec3 position, glm::dvec3 rotation_euler): _position(position), _rotation(rotation_euler) {}
+        Pose(glm::aligned_dvec3 position, glm::aligned_dvec3 rotation_euler): _position(position), _rotation(rotation_euler) {}
         // standard constructor with euler rotation
-        Pose(glm::vec3 position, glm::vec3 rotation_euler): _position(glm::dvec3(position)), _rotation(glm::dvec3(rotation_euler)) {}
+        Pose(glm::aligned_vec3 position, glm::aligned_vec3 rotation_euler): _position(glm::dvec3(position)), _rotation(glm::dvec3(rotation_euler)) {}
 
         // constructor from std::arrays with euler rotation
         Pose(std::array<float, 3> position, std::array<float, 3> rotation):
             _position(position[0], position[1], position[2]),
-            _rotation(glm::vec3{rotation[0], rotation[1], rotation[2]}) {}
+            _rotation(glm::aligned_vec3{rotation[0], rotation[1], rotation[2]}) {}
         // constructor from std::arrays with quaternion
         Pose(std::array<float, 3> position, std::array<float, 4> rotation):
             _position(position[0], position[1], position[2]),
@@ -23,7 +23,7 @@ namespace chad::detail {
         // constructor from std::arrays with euler rotation
         Pose(std::array<double, 3> position, std::array<double, 3> rotation):
             _position(position[0], position[1], position[2]),
-            _rotation(glm::dvec3{rotation[0], rotation[1], rotation[2]}) {}
+            _rotation(glm::aligned_dvec3{rotation[0], rotation[1], rotation[2]}) {}
         // constructor from std::arrays with quaternion
         Pose(std::array<double, 3> position, std::array<double, 4> rotation):
             _position(position[0], position[1], position[2]),
@@ -43,7 +43,7 @@ namespace chad::detail {
             };
         }
 
-        glm::dvec3 _position;
-        glm::dquat _rotation;
+        glm::aligned_dvec3 _position;
+        glm::aligned_dquat _rotation;
     };
 }

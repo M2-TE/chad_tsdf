@@ -6,11 +6,21 @@
 namespace chad::detail {
     struct MortonCode {
         MortonCode(uint64_t value): _value(value) {}
+        MortonCode(const glm::aligned_ivec3& vox_pos) {
+            encode(vox_pos);
+        }
+        MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) {
+            // convert to voxel coordinate and discretize with floor()
+            glm::aligned_vec3 point_discretized = glm::floor(point * sdf_res_reciprocal);
+            encode(glm::aligned_ivec3{ point_discretized });
+        }
+        // TODO: remove this once revamp is done
+        [[deprecated]]
         MortonCode(const glm::ivec3& vox_pos) {
             encode(vox_pos);
         }
 
-        void inline encode(const glm::ivec3& vox_pos) {
+        void inline encode(const glm::aligned_ivec3& vox_pos) {
             // truncate from 32-bit int to 21-bit int
             uint32_t x, y, z;
             x = (1 << 20) + uint32_t(vox_pos.x);
@@ -18,7 +28,7 @@ namespace chad::detail {
             z = (1 << 20) + uint32_t(vox_pos.z);
             _value = uint64_t(libmorton::morton3D_64_encode(x, y, z));
         }
-        auto inline decode() const -> glm::ivec3 {
+        auto inline decode() const -> glm::aligned_ivec3 {
             uint_fast32_t x, y, z;
             libmorton::morton3D_64_decode(_value, x, y, z);
             // expand from 21-bit uint back to 32-bit int
@@ -49,41 +59,35 @@ namespace chad::detail {
 
         uint64_t _value;
     };
-}
 
-namespace chad::detail {
-    using MortonVector = std::vector<std::pair<glm::vec3, MortonCode>>;
-    auto inline calc_morton_vector(const std::vector<std::array<float, 3>>& points, const float sdf_res) -> MortonVector {
-        // calc reciprocal of voxel resolution for later
-        const float voxel_reciprocal = float(1.0 / double(sdf_res));
+    namespace morton {
+        // sort points by their morton code
+        void inline sort(std::vector<glm::aligned_vec3>& points, float sdf_res) {
+            // reciprocal of voxel resolution for later
+            const float sdf_res_reciprocal = static_cast<float>(1.0 / double(sdf_res));
 
-        // generate morton codes from discretized points
-        MortonVector points_mc;
-        points_mc.reserve(points.size());
-        for (const auto& point_arr: points) {
-            glm::vec3 point { point_arr[0], point_arr[1], point_arr[2] };
-            // convert to voxel coordinate and discretize with floor()
-            glm::vec3 point_discretized = glm::floor(point * voxel_reciprocal);
-            // create morton code from discretized integer position
-            points_mc.emplace_back(point, glm::ivec3(point_discretized));
+            // create morton codes from XYZ coordinates
+            std::vector<MortonCode> morton_codes;
+            morton_codes.reserve(points.size());
+            for (const auto& point: points) {
+                morton_codes.push_back(MortonCode{ point, sdf_res_reciprocal });
+            }
+
+            // prepare a set of indices for sorting
+            std::vector<std::uint32_t> indices;
+            indices.resize(points.size());
+            std::iota(indices.begin(), indices.end(), 0);
+            std::sort(indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
+                return morton_codes[a] < morton_codes[b];
+            });
+
+            // sort using already sorted indices
+            const auto points_copy = points;
+            for (std::uint32_t i = 0; i < points.size(); i++) {
+                std::uint32_t sorted_index = indices[i];
+                points[i] = points_copy[sorted_index];
+            }
         }
-        return points_mc;
-    }
-    auto inline sort_morton_vector(MortonVector& points_mc) -> std::vector<glm::vec3> {
-        // sort points using morton codes
-        auto mc_sorter = [](const auto& a, const auto& b){
-            return a.second._value > b.second._value;
-        };
-        // std::sort(std::execution::par_unseq, points_mc.begin(), points_mc.end(), mc_sorter);
-        std::sort(points_mc.begin(), points_mc.end(), mc_sorter);
-        
-        // store isolated sorted points
-        std::vector<glm::vec3> points_sorted;
-        points_sorted.reserve(points_mc.size());
-        for (const auto& mc_point: points_mc) {
-            points_sorted.push_back(mc_point.first);
-        }
-        return points_sorted;
     }
 }
 

@@ -1,7 +1,7 @@
-#include "chad/detail/ndd.hpp"
 #include "chad/indices.hpp"
 #include "chad/tsdf_map.hpp"
 #include "chad/detail/ply.hpp"
+#include "chad/detail/ndd.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
@@ -9,15 +9,13 @@
 #include "chad/detail/optimizer.hpp"
 #include "chad/detail/dag_storage.hpp"
 
-// TODO: isolate GTSAM related code (and its headers) into separate src file
-// TODO: isolate Eigen (used in GTSAM)
 // TODO: benchmark #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES and #define GLM_FORCE_SSE41
 
 void inline CHAD_MESSAGE(std::string_view message) {
     fmt::println("[CHAD] {}", message);
 }
-void inline MEASURE_TIME(std::chrono::high_resolution_clock::time_point beg, std::string_view message) {
-    double dur = std::chrono::duration<double, std::milli> (std::chrono::high_resolution_clock::now() - beg).count();
+void inline MEASURE_TIME(std::chrono::steady_clock::time_point beg, std::string_view message) {
+    double dur = std::chrono::duration<double, std::milli>{ std::chrono::steady_clock::now() - beg }.count();
     fmt::println("[CHAD] {}: {:.2f}ms", message, dur);
 }
 
@@ -73,7 +71,7 @@ namespace chad {
     void TSDFMap::finalize_active_submap() {
         if (!is_submap_active()) CHAD_MESSAGE("There is no active submap yet");
 
-        auto beg = std::chrono::high_resolution_clock::now();
+        auto beg = std::chrono::steady_clock::now();
         // create persistent octree with DAG nodes
         RootIndices roots = insert_octree(_active_octree_p);
         _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
@@ -84,7 +82,7 @@ namespace chad {
         MEASURE_TIME(beg, "++ Finalizing submap");
 
         // check for loop closure using all descriptors within finalized submap
-        beg = std::chrono::high_resolution_clock::now();
+        beg = std::chrono::steady_clock::now();
         _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
         if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
     }
@@ -101,30 +99,8 @@ namespace chad {
             finalize_active_submap();
         }
 
-        // DEBUG GTSAM OUTPUT
-        gtsam::Values result = _map_optimizer_p->_isam.calculateEstimate();
-        std::cout << "Final optimized poses:\n";
-        for (uint32_t i = 0; i < result.size(); ++i) {
-            auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
-            auto rot = res.rotation().xyz();
-            auto pos = res.translation();
-
-            const Pose& pose = _map_optimizer_p->_submaps[i]._pose_avg;
-            const Pose pose_true{
-                glm::dvec3(pos.x(), pos.y(), pos.z()),
-                glm::dvec3(rot.x(), rot.y(), rot.z())
-            };
-            // adjust pose error as per gtsam graph
-            _map_optimizer_p->_submaps[i]._pose_err = {
-                pose._position - pose_true._position,
-                pose_true._rotation
-            };
-            fmt::println("position was ({:.2f},{:.2f},{:.2f}) and should be ({:.2f},{:.2f},{:.2f})",
-                pose._position.x, pose._position.y, pose._position.z,
-                pos.x(), pos.y(), pos.z()
-            );
-
-        }
+        // TODO: remove
+        _map_optimizer_p->debug_thingy();
 
         // make sure the folder is clean
         if (clean_first) std::filesystem::remove_all(foldername);
@@ -134,7 +110,7 @@ namespace chad {
         Octree octree_base, octree;
         const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
         for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
-            auto beg = std::chrono::high_resolution_clock::now();
+            auto beg = std::chrono::steady_clock::now();
             // go over all submaps within this chunk
             for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
                 const Submap& submap = submaps[chunk_i + submap_offset];
@@ -187,7 +163,8 @@ namespace chad {
 
             // constexpr byte sizes for SIMD leverage
             constexpr std::size_t POINT_BYTES = XYZ_BYTES + RGB_BYTES;
-            std::vector<glm::aligned_vec3> points{ data_bytes / POINT_BYTES };
+            std::vector<glm::aligned_vec3> points;
+            points.resize(data_bytes / POINT_BYTES);
             // perform safe bit-wise copy from point array to glm vector
             for (std::size_t i = 0; i < points.size(); i++) {
                 glm::aligned_vec3* dst_p = std::next(points.data(), i);
@@ -200,13 +177,36 @@ namespace chad {
 
     void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
         using namespace chad::detail;
-        auto beg = std::chrono::high_resolution_clock::now();
+        auto beg = std::chrono::steady_clock::now();
 
-        // use templating for SIMD leverage
+        // use templating for SIMD leverage (constexpr byte width)
+        auto timestamp = std::chrono::steady_clock::now();
         std::vector<glm::aligned_vec3> points_xyz = copy_xyz(data_p, data_bytes, data_flags);
+        std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz; // copy of original data for thread-safety
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
+
+        // sort points by their morton code, discretized to the voxel resolution
+        timestamp = std::chrono::steady_clock::now();
+        morton::sort(points_xyz, _sdf_res);
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Points sorted by morton code");
+
+        // estimate the normal of every point
+        timestamp = std::chrono::steady_clock::now();
+        const Pose pose{ position, rotation };
+        std::vector<glm::aligned_vec3> normals = normals::estimate(points_xyz, pose._position, _sdf_res);
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Normal estimation");
+
+        // create a scan context descriptor from the pointcloud
+        timestamp = std::chrono::steady_clock::now();
+        ndd::Descriptor descriptor{ points_xyz, pose._position };
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated scan context");
+
+        // TODO: multithread all this stuff
+        // TODO: multithread sort by splitting workload via morton code from input?
+
+
 
         // check if an active submap should be finalized
-        const Pose pose{ position, rotation };
         // if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
         //     finalize_active_submap();
         // }
@@ -214,23 +214,23 @@ namespace chad {
         // _active_scan_end++;
 
         // // sort points by their morton code, discretized to the voxel resolution
-        // auto beg_intermediate = std::chrono::high_resolution_clock::now();
+        // auto beg_intermediate = std::chrono::steady_clock::now();
         // MortonVector points_mc = calc_morton_vector(points, _sdf_res);
         // std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
         // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
 
         // // add pose and create descriptor for current scan (TODO: can do this on separate thread)
-        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // beg_intermediate = std::chrono::steady_clock::now();
         // _map_optimizer_p->add_scan_descriptor(points_sorted, pose);
         // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
 
         // // estimate the normal of every point
-        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // beg_intermediate = std::chrono::steady_clock::now();
         // std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
         // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Normal estimation");
 
         // // insert points into active octree as signed distances
-        // beg_intermediate = std::chrono::high_resolution_clock::now();
+        // beg_intermediate = std::chrono::steady_clock::now();
         // _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
         // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
         MEASURE_TIME(beg, "-- Total insertion time");

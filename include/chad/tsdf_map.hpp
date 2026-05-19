@@ -58,7 +58,7 @@ namespace chad {
 
             // points will be passed as a raw byte array to avoid aliasing violations
             const std::size_t data_bytes = points.size() * sizeof(glm::vec3);
-            const uint8_t* data_p = reinterpret_cast<const uint8_t*>(points.data());
+            const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
             const std::array<double, 3> position_arr{ position.x, position.y, position.z };
             const std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
             insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
@@ -76,7 +76,7 @@ namespace chad {
 
             // points will be passed as a raw byte array to avoid aliasing violations
             const std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
-            const uint8_t* data_p = reinterpret_cast<const uint8_t*>(points.data());
+            const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
             const std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
             const std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
             insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);

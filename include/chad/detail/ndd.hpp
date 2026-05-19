@@ -15,17 +15,17 @@ namespace ndd {
         using LookupKey = Sector;
         using AlignmentKey = Ring;
 
-        // TODO: prevent CV being non-inversible (see original paper)
-        Descriptor(const std::vector<glm::vec3>& points, const glm::vec3& position) {
+        // TODO: prevent CV from being non-inversible (see original paper)
+        Descriptor(const std::vector<glm::aligned_vec3>& points, const glm::aligned_vec3& position) {
             // reset all cells to 0
             for (auto& ring: _cells) ring.fill(0.0f);
 
             // gather all points belonging to a given cell
-            std::array<std::array<std::vector<glm::vec3>, N_SECTORS>, N_RINGS> cell_points;
+            std::array<std::array<std::vector<glm::aligned_vec3>, N_SECTORS>, N_RINGS> cell_points;
 
             // add points to their respective cells
             for (const auto& point_ref: points) {
-                glm::vec3 point = point_ref - position; // make sure points are centered to position
+                glm::aligned_vec3 point = point_ref - position; // make sure points are centered to position
                 // calc position of point on circular 2D plane in format of azimuth angle/distance from center
                 const float azim_range = std::sqrt(point.x * point.x + point.y * point.y); // TODO: wouldnt squared range be sufficient?
                 if (azim_range > MAX_RADIUS) continue; // TODO: this could easily handle axim_range being squared
@@ -54,15 +54,15 @@ namespace ndd {
                     if (cell_points[ring_i][sector_i].size() < N_POINTS_THRESHHOLD) continue;
 
                     // retrieve cell containing all the points
-                    std::vector<glm::vec3>& cell = cell_points[ring_i][sector_i];
+                    std::vector<glm::aligned_vec3>& cell = cell_points[ring_i][sector_i];
 
                     // mean point μ (calc in double precision as points count can be high with large individual positions)
-                    glm::dvec3 pointd_mean{ 0, 0, 0 };
+                    glm::aligned_dvec3 pointd_mean{ 0, 0, 0 };
                     for (const auto& point: cell) {
-                        pointd_mean += glm::dvec3(point);
+                        pointd_mean += glm::aligned_dvec3{ point };
                     }
                     pointd_mean /= double(cell.size());
-                    const glm::vec3 point_mean = glm::vec3(pointd_mean);
+                    const glm::aligned_vec3 point_mean = glm::aligned_vec3{ pointd_mean };
 
                     // store centered points back into cell points
                     for (auto& point: cell) {
@@ -70,7 +70,7 @@ namespace ndd {
                     }
 
                     // calculate covariance matrix cv via "cell * transpose(cell) / (cell.size() - 1)" with cell being treated as a 3xN matrix
-                    glm::mat3x3 cv = glm::zero<glm::mat3x3>();
+                    glm::aligned_mat3x3 cv = glm::zero<glm::aligned_mat3x3>();
                     for (uint32_t row = 0; row < cell.size(); row++) {
                         // diagonal
                         cv[0][0] += double(cell[row].x * cell[row].x);
@@ -91,7 +91,7 @@ namespace ndd {
                     double gaussian_trace = 0.0;
                     for (uint32_t diag = 0; diag < cell.size(); diag++) {
                         float val = 0.0f;
-                        glm::vec3 cell_cv;
+                        glm::aligned_vec3 cell_cv;
                         cell_cv.x = cell[diag].x * cv[0].x + cell[diag].y * cv[1].x + cell[diag].z * cv[2].x;
                         cell_cv.y = cell[diag].x * cv[0].y + cell[diag].y * cv[1].y + cell[diag].z * cv[2].y;
                         cell_cv.z = cell[diag].x * cv[0].z + cell[diag].y * cv[1].z + cell[diag].z * cv[2].z;
@@ -100,7 +100,7 @@ namespace ndd {
                         val += cell[diag].y * cell_cv.y;
                         val += cell[diag].z * cell_cv.z;
                         val *= -0.5;
-                        gaussian_trace += std::exp(double(val)); // rip any chance for SIMD.. TODO: use aligned vectors?
+                        gaussian_trace += std::exp(double(val));
                     }
                     // write final pd sum to ring/sector cell
                     _cells[ring_i][sector_i] = gaussian_trace;
@@ -117,9 +117,6 @@ namespace ndd {
                 _alignment_key[sector_i] = sum;
             }
         }
-        ~Descriptor() = default;
-
-        public:
         // construct the lookup key for this descriptor
         auto get_lookup_key() const -> LookupKey {
             LookupKey key;
@@ -190,7 +187,7 @@ namespace ndd {
             return std::make_pair(max_correlation, max_shift);
         }
 
-        private:
+    private:
         // get mean of all cells
         auto get_mean() const -> double {
             // use double precision for calc, as values can get quite large
@@ -248,7 +245,7 @@ namespace ndd {
             return dot;
         }
 
-        public:
+    public:
         CellMatrix _cells;
         AlignmentKey _alignment_key;
     };
