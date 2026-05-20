@@ -1,13 +1,15 @@
 #include "chad/tsdf_map.hpp"
 #include "chad/detail/pose.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/optimizer.hpp"
 #include "chad/detail/morton_code.hpp"
 #include "chad/detail/dag_storage.hpp"
 #include "chad/detail/ndd/ndd.hpp"
+#include "chad/detail/funcs/TODO.hpp"
 #include "chad/detail/funcs/sort.hpp"
 #include "chad/detail/funcs/normals.hpp"
+#include "chad/detail/funcs/extract.hpp"
 #include "chad/detail/dag/root_indices.hpp"
+#include "chad/detail/mapping/optimizer.hpp"
 #include "chad/detail/reconstruction/ply.hpp"
 
 // TODO: put things into better folders (e.g. dag folder)
@@ -28,7 +30,7 @@ namespace chad {
         _submap_threshhold(submap_threshhold),
         _active_octree_p(std::make_unique<detail::Octree>()),
         _dag_storage_p(std::make_unique<detail::DAGStorage>()),
-        _map_optimizer_p(std::make_unique<detail::MapOptimizer>()) {
+        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>()) {
     }
     TSDFMap::~TSDFMap() {
     }
@@ -110,12 +112,12 @@ namespace chad {
 
         // recontruct multiple submaps as single mesh chunks
         Octree octree_base, octree;
-        const std::vector<dag::Submap>& submaps = _map_optimizer_p->_submaps;
-        for (dag::Submap::Index chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
+        const std::vector<mapping::Submap>& submaps = _map_optimizer_p->_submaps;
+        for (mapping::SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
             auto beg = std::chrono::steady_clock::now();
             // go over all submaps within this chunk
-            for (dag::Submap::Index submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
-                const dag::Submap& submap = submaps[chunk_i + submap_offset];
+            for (mapping::SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+                const mapping::Submap& submap = submaps[chunk_i + submap_offset];
                 octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
 
                 // invert error to get delta from octree to global coordinate frame (octree_base)
@@ -132,51 +134,6 @@ namespace chad {
         }
     }
 
-    // copy xyz values from input array into a std::vector of glm::vec3
-    template<std::size_t XYZ_BYTES = std::numeric_limits<std::size_t>::max(), std::size_t RGB_BYTES = std::numeric_limits<std::size_t>::max()>
-    auto copy_xyz(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags) -> std::vector<glm::aligned_vec3> {
-        // this function will call itself until all template parameters are filled.
-        if constexpr (XYZ_BYTES == std::numeric_limits<std::size_t>::max()) {
-            // ensure exactly one XYZ bit is set
-            constexpr PointFlags xyz_all = PointFlagBits::eXYZ_F32 | PointFlagBits::eXYZ_F64 | PointFlagBits::eXYZW_F32 | PointFlagBits::eXYZW_F64;
-            if (std::popcount(data_flags & xyz_all) != 1) throw std::runtime_error("TSDFMap: Exactly one XYZ(W) bit in PointFlags must be set");
-            // forward to next call
-            if      (data_flags & PointFlagBits::eXYZ_F32)  return copy_xyz<sizeof(float) * 3>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eXYZW_F32) return copy_xyz<sizeof(float) * 4>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eXYZ_F64)  return copy_xyz<sizeof(double) * 3>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eXYZW_F64) return copy_xyz<sizeof(double) * 4>(data_p, data_bytes, data_flags);
-            else throw std::logic_error("TSDFMap: Invalid branch in copy_xyz"); // return copy_xyz<0>(data_p, data_bytes, data_flags);
-        }
-        else if constexpr (RGB_BYTES == std::numeric_limits<std::size_t>::max()) {
-            // ensure that no RGB bit is set (not yet implemented)
-            constexpr PointFlags rgb_all = PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8 | PointFlagBits::eRGB_U8;
-            if (std::popcount(data_flags & rgb_all) > 0) throw std::runtime_error("TSDFMap: RGB input is not yet supported");
-            // forward to next call
-            if      (data_flags & PointFlagBits::eRGB_U8)   return copy_xyz<XYZ_BYTES, sizeof(std::uint8_t) * 3>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eRGBA_U8)  return copy_xyz<XYZ_BYTES, sizeof(std::uint8_t) * 4>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eRGB_F32)  return copy_xyz<XYZ_BYTES, sizeof(float) * 3>(data_p, data_bytes, data_flags);
-            else if (data_flags & PointFlagBits::eRGBA_F32) return copy_xyz<XYZ_BYTES, sizeof(float) * 4>(data_p, data_bytes, data_flags);
-            else                                            return copy_xyz<XYZ_BYTES, 0>(data_p, data_bytes, data_flags);
-        }
-        else {
-            if      (data_flags & PointFlagBits::eXYZW_F32) throw std::logic_error("Not yet implemented");
-            else if (data_flags & PointFlagBits::eXYZ_F64)  throw std::logic_error("Not yet implemented");
-            else if (data_flags & PointFlagBits::eXYZW_F64) throw std::logic_error("Not yet implemented");
-
-            // constexpr byte sizes for SIMD leverage
-            constexpr std::size_t POINT_BYTES = XYZ_BYTES + RGB_BYTES;
-            std::vector<glm::aligned_vec3> points;
-            points.resize(data_bytes / POINT_BYTES);
-            // perform safe bit-wise copy from point array to glm vector
-            for (std::size_t i = 0; i < points.size(); i++) {
-                glm::aligned_vec3* dst_p = std::next(points.data(), i);
-                const std::uint8_t* src_p = std::next(data_p, i * POINT_BYTES);
-                std::memcpy(dst_p, src_p, XYZ_BYTES);
-            }
-            return points;
-        }
-    }
-
     void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
         auto beg = std::chrono::steady_clock::now();
 
@@ -185,7 +142,7 @@ namespace chad {
 
         // use templating for SIMD leverage (constexpr byte width)
         auto timestamp = std::chrono::steady_clock::now();
-        std::vector<glm::aligned_vec3> points_xyz = copy_xyz(data_p, data_bytes, data_flags);
+        std::vector<glm::aligned_vec3> points_xyz = detail::funcs::extract_xyz(data_p, data_bytes, data_flags);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
 
         // create a scan context descriptor from the pointcloud
@@ -334,34 +291,6 @@ namespace chad {
         return roots;
     }
 
-    // pilfered from HATSDF
-    void lu_decomposition(std::array<std::array<double, 6>, 6>& H) {
-        for (int i = 0; i < 6 - 1; i++) {
-            for (int k = i + 1; k < 6; k++) {
-                H[k][i] /= H[i][i];
-                for (int j = i + 1; j < 6; j++) {
-                    H[k][j] -= H[k][i] * H[i][j];
-                }
-            }
-        }
-    }
-    // pilfered from HATSDF
-    auto lu_solve(const std::array<std::array<double, 6>, 6>& H, const std::array<double, 6>& g) -> std::array<double,6> {
-        std::array<double, 6> x;
-        for (int i = 0; i < 6; i++) {
-            x[i] = g[i];
-            for (int k = 0; k < i; k++) {
-                x[i] -= H[i][k] * x[k];
-            }
-        }
-        for (int i = 6 - 1; i >= 0; i--) {
-            for (int k = i + 1; k < 6; k++) {
-                x[i] -= H[i][k] * x[k];
-            }
-            x[i] /= H[i][i];
-        }
-        return x;
-    }
     // prototype for point-to-tsdf
     void TSDFMap::dothingy(std::vector<glm::vec3>& points, glm::vec3& position) {
         using namespace chad::detail;
@@ -445,8 +374,8 @@ namespace chad {
 
         fmt::println("count: {} error: {}", count, error);
 
-        lu_decomposition(H);
-        auto xi = lu_solve(H, g);
+        funcs::lu_decomposition(H);
+        auto xi = funcs::lu_solve(H, g);
         fmt::println("rot_x {:.4f}", xi[0]);
         fmt::println("rot_y {:.4f}", xi[1]);
         fmt::println("rot_z {:.4f}", xi[2]);

@@ -1,4 +1,4 @@
-#include "chad/detail/optimizer.hpp"
+#include "chad/detail/mapping/optimizer.hpp"
 
 // all the gtsam headers, mostly taken from their example
 #include <gtsam/geometry/Rot3.h>
@@ -13,7 +13,7 @@
 // KD-Tree for finding NDD matches
 #include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
-namespace chad::detail {
+namespace chad::detail::mapping {
     struct GTSAMData {
         static constexpr int _relinearize_skip = 1;
         static constexpr float _relinearize_threshold = 0.01;
@@ -22,20 +22,20 @@ namespace chad::detail {
         gtsam::SharedDiagonal _loop_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.02, 0.02, 0.02, 0.1, 0.1, 0.1).finished());
         gtsam::ISAM2 _isam{ gtsam::ISAM2Params{ gtsam::ISAM2GaussNewtonParams(), _relinearize_threshold, _relinearize_skip }};
     };
-    MapOptimizer::MapOptimizer() {}
-    MapOptimizer::~MapOptimizer() {}
+    Optimizer::Optimizer() {}
+    Optimizer::~Optimizer() {}
 
-    void MapOptimizer::add_scan_descriptor(const std::vector<glm::aligned_vec3>& points, const Pose& pose) {
+    void Optimizer::add_scan_descriptor(const std::vector<glm::aligned_vec3>& points, const Pose& pose) {
         _scan_poses.push_back(pose);
         _scan_submap.push_back(_submaps.size());
         _scan_descriptors.emplace_back(points, pose._position);
         _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
     }
-    void MapOptimizer::detect_loop_closure(dag::Submap::Index submap_i) {
+    void Optimizer::detect_loop_closure(SubmapIndex submap_i) {
         using namespace ndd;
 
         // indices for descriptors are within submap
-        dag::Submap& submap = _submaps[submap_i];
+        Submap& submap = _submaps[submap_i];
         const uint32_t descriptor_beg = submap._scan_beg;
         const uint32_t descriptor_end = submap._scan_end;
 
@@ -54,7 +54,7 @@ namespace chad::detail {
             uint32_t sector_shift = 0;
         };
         // we need to map correlations to their respective submap pairings
-        std::map<dag::Submap::Index, std::vector<Correlation>> correlations;
+        std::map<SubmapIndex, std::vector<Correlation>> correlations;
         uint32_t correlation_count = 0;
 
         // for every descriptor within submap, try to find correlations with other submaps
@@ -91,7 +91,7 @@ namespace chad::detail {
             // threshhold for correlation to even be considered as a loop closure candidate
             constexpr static double CORRELATION_THRESHHOLD = 0.95; // TODO: move to TSDFMap as parameter
             if (max_correlation > CORRELATION_THRESHHOLD) {
-                dag::Submap::Index index = _scan_submap[max_candidate];
+                SubmapIndex index = _scan_submap[max_candidate];
                 Correlation correlation {
                     float(max_correlation),
                     descriptor_i,
@@ -147,7 +147,7 @@ namespace chad::detail {
             _gtsam->_isam.update(factors);
         }
     }
-    auto MapOptimizer::add_submap(dag::RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const dag::Submap& {
+    auto Optimizer::add_submap(dag::RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const Submap& {
         // avg of positions as submap center
         glm::dvec3 position{ 0, 0, 0 };
         for (ScanIndex scan_i = scan_beg; scan_i < scan_end; scan_i++) {
@@ -157,7 +157,7 @@ namespace chad::detail {
         position /= float(scan_end - scan_beg);
 
         // go ahead and create submap based on avg pose
-        dag::Submap submap{
+        Submap submap{
             ._root_indices = roots,
             ._scan_beg = scan_beg,
             ._scan_end = scan_end,
@@ -195,14 +195,14 @@ namespace chad::detail {
         _submaps.push_back(submap);
         return _submaps.back();
     }
-    bool MapOptimizer::is_active_submap_done(const Pose& pose_new, ScanIndex submap_beg, float threshhold) {
+    bool Optimizer::is_active_submap_done(const Pose& pose_new, ScanIndex submap_beg, float threshhold) {
         const Pose& pose_prev = _scan_poses[submap_beg];
         float distance = glm::distance(pose_prev._position, pose_new._position);
         // if our submap threshhold is crossed, finalize the active submap before inserting new points
         if (distance > threshhold) return true;
         else return false;
     }
-    void MapOptimizer::debug_thingy() {
+    void Optimizer::debug_thingy() {
         gtsam::Values result = _gtsam->_isam.calculateEstimate();
         std::cout << "Final optimized poses:\n";
         for (uint32_t i = 0; i < result.size(); ++i) {

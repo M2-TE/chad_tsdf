@@ -17,7 +17,7 @@ add_library(${PROJECT_NAME}
 add_library(chad::tsdf ALIAS ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include/chad/detail/pch.hpp")
+target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/chad/pch.cpp")
 target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # compiler/linker options across different vendors

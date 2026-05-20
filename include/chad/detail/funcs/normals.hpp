@@ -1,7 +1,7 @@
 #pragma once
 #include "chad/detail/morton_code.hpp"
 
-namespace chad::detail::funcs {
+namespace {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
     auto inline estimate_normal(std::vector<glm::aligned_vec3>::const_iterator beg, std::vector<glm::aligned_vec3>::const_iterator end) -> glm::aligned_vec3 {
         // calculate centroid by through coefficient average
@@ -74,6 +74,9 @@ namespace chad::detail::funcs {
         // return normalized weighted direction as surface normal
         return glm::aligned_vec3(glm::normalize(weighted_dir));
     }
+}
+
+namespace chad::detail::funcs {
     // estimate normals for given vector of (sorted!) points
     auto inline estimate_normals(const std::vector<glm::aligned_vec3>& points, glm::aligned_vec3 position, float sdf_res) -> std::vector<glm::aligned_vec3> {
         // min points per neighbourhood for valid normal estimation

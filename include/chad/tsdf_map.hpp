@@ -16,7 +16,9 @@ namespace chad {
     namespace detail {
         struct Octree;
         struct DAGStorage;
-        struct MapOptimizer;
+        namespace mapping {
+            struct Optimizer;
+        }
     }
 
     using PointFlags = std::uint64_t;
@@ -121,11 +123,11 @@ namespace chad {
 
     private:
         // transient
-        std::uint32_t _active_scan_beg = 0; // index of first scan for active submap
-        std::uint32_t _active_scan_end = 0; // past-the-end index of final scan for active submap
-        std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
+        [[deprecated]] std::uint32_t _active_scan_beg = 0; // index of first scan for active submap
+        [[deprecated]] std::uint32_t _active_scan_end = 0; // past-the-end index of final scan for active submap
+        [[deprecated]] std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
         // persistent
-        std::unique_ptr<detail::DAGStorage>   _dag_storage_p; // storage for all hashed nodes
-        std::unique_ptr<detail::MapOptimizer> _map_optimizer_p; // loop closure detection and pose optimization
+        std::unique_ptr<detail::DAGStorage> _dag_storage_p; // storage for all hashed nodes
+        std::unique_ptr<detail::mapping::Optimizer> _map_optimizer_p; // loop closure detection and pose optimization
     };
 }
