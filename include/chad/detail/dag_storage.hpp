@@ -1,6 +1,6 @@
 #pragma once
 #include "chad/cluster.hpp"
-#include "chad/detail/morton.hpp"
+#include "chad/detail/morton_code.hpp"
 #include "chad/detail/virtual_array.hpp"
 
 namespace chad::detail {

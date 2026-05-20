@@ -1,6 +1,4 @@
 #pragma once
-#include <numbers>
-#include <fmt/base.h>
 
 namespace ndd {
     struct Descriptor {
@@ -117,6 +115,8 @@ namespace ndd {
                 _alignment_key[sector_i] = sum;
             }
         }
+        Descriptor() = default;
+        ~Descriptor() = default;
         // construct the lookup key for this descriptor
         auto get_lookup_key() const -> LookupKey {
             LookupKey key;

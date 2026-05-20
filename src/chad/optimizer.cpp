@@ -11,7 +11,7 @@
 #include <gtsam/slam/BetweenFactor.h>
 
 // KD-Tree for finding NDD matches
-#include "chad/detail/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
+#include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
 namespace chad::detail {
     struct GTSAMData {
@@ -31,11 +31,11 @@ namespace chad::detail {
         _scan_descriptors.emplace_back(points, pose._position);
         _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
     }
-    void MapOptimizer::detect_loop_closure(SubmapIndex submap_i) {
+    void MapOptimizer::detect_loop_closure(dag::Submap::Index submap_i) {
         using namespace ndd;
 
         // indices for descriptors are within submap
-        Submap& submap = _submaps[submap_i];
+        dag::Submap& submap = _submaps[submap_i];
         const uint32_t descriptor_beg = submap._scan_beg;
         const uint32_t descriptor_end = submap._scan_end;
 
@@ -54,7 +54,7 @@ namespace chad::detail {
             uint32_t sector_shift = 0;
         };
         // we need to map correlations to their respective submap pairings
-        std::map<SubmapIndex, std::vector<Correlation>> correlations;
+        std::map<dag::Submap::Index, std::vector<Correlation>> correlations;
         uint32_t correlation_count = 0;
 
         // for every descriptor within submap, try to find correlations with other submaps
@@ -91,7 +91,7 @@ namespace chad::detail {
             // threshhold for correlation to even be considered as a loop closure candidate
             constexpr static double CORRELATION_THRESHHOLD = 0.95; // TODO: move to TSDFMap as parameter
             if (max_correlation > CORRELATION_THRESHHOLD) {
-                SubmapIndex index = _scan_submap[max_candidate];
+                dag::Submap::Index index = _scan_submap[max_candidate];
                 Correlation correlation {
                     float(max_correlation),
                     descriptor_i,
@@ -147,7 +147,7 @@ namespace chad::detail {
             _gtsam->_isam.update(factors);
         }
     }
-    auto MapOptimizer::add_submap(RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const Submap& {
+    auto MapOptimizer::add_submap(dag::RootIndices roots, ScanIndex scan_beg, ScanIndex scan_end) -> const dag::Submap& {
         // avg of positions as submap center
         glm::dvec3 position{ 0, 0, 0 };
         for (ScanIndex scan_i = scan_beg; scan_i < scan_end; scan_i++) {
@@ -157,12 +157,12 @@ namespace chad::detail {
         position /= float(scan_end - scan_beg);
 
         // go ahead and create submap based on avg pose
-        Submap submap{
-            Pose{ glm::dvec3(position), glm::identity<glm::quat>() },
-            Pose{}, // error
-            roots,
-            scan_beg,
-            scan_end,
+        dag::Submap submap{
+            ._root_indices = roots,
+            ._scan_beg = scan_beg,
+            ._scan_end = scan_end,
+            ._pose_avg{ glm::dvec3(position), glm::identity<glm::quat>() },
+            ._pose_err{},
         };
 
         // add pose to gtsam

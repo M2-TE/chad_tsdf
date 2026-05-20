@@ -3,7 +3,6 @@
 #include <vector>
 #include <cstdint>
 #include <stdexcept>
-#include "chad/indices.hpp"
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -44,7 +43,7 @@ namespace chad {
 
         // initialize a TSDF map with the given voxel size and truncation distance
         TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_threshhold = 5.0f);
-        // destructor to free allocations
+        // explicit destructor to free forward-declared allocations
         ~TSDFMap();
 
         #if __has_include(<glm/vec3.hpp>)
@@ -111,9 +110,8 @@ namespace chad {
     private:
         // insert pointcloud (internal function used by all insert(...) calls)
         void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation);
-
-        // insert finalized octree as read-only tree of hashed nodes
-        auto insert_octree(const std::unique_ptr<detail::Octree>& octree_p) -> RootIndices;
+        // insert finalized octree as read-only tree of hashed nodes and return the dag root indices
+        auto insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t>;
 
     public:
         const float _sdf_res;
@@ -123,8 +121,8 @@ namespace chad {
 
     private:
         // transient
-        ScanIndex _active_scan_beg = 0; // index of first scan for active submap
-        ScanIndex _active_scan_end = 0; // past-the-end index of final scan for active submap
+        std::uint32_t _active_scan_beg = 0; // index of first scan for active submap
+        std::uint32_t _active_scan_end = 0; // past-the-end index of final scan for active submap
         std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
         // persistent
         std::unique_ptr<detail::DAGStorage>   _dag_storage_p; // storage for all hashed nodes

@@ -1,15 +1,17 @@
-#include "chad/indices.hpp"
 #include "chad/tsdf_map.hpp"
-#include "chad/detail/ply.hpp"
-#include "chad/detail/ndd.hpp"
 #include "chad/detail/pose.hpp"
-#include "chad/detail/morton.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/normals.hpp"
 #include "chad/detail/optimizer.hpp"
+#include "chad/detail/morton_code.hpp"
 #include "chad/detail/dag_storage.hpp"
+#include "chad/detail/ndd/ndd.hpp"
+#include "chad/detail/funcs/sort.hpp"
+#include "chad/detail/funcs/normals.hpp"
+#include "chad/detail/dag/root_indices.hpp"
+#include "chad/detail/reconstruction/ply.hpp"
 
-// TODO: benchmark #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES and #define GLM_FORCE_SSE41
+// TODO: put things into better folders (e.g. dag folder)
+// TODO: use estimated normals for NDD input?
 
 void inline CHAD_MESSAGE(std::string_view message) {
     fmt::println("[CHAD] {}", message);
@@ -73,7 +75,7 @@ namespace chad {
 
         auto beg = std::chrono::steady_clock::now();
         // create persistent octree with DAG nodes
-        RootIndices roots = insert_octree(_active_octree_p);
+        detail::dag::RootIndices roots = insert_internal_octree(_active_octree_p);
         _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
 
         // start new submap with a fresh octree and new pose indices
@@ -108,12 +110,12 @@ namespace chad {
 
         // recontruct multiple submaps as single mesh chunks
         Octree octree_base, octree;
-        const std::vector<Submap>& submaps = _map_optimizer_p->_submaps;
-        for (SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
+        const std::vector<dag::Submap>& submaps = _map_optimizer_p->_submaps;
+        for (dag::Submap::Index chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
             auto beg = std::chrono::steady_clock::now();
             // go over all submaps within this chunk
-            for (SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
-                const Submap& submap = submaps[chunk_i + submap_offset];
+            for (dag::Submap::Index submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+                const dag::Submap& submap = submaps[chunk_i + submap_offset];
                 octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
 
                 // invert error to get delta from octree to global coordinate frame (octree_base)
@@ -124,7 +126,7 @@ namespace chad {
 
             // reconstruct 3D mesh from the merged octree
             std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / submaps_per_chunk);
-            ply::reconstruct(full_file, octree_base, _sdf_res);
+            reconstruction::reconstruct(full_file, octree_base, _sdf_res);
             octree_base.clear();
             MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
         }
@@ -176,33 +178,38 @@ namespace chad {
     }
 
     void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
-        using namespace chad::detail;
         auto beg = std::chrono::steady_clock::now();
+
+        // convert position and rotation into glm structs for convenience
+        const detail::Pose pose{ position, rotation };
 
         // use templating for SIMD leverage (constexpr byte width)
         auto timestamp = std::chrono::steady_clock::now();
         std::vector<glm::aligned_vec3> points_xyz = copy_xyz(data_p, data_bytes, data_flags);
-        std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz; // copy of original data for thread-safety
         if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
+
+        // create a scan context descriptor from the pointcloud
+        timestamp = std::chrono::steady_clock::now();
+        ndd::Descriptor descriptor;
+        const std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz;
+        std::jthread thread_ndd{[&](){
+            // use copied points vector for thread safety
+            descriptor = ndd::Descriptor{ points_xyz_copy, pose._position };
+            if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated scan context");
+        }};
 
         // sort points by their morton code, discretized to the voxel resolution
         timestamp = std::chrono::steady_clock::now();
-        morton::sort(points_xyz, _sdf_res);
+        detail::funcs::sort(points_xyz, _sdf_res);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Points sorted by morton code");
 
         // estimate the normal of every point
         timestamp = std::chrono::steady_clock::now();
-        const Pose pose{ position, rotation };
-        std::vector<glm::aligned_vec3> normals = normals::estimate(points_xyz, pose._position, _sdf_res);
+        const std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Normal estimation");
 
-        // create a scan context descriptor from the pointcloud
-        timestamp = std::chrono::steady_clock::now();
-        ndd::Descriptor descriptor{ points_xyz, pose._position };
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated scan context");
-
-        // TODO: multithread all this stuff
-        // TODO: multithread sort by splitting workload via morton code from input?
+        // wait for the NDD to complete construction
+        thread_ndd.join();
 
 
 
@@ -235,7 +242,7 @@ namespace chad {
         // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
         MEASURE_TIME(beg, "-- Total insertion time");
     }
-    auto TSDFMap::insert_octree(const std::unique_ptr<detail::Octree>& octree_p) -> RootIndices {
+    auto TSDFMap::insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t> {
         using namespace chad::detail;
         const Octree& octree = *octree_p;
 
@@ -253,7 +260,7 @@ namespace chad {
 
         // traverse octree to build DAG
         uint32_t depth = 0;
-        RootIndices roots;
+        detail::dag::RootIndices roots;
         while (true) {
             uint8_t child_i = path[depth]++;
 
@@ -360,7 +367,7 @@ namespace chad {
         using namespace chad::detail;
 
         // TEMPORARY
-        RootIndex tsdf_root = _map_optimizer_p->_submaps.back()._root_indices._tsdfs;
+        dag::RootIndex tsdf_root = _map_optimizer_p->_submaps.back()._root_indices._tsdfs;
 
         // accumulate count of valid comparisons and total error estimate
         float error = 0.0f;

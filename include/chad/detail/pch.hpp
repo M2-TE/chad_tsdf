@@ -4,14 +4,16 @@
 #include <chrono>
 #include <random>
 #include <string>
-#include <vector>
+#include <thread>
 #include <limits>
+#include <vector>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
-#include <stdexcept>
 #include <algorithm>
+#include <execution>
+#include <stdexcept>
 #include <filesystem>
 #include <functional>
 #include <string_view>
@@ -23,7 +25,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_aligned.hpp>
+// better hashmap implementation
 #include <gtl/phmap.hpp>
+// morton code encoding/decoding
 #include <libmorton/morton.h>
+// std::print wannabe
 #include <fmt/base.h>
 #include <fmt/format.h>

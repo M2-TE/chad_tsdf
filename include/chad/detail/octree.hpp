@@ -1,8 +1,8 @@
 #pragma once
-#include "chad/indices.hpp"
-#include "chad/detail/morton.hpp"
 #include "chad/detail/dag_storage.hpp"
+#include "chad/detail/morton_code.hpp"
 #include "chad/detail/virtual_array.hpp"
+#include "chad/detail/dag/root_indices.hpp"
 
 namespace chad::detail {
     struct Octree {
@@ -98,12 +98,12 @@ namespace chad::detail {
 
                 // the step distance to reach the next voxel in each dimension
                 const glm::aligned_dvec3 ray_delta = glm::abs(double(sdf_res) / ray_dir);
-                
+
                 // the step distance needed to reach the next voxel from current ray_pos
                 glm::aligned_dvec3 dim_step = ray_step * (glm::aligned_dvec3(ray_pos_vox) * double(sdf_res) - ray_pos);
                 dim_step += (ray_step * 0.5 + 0.5) * double(sdf_res);
                 dim_step *= ray_delta * double(sdf_res_recip);
-                
+
                 // can already add the first voxel
                 traversed_voxels.emplace_back(ray_pos_vox);
 
@@ -159,7 +159,7 @@ namespace chad::detail {
             }
         }
         // insert TSDFs from compressed DAG submap
-        void insert(const DAGStorage& dag, RootIndices roots, float sdf_trunc) {
+        void insert(const DAGStorage& dag, dag::RootIndices roots, float sdf_trunc) {
             // read-only trackers for submap
             std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
             std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
@@ -184,12 +184,12 @@ namespace chad::detail {
                 else if (depth < DAGStorage::MAX_DEPTH - 1) {
                     // try to find the child in current node
                     uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
-                    
+
                     // check if child address is valid (only need to check one)
                     if (child_addr_tsdf > 0) {
                         // no need to verify
                         uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
-                        
+
                         depth++;
                         path_child[depth] = 0; // reset child index for new depth
                         addr_tsdf[depth] = child_addr_tsdf;

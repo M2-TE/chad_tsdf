@@ -1,9 +1,9 @@
 #pragma once
-#include "chad/indices.hpp"
 #include "chad/detail/octree.hpp"
-#include "chad/detail/morton.hpp"
 #include "chad/detail/dag_storage.hpp"
-#include "chad/detail/marching_cubes.hpp"
+#include "chad/detail/morton_code.hpp"
+#include "chad/detail/dag/root_indices.hpp"
+#include "chad/detail/reconstruction/marching_cubes.hpp"
 
 // helpers
 namespace {
@@ -63,7 +63,7 @@ property uint8 blue\n";
 }
 
 // ply implementation
-namespace chad::detail::ply {
+namespace chad::detail::reconstruction {
     // Step 0: write ply header without vertex/face counts
     void inline write_header(std::ofstream& ofs) {
         ofs << std::string("ply\n");
@@ -77,7 +77,7 @@ namespace chad::detail::ply {
     }
 
     // Step 1 (DAG tree): create a hashmap that is used to perform more efficient neighbour lookups later
-    auto inline create_hashmap(const DAGStorage& dag, RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
+    auto inline create_hashmap(const DAGStorage& dag, dag::RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
         // read-only trackers for submap
         gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
         std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
@@ -244,7 +244,7 @@ namespace chad::detail::ply {
                 const float leaf_sd = leaf._signed_distance;
                 const float other_sd = other_it->second._signed_distance;
                 if (other_sd * leaf_sd >= 0.0f) continue;
-                
+
                 const float leaf_weight = float(leaf._weight);
                 const float other_weight = float(other_it->second._weight);
 
@@ -288,7 +288,7 @@ namespace chad::detail::ply {
             //   v0-----e0-----v1
             //
             // with v0 at (0, 0, 0) and v6 at (1, 1, 1)
-            
+
             // the current leaf will be the [0, 0, 0] of this voxel
             // fetch the other 6 leaves to get information on all 12 voxel edges
             // for now just ignore cubes with missing corners
@@ -361,7 +361,7 @@ namespace chad::detail::ply {
                 std::pair<uint32_t, uint32_t>{ 3, 7 },
                 std::pair<uint32_t, uint32_t>{ 2, 6 },
             };
-            
+
             // create the faces
             for (uint32_t i = 0; i < table_entry.size(); i += 3) {
                 Face face;
@@ -386,8 +386,8 @@ namespace chad::detail::ply {
                 }
 
                 // filter out invisible faces
-                if (face._indices[0] == face._indices[1] || 
-                    face._indices[0] == face._indices[2] || 
+                if (face._indices[0] == face._indices[1] ||
+                    face._indices[0] == face._indices[2] ||
                     face._indices[1] == face._indices[2]) {
                     continue;
                 }
@@ -409,7 +409,7 @@ namespace chad::detail::ply {
     }
 }
 
-namespace chad::detail::ply {
+namespace chad::detail::reconstruction {
     // reconstruct ply mesh from octree
     void inline reconstruct(const std::string& filename, const Octree& octree, float sdf_res) {
         std::ofstream ofs{ filename, std::ios::binary };
@@ -423,9 +423,9 @@ namespace chad::detail::ply {
         ofs.close();
     }
     // reconstruct ply mesh from hashed DAG tree
-    void inline reconstruct(const std::string& filename, const DAGStorage& dag, RootIndices roots, float sdf_res, float sdf_trunc) {
+    void inline reconstruct(const std::string& filename, const DAGStorage& dag, dag::RootIndices roots, float sdf_res, float sdf_trunc) {
         std::ofstream ofs{ filename, std::ios::binary };
-        if (!ofs.is_open()) fmt::println("Failed to open {} for writing", filename); 
+        if (!ofs.is_open()) fmt::println("Failed to open {} for writing", filename);
 
         write_header(ofs);
         auto leaves = create_hashmap(dag, roots, sdf_trunc);

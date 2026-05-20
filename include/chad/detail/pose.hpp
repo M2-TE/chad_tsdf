@@ -9,7 +9,7 @@ namespace chad::detail {
         // standard constructor with euler rotation
         Pose(glm::aligned_dvec3 position, glm::aligned_dvec3 rotation_euler): _position(position), _rotation(rotation_euler) {}
         // standard constructor with euler rotation
-        Pose(glm::aligned_vec3 position, glm::aligned_vec3 rotation_euler): _position(glm::dvec3(position)), _rotation(glm::dvec3(rotation_euler)) {}
+        Pose(glm::aligned_vec3 position, glm::aligned_vec3 rotation_euler): _position(position), _rotation(rotation_euler) {}
 
         // constructor from std::arrays with euler rotation
         Pose(std::array<float, 3> position, std::array<float, 3> rotation):

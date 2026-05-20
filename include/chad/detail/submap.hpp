@@ -5,13 +5,13 @@
 namespace chad::detail {
     struct Submap {
         Submap(const Pose& pose_avg,
-                const Pose& pose_err, 
+                const Pose& pose_err,
                 const RootIndices& root_indices,
                 ScanIndex scan_beg,
                 ScanIndex scan_end):
             _pose_avg(pose_avg),
-            _pose_err(pose_err), 
-            _root_indices(root_indices), 
+            _pose_err(pose_err),
+            _root_indices(root_indices),
             _scan_beg(scan_beg),
             _scan_end(scan_end) {
         }

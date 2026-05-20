@@ -1,6 +1,6 @@
 #pragma once
 
-namespace chad::detail {
+namespace chad::detail::reconstruction {
     // quick and dirty std::inplace_vector replica, since most compilers cant use c++26 yet
     template<typename T, std::size_t CAPACITY>
     struct inplace_vector {

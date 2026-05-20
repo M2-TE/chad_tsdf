@@ -1,9 +1,9 @@
 #pragma once
-#include "chad/detail/morton.hpp"
+#include "chad/detail/morton_code.hpp"
 
-namespace chad::detail::normals {
+namespace chad::detail::funcs {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
-    auto inline estimate(std::vector<glm::aligned_vec3>::const_iterator beg, std::vector<glm::aligned_vec3>::const_iterator end) -> glm::aligned_vec3 {
+    auto inline estimate_normal(std::vector<glm::aligned_vec3>::const_iterator beg, std::vector<glm::aligned_vec3>::const_iterator end) -> glm::aligned_vec3 {
         // calculate centroid by through coefficient average
         glm::aligned_dvec3 centroid { 0, 0, 0 };
         for (auto it = beg; it != end; it++) {
@@ -75,7 +75,7 @@ namespace chad::detail::normals {
         return glm::aligned_vec3(glm::normalize(weighted_dir));
     }
     // estimate normals for given vector of (sorted!) points
-    auto inline estimate(const std::vector<glm::aligned_vec3>& points, glm::aligned_vec3 position, float sdf_res) -> std::vector<glm::aligned_vec3> {
+    auto inline estimate_normals(const std::vector<glm::aligned_vec3>& points, glm::aligned_vec3 position, float sdf_res) -> std::vector<glm::aligned_vec3> {
         // min points per neighbourhood for valid normal estimation
         constexpr std::uint32_t min_points = 8;
         // reciprocal of voxel resolution for later
@@ -112,7 +112,7 @@ namespace chad::detail::normals {
             uint32_t neigh_size = std::distance(it_neigh_beg, it_neigh_end);
             if (neigh_size >= min_points) {
                 // estimate via neighbourhood
-                glm::aligned_vec3 normal = normals::estimate(it_neigh_beg, it_neigh_end);
+                glm::aligned_vec3 normal = estimate_normal(it_neigh_beg, it_neigh_end);
 
                 // flip normal if needed (TODO: should this be moved into the it_neigh loop?)
                 float normal_dot = glm::dot(normal, glm::normalize(position - *it));
