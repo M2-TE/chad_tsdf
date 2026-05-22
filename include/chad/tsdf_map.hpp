@@ -44,44 +44,44 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_threshhold = 5.0f);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_xyz_threshhold = 5.0f, float submap_cor_threshhold = 0.95);
         // explicit destructor to free forward-declared allocations
         ~TSDFMap();
 
         #if __has_include(<glm/vec3.hpp>)
-        // insert pointcloud alongside scanner position and (euler) rotation
-        void inline insert(const std::vector<glm::vec3>& points, const glm::dvec3& position, const glm::dvec3& rotation) {
-            // point layout may change according to alignment
-            PointFlags data_flags = PointFlagBits::eNone;
-            static_assert(sizeof(glm::vec3) <= sizeof(float) * 4); // just to be safe
-            if      constexpr (sizeof(glm::vec3) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
-            else if constexpr (sizeof(glm::vec3) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
+            // insert pointcloud alongside scanner position and (euler) rotation
+            void inline insert(const std::vector<glm::vec3>& points, const glm::dvec3& position, const glm::dvec3& rotation) {
+                // point layout may change according to alignment
+                PointFlags data_flags = PointFlagBits::eNone;
+                static_assert(sizeof(glm::vec3) <= sizeof(float) * 4); // just to be safe
+                if      constexpr (sizeof(glm::vec3) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
+                else if constexpr (sizeof(glm::vec3) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
 
-            // points will be passed as a raw byte array to avoid aliasing violations
-            const std::size_t data_bytes = points.size() * sizeof(glm::vec3);
-            const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
-            const std::array<double, 3> position_arr{ position.x, position.y, position.z };
-            const std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
-            insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
-        }
+                // points will be passed as a raw byte array to avoid aliasing violations
+                const std::size_t data_bytes = points.size() * sizeof(glm::vec3);
+                const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
+                const std::array<double, 3> position_arr{ position.x, position.y, position.z };
+                const std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
+                insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
+            }
         #endif
 
         #if __has_include(<Eigen/Eigen>)
-        // insert pointcloud alongside estimated scanner position and (euler) rotation
-        void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3d& position, const Eigen::Vector3d& rotation) {
-            // point layout may change according to alignment
-            PointFlags data_flags = PointFlagBits::eNone;
-            static_assert(sizeof(Eigen::Vector3f) <= sizeof(float) * 4); // just to be safe
-            if      constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
-            else if constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
+            // insert pointcloud alongside estimated scanner position and (euler) rotation
+            void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3d& position, const Eigen::Vector3d& rotation) {
+                // point layout may change according to alignment
+                PointFlags data_flags = PointFlagBits::eNone;
+                static_assert(sizeof(Eigen::Vector3f) <= sizeof(float) * 4); // just to be safe
+                if      constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 3) data_flags = PointFlagBits::eXYZ_F32;
+                else if constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
 
-            // points will be passed as a raw byte array to avoid aliasing violations
-            const std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
-            const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
-            const std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
-            const std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
-            insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
-        }
+                // points will be passed as a raw byte array to avoid aliasing violations
+                const std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
+                const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
+                const std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
+                const std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
+                insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
+            }
         #endif
 
         // insert pointcloud alongside estimated scanner position and (euler) rotation
@@ -118,7 +118,6 @@ namespace chad {
     public:
         const float _sdf_res;
         const float _sdf_trunc;
-        const float _submap_threshhold;
         bool _debug_outputs = false;
 
     private:

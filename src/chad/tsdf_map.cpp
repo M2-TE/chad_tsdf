@@ -24,13 +24,12 @@ void inline MEASURE_TIME(std::chrono::steady_clock::time_point beg, std::string_
 }
 
 namespace chad {
-    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_threshhold):
+    TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold):
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
-        _submap_threshhold(submap_threshhold),
         _active_octree_p(std::make_unique<detail::Octree>()),
         _dag_storage_p(std::make_unique<detail::DAGStorage>()),
-        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>()) {
+        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>(submap_xyz_threshhold, submap_cor_threshhold)) {
     }
     TSDFMap::~TSDFMap() {
     }
@@ -168,7 +167,10 @@ namespace chad {
         // wait for the NDD to complete construction
         thread_ndd.join();
 
-
+        // add scan to the map optimizer (will handle sub-submapping)
+        timestamp = std::chrono::steady_clock::now();
+        _map_optimizer_p->add_scan(points_xyz, normals, descriptor, pose);
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Added scan to map optimizer");
 
         // check if an active submap should be finalized
         // if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
@@ -176,22 +178,6 @@ namespace chad {
         // }
         // // either way, increment scan index
         // _active_scan_end++;
-
-        // // sort points by their morton code, discretized to the voxel resolution
-        // auto beg_intermediate = std::chrono::steady_clock::now();
-        // MortonVector points_mc = calc_morton_vector(points, _sdf_res);
-        // std::vector<glm::vec3> points_sorted = sort_morton_vector(points_mc);
-        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "MortonCode calc and sort");
-
-        // // add pose and create descriptor for current scan (TODO: can do this on separate thread)
-        // beg_intermediate = std::chrono::steady_clock::now();
-        // _map_optimizer_p->add_scan_descriptor(points_sorted, pose);
-        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Adding scan to map optimizer");
-
-        // // estimate the normal of every point
-        // beg_intermediate = std::chrono::steady_clock::now();
-        // std::vector<glm::vec3> normals = estimate_normals(points_mc, pose._position);
-        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Normal estimation");
 
         // // insert points into active octree as signed distances
         // beg_intermediate = std::chrono::steady_clock::now();
