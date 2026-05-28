@@ -6,8 +6,9 @@
 namespace chad::detail::mapping {
     struct Submap {
         dag::RootIndices _root_indices; // roots for octrees in dag::Storage
-        ScanIndex _scan_beg; // index of first scan
-        ScanIndex _scan_end; // past-the-end index of final scan
+        DescriptorIndex _ndd_beg; // iterator for Optimizer::_descriptors
+        DescriptorIndex _ndd_end; // iterator for Optimizer::_descriptors
+        std::vector<Pose> _poses;
         Pose _pose_avg; // the pose average from all inserted scans
         Pose _pose_err; // pose error obtained from pose graph optimization
 

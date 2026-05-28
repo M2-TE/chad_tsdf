@@ -66,28 +66,10 @@ namespace chad {
 
         // NDD descriptors and their lookup keys
         const auto& optimizer = *_map_optimizer_p;
-        mem_ndd += double(optimizer._scan_descriptors.size() * sizeof(ndd::Descriptor));
-        mem_ndd += double(optimizer._scan_lookup_keys.size() * sizeof(ndd::Descriptor::LookupKey));
+        mem_ndd += double(optimizer._descriptors.size() * sizeof(ndd::Descriptor));
+        mem_ndd += double(optimizer._lookup_keys.size() * sizeof(ndd::Descriptor::LookupKey));
 
         CHAD_MESSAGE(fmt::format("Memory footprint in MiB. Nodes: {:.4f} Hashes: {:.4f} NDDs: {:.4f}", mem_dag_nodes / 1024 / 1024, mem_dag_hashes / 1024 / 1024, mem_ndd / 1024 / 1024));
-    }
-    void TSDFMap::finalize_active_submap() {
-        if (!is_submap_active()) CHAD_MESSAGE("There is no active submap yet");
-
-        auto beg = std::chrono::steady_clock::now();
-        // create persistent octree with DAG nodes
-        detail::dag::RootIndices roots = insert_internal_octree(_active_octree_p);
-        _map_optimizer_p->add_submap(roots, _active_scan_beg, _active_scan_end);
-
-        // start new submap with a fresh octree and new pose indices
-        _active_octree_p->clear();
-        _active_scan_beg = _active_scan_end;
-        MEASURE_TIME(beg, "++ Finalizing submap");
-
-        // check for loop closure using all descriptors within finalized submap
-        beg = std::chrono::steady_clock::now();
-        _map_optimizer_p->detect_loop_closure(_map_optimizer_p->_submaps.size() - 1);
-        if (_debug_outputs) MEASURE_TIME(beg, "Checking for loop closure");
     }
     void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
         using namespace chad::detail;
@@ -101,9 +83,6 @@ namespace chad {
             CHAD_MESSAGE(">> Forcefully finalizing submap for reconstruction");
             finalize_active_submap();
         }
-
-        // TODO: remove
-        _map_optimizer_p->debug_thingy();
 
         // make sure the folder is clean
         if (clean_first) std::filesystem::remove_all(foldername);
@@ -145,10 +124,10 @@ namespace chad {
         if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
 
         // create a scan context descriptor from the pointcloud
-        timestamp = std::chrono::steady_clock::now();
         ndd::Descriptor descriptor;
         const std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz;
         std::jthread thread_ndd{[&](){
+            auto timestamp = std::chrono::steady_clock::now();
             // use copied points vector for thread safety
             descriptor = ndd::Descriptor{ points_xyz_copy, pose._position };
             if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated scan context");
@@ -169,20 +148,9 @@ namespace chad {
 
         // add scan to the map optimizer (will handle sub-submapping)
         timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(points_xyz, normals, descriptor, pose);
+        _map_optimizer_p->add_scan(points_xyz, normals, std::move(descriptor), pose);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Added scan to map optimizer");
 
-        // check if an active submap should be finalized
-        // if (is_submap_active() && _map_optimizer_p->is_active_submap_done(pose, _active_scan_beg, _submap_threshhold)) {
-        //     finalize_active_submap();
-        // }
-        // // either way, increment scan index
-        // _active_scan_end++;
-
-        // // insert points into active octree as signed distances
-        // beg_intermediate = std::chrono::steady_clock::now();
-        // _active_octree_p->insert(points_sorted, normals, pose._position, _sdf_res, _sdf_trunc);
-        // if (_debug_outputs) MEASURE_TIME(beg_intermediate, "Update active octree");
         MEASURE_TIME(beg, "-- Total insertion time");
     }
     auto TSDFMap::insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t> {
