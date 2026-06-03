@@ -5,25 +5,118 @@
 
 namespace chad::detail::mapping {
     struct ActiveSubmap {
-        void add_data(const std::vector<glm::aligned_vec3>& points, const std::vector<glm::aligned_vec3>& normals, Pose pose) {
-            _all_poses.push_back(pose);
-            _sub_poses.push_back(pose);
-            _sub_points.insert(_sub_points.end(), points.cbegin(), points.cend());
-            _sub_normals.insert(_sub_normals.end(), normals.cbegin(), normals.cend());
-        }
-
+        // clear only sub-submap related data
         void clear_sub() {
             _sub_poses.clear();
             _sub_points.clear();
             _sub_normals.clear();
         }
-        void clear_all() {
-            _all_poses.clear();
+        // clear all data
+        void clear() {
             clear_sub();
+            _all_poses.clear();
             _descriptor_indices.clear();
             _tsdf_octree.clear();
         }
+        // add a single scan frame
+        void add_frame(std::vector<glm::aligned_vec3>&& points, std::vector<glm::aligned_vec3>&& normals, Pose pose) {
+            _all_poses.push_back(pose);
+            _sub_poses.push_back(pose);
+            _sub_points.insert(_sub_points.end(), std::make_move_iterator(points.begin()), std::make_move_iterator(points.end()));
+            _sub_normals.insert(_sub_normals.end(), std::make_move_iterator(normals.begin()), std::make_move_iterator(normals.end()));
+        }
 
+        // TODO: spread out across multiple threads
+        // integrate all _sub_* data into TSDF octree via DDA raycast within truncation distance
+        template<typename T = double> // needs to be floating point
+        void write_octree(Pose pose, T sdf_res, T sdf_trunc) {
+            static_assert(std::is_floating_point_v<T>);
+            const T sdf_res_reciprocal = 1.0 / double(sdf_res);
+            const glm::aligned_dvec3 position = pose._position;
+            std::vector<MortonCode> traversed_voxels;
+
+            // raycast from pose center to each point's voxel
+            auto points_it = std::cbegin(_sub_points);
+            auto normals_it = std::cbegin(_sub_normals);
+            for (/**/; points_it < std::cend(_sub_points); points_it++, normals_it++) {
+                // make it easy to switch between single and double precision
+                using glm_float_t = T;
+                using glm_vec3f_t = glm::vec<3, glm_float_t, glm::aligned_highp>;
+                const glm_vec3f_t point = *points_it;
+                const glm_vec3f_t normal = *normals_it;
+
+                // calculate ray properties within truncation distance
+                const glm_vec3f_t ray_dir = glm::normalize(point - glm_vec3f_t{ position });
+                const glm_vec3f_t ray_pos = point - ray_dir * sdf_trunc;
+                const glm_vec3f_t ray_end = point + ray_dir * sdf_trunc;
+                glm::aligned_ivec3 ray_pos_vox = glm::aligned_ivec3{ glm::floor(ray_pos * sdf_res_reciprocal) };
+                const glm::aligned_ivec3 ray_end_vox = glm::aligned_ivec3{ glm::floor(ray_end * sdf_res_reciprocal) };
+
+                // the step direction corresponding to ray direction
+                const glm_vec3f_t ray_step = glm::sign(ray_dir);
+                const glm::aligned_ivec3 ray_step_vox = glm::aligned_ivec3{ ray_step };
+
+                // the step distance to reach the next voxel in each dimension
+                const glm_vec3f_t ray_delta = glm::abs(sdf_res / ray_dir);
+
+                // the step distance needed to reach the next voxel from current ray_pos
+                glm_vec3f_t dim_step = ray_step * (glm_vec3f_t{ ray_pos_vox } * sdf_res - ray_pos);
+                dim_step += (ray_step * static_cast<glm_float_t>(0.5) + static_cast<glm_float_t>(0.5)) * sdf_res;
+                dim_step *= ray_delta * sdf_res_reciprocal;
+
+                // can already add the first voxel
+                traversed_voxels.emplace_back(ray_pos_vox);
+
+                // 1 bit for each completed dimension
+                uint32_t completion_mask = 0b000;
+                if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
+                if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
+                if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
+                while (completion_mask != 0b111) {
+                    if (dim_step.x < dim_step.y) {
+                        if (dim_step.x < dim_step.z) {
+                            dim_step.x += ray_delta.x;
+                            ray_pos_vox.x += ray_step_vox.x;
+                            if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
+                        }
+                        else {
+                            dim_step.z += ray_delta.z;
+                            ray_pos_vox.z += ray_step_vox.z;
+                            if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
+                        }
+                    }
+                    else {
+                        if (dim_step.y < dim_step.z) {
+                            dim_step.y += ray_delta.y;
+                            ray_pos_vox.y += ray_step_vox.y;
+                            if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
+                        }
+                        else {
+                            dim_step.z += ray_delta.z;
+                            ray_pos_vox.z += ray_step_vox.z;
+                            if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
+                        }
+                    }
+                    traversed_voxels.emplace_back(ray_pos_vox);
+                }
+
+                // update the traversed octree leaves
+                for (const MortonCode& morton_code: traversed_voxels) {
+                    // compute signed distance
+                    glm_vec3f_t voxel_pos = glm_vec3f_t{ morton_code.decode() } + glm_vec3f_t{ 0.5, 0.5, 0.5 };
+                    glm_vec3f_t point_to_voxel = voxel_pos * sdf_res - point;
+                    float signed_distance = static_cast<float>(glm::dot(normal, point_to_voxel));
+                    signed_distance = std::clamp<float>(signed_distance, -sdf_trunc, +sdf_trunc);
+                    // integrate truncated sd measurement into octree
+                    _tsdf_octree.insert(morton_code, signed_distance);
+                }
+                traversed_voxels.clear();
+            }
+            // clear out all of the now integrated points
+            clear_sub();
+        }
+
+        // accumulated poses for current submap
         std::vector<Pose> _all_poses;
         // accumulated data for current sub-submap
         std::vector<Pose> _sub_poses;

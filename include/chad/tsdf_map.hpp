@@ -2,7 +2,6 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
-#include <stdexcept>
 
 #if __has_include(<glm/vec3.hpp>)
 #   include <glm/vec3.hpp>
@@ -90,14 +89,14 @@ namespace chad {
         }
 
         // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
-        bool inline is_submap_active() const { return _active_scan_end != _active_scan_beg; }
+        [[deprecated]] bool inline is_submap_active() const { return _active_scan_end != _active_scan_beg; }
 
         // clear all data and release memory
-        void clear() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::clear()"); }
+        void clear();
         // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
-        void release_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::release_hashes()"); }
+        void release_hashes();
         // rebuild all hash structures to allow insertion of new data
-        void rebuild_hashes() { throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()"); }
+        void rebuild_hashes();
         // print full memory footprint of different components
         void print_memory_usage();
 
@@ -113,7 +112,7 @@ namespace chad {
         // insert pointcloud (internal function used by all insert(...) calls)
         void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation);
         // insert finalized octree as read-only tree of hashed nodes and return the dag root indices
-        auto insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t>;
+        [[deprecated]] auto insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t>;
 
     public:
         const float _sdf_res;

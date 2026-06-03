@@ -33,8 +33,9 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_FAST_MATH}>>: -ffast-math>
     # SIMD instruction set (native or BMI2)
     $<$<CXX_COMPILER_ID:MSVC>: /arch:AVX2>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:$<IF:$<BOOL:${CHAD_USE_ARCH_NATIVE}>, -march=native -mfpmath=sse, -mbmi2>> # TODO: benchmark -mfpmath=sse ?
+    $<$<CXX_COMPILER_ID:GNU,Clang>:$<IF:$<BOOL:${CHAD_USE_ARCH_NATIVE}>, -march=native, -mbmi2>>
     # misc
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -mfpmath=sse> # TODO: benchmark -mfpmath=sse ?
     $<$<CXX_COMPILER_ID:MSVC>: /diagnostics:classic /Zc:__cplusplus /Zc:inline /fp:except- /FC /Gm- /MP /nologo>)
 target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: /SUBSYSTEM:CONSOLE>

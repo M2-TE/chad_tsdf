@@ -6,6 +6,7 @@
 #include "chad/detail/ndd/ndd.hpp"
 #include "chad/detail/funcs/TODO.hpp"
 #include "chad/detail/funcs/sort.hpp"
+#include "chad/detail/funcs/timing.hpp"
 #include "chad/detail/funcs/normals.hpp"
 #include "chad/detail/funcs/extract.hpp"
 #include "chad/detail/dag/root_indices.hpp"
@@ -15,30 +16,25 @@
 // TODO: put things into better folders (e.g. dag folder)
 // TODO: use estimated normals for NDD input?
 
-void inline CHAD_MESSAGE(std::string_view message) {
-    fmt::println("[CHAD] {}", message);
-}
-void inline MEASURE_TIME(std::chrono::steady_clock::time_point beg, std::string_view message) {
-    double dur = std::chrono::duration<double, std::milli>{ std::chrono::steady_clock::now() - beg }.count();
-    fmt::println("[CHAD] {}: {:.2f}ms", message, dur);
-}
-
 namespace chad {
     TSDFMap::TSDFMap(float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold):
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
         _active_octree_p(std::make_unique<detail::Octree>()),
         _dag_storage_p(std::make_unique<detail::DAGStorage>()),
-        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>(submap_xyz_threshhold, submap_cor_threshhold)) {
+        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>(sdf_res, sdf_trunc, submap_xyz_threshhold, submap_cor_threshhold)) {
     }
     TSDFMap::~TSDFMap() {
     }
-    // void TSDFMap::clear() {
-    // }
-    // void TSDFMap::release_hashes() {
-    // }
-    // void TSDFMap::rebuild_hashes() {
-    // }
+    void TSDFMap::clear() {
+        throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()");
+    }
+    void TSDFMap::release_hashes() {
+        throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()");
+    }
+    void TSDFMap::rebuild_hashes() {
+        throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()");
+    }
     void TSDFMap::print_memory_usage() {
         using namespace chad::detail;
         double mem_dag_nodes = 0;
@@ -126,11 +122,11 @@ namespace chad {
         // create a scan context descriptor from the pointcloud
         ndd::Descriptor descriptor;
         const std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz;
-        std::jthread thread_ndd{[&](){
+        std::jthread descriptor_thread{[&](){
             auto timestamp = std::chrono::steady_clock::now();
             // use copied points vector for thread safety
             descriptor = ndd::Descriptor{ points_xyz_copy, pose._position };
-            if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated scan context");
+            if (_debug_outputs) MEASURE_TIME(timestamp, "(async) Calculated descriptor");
         }};
 
         // sort points by their morton code, discretized to the voxel resolution
@@ -140,15 +136,12 @@ namespace chad {
 
         // estimate the normal of every point
         timestamp = std::chrono::steady_clock::now();
-        const std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
+        std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Normal estimation");
-
-        // wait for the NDD to complete construction
-        thread_ndd.join();
 
         // add scan to the map optimizer (will handle sub-submapping)
         timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(points_xyz, normals, std::move(descriptor), pose);
+        _map_optimizer_p->add_scan(std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Added scan to map optimizer");
 
         MEASURE_TIME(beg, "-- Total insertion time");
