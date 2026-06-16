@@ -4,12 +4,12 @@
 #include "chad/detail/mapping/indices.hpp"
 
 namespace chad::detail::mapping {
-    struct ActiveSubmap {
+    class ActiveSubmap {
+    public:
         // clear only sub-submap related data
         void clear_sub() {
             _sub_poses.clear();
             _sub_points.clear();
-            _sub_normals.clear();
         }
         // clear all data
         void clear() {
@@ -19,26 +19,31 @@ namespace chad::detail::mapping {
             _tsdf_octree.clear();
         }
         // add a single scan frame
-        void add_frame(std::vector<glm::aligned_vec3>&& points, std::vector<glm::aligned_vec3>&& normals, Pose pose) {
+        void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
             _all_poses.push_back(pose);
             _sub_poses.push_back(pose);
+
+            // immediately integrate points into the tsdf octree
+            write_octree<double>(points, normals, pose, sdf_res, sdf_trunc);
+
+            // move data to avoid copies
             _sub_points.insert(_sub_points.end(), std::make_move_iterator(points.begin()), std::make_move_iterator(points.end()));
-            _sub_normals.insert(_sub_normals.end(), std::make_move_iterator(normals.begin()), std::make_move_iterator(normals.end()));
         }
 
-        // TODO: spread out across multiple threads
+    private:
+        // TODO: spread out across multiple threads?
         // integrate all _sub_* data into TSDF octree via DDA raycast within truncation distance
-        template<typename T = double> // needs to be floating point
-        void write_octree(Pose pose, T sdf_res, T sdf_trunc) {
+        template<typename T = double> // needs to be a floating point type
+        void write_octree(const std::vector<glm::aligned_vec3>& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, T sdf_res, T sdf_trunc) {
             static_assert(std::is_floating_point_v<T>);
             const T sdf_res_reciprocal = 1.0 / double(sdf_res);
             const glm::aligned_dvec3 position = pose._position;
             std::vector<MortonCode> traversed_voxels;
 
             // raycast from pose center to each point's voxel
-            auto points_it = std::cbegin(_sub_points);
-            auto normals_it = std::cbegin(_sub_normals);
-            for (/**/; points_it < std::cend(_sub_points); points_it++, normals_it++) {
+            auto points_it = std::cbegin(points);
+            auto normals_it = std::cbegin(normals);
+            for (/**/; points_it < std::cend(points); points_it++, normals_it++) {
                 // make it easy to switch between single and double precision
                 using glm_float_t = T;
                 using glm_vec3f_t = glm::vec<3, glm_float_t, glm::aligned_highp>;
@@ -112,19 +117,19 @@ namespace chad::detail::mapping {
                 }
                 traversed_voxels.clear();
             }
-            // clear out all of the now integrated points
-            clear_sub();
         }
 
+    public:
         // accumulated poses for current submap
         std::vector<Pose> _all_poses;
-        // accumulated data for current sub-submap
+        // accumulated data for current sub-submap (used for point-to-tsdf loop closure)
         std::vector<Pose> _sub_poses;
         std::vector<glm::aligned_vec3> _sub_points;
-        std::vector<glm::aligned_vec3> _sub_normals;
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
         Octree2 _tsdf_octree;
+        // mutex for async safety
+        std::mutex _mutex;
     };
 }

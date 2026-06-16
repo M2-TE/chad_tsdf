@@ -18,12 +18,11 @@ namespace chad::detail::mapping {
             std::uint32_t _weight = 0;
         };
         struct Node {
-            // DEPTH_SPAN depths worth of 2x2x2 nodes
+            // DEPTH_SPAN depths of 2x2x2 nodes each
             std::array<Leaf, 8*8*8> _leaves;
 
             // validation
-            static constexpr std::size_t DEPTH_SPAN = calc_spanned_depth<8>(sizeof(_leaves) / sizeof(Leaf));
-            static_assert(DEPTH_SPAN == 3); // just for sanity check while working on it
+            constexpr static std::size_t DEPTH_SPAN = calc_spanned_depth<8>(sizeof(_leaves) / sizeof(Leaf));
         };
 
         void inline clear() {
@@ -32,7 +31,7 @@ namespace chad::detail::mapping {
         void inline insert(MortonCode morton_code, float signed_distance) {
             // mask out the bits relevant for hashmap lookup
             constexpr std::uint64_t shift_distance = sizeof(std::uint64_t) * 8 - DEPTH_START * 3 - 1;
-            constexpr std::uint64_t mask = -1ull >> shift_distance << shift_distance;
+            constexpr std::uint64_t mask = std::uint64_t(-1) >> shift_distance << shift_distance;
 
             // obtain node using masked morton code as the key
             auto [it, emplaced_b] = _nodes.try_emplace(morton_code & mask);
@@ -50,7 +49,6 @@ namespace chad::detail::mapping {
         gtl::parallel_node_hash_map<MortonCode, Node> _nodes; // starts at depth DEPTH_START
 
         // validation
-        static constexpr std::size_t DEPTH_START = 21 - Node::DEPTH_SPAN;
-        static_assert(DEPTH_START == 18); // just for sanity check while working on it
+        constexpr static std::uint64_t DEPTH_START = 21 - Node::DEPTH_SPAN;
     };
 }

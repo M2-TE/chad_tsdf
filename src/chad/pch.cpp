@@ -1,5 +1,6 @@
 // std
 #include <array>
+#include <mutex>
 #include <bitset>
 #include <chrono>
 #include <random>

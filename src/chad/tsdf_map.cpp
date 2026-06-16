@@ -35,6 +35,7 @@ namespace chad {
     void TSDFMap::rebuild_hashes() {
         throw std::logic_error("Function not yet implemented: chad::TSDFMap::rebuild_hashes()");
     }
+    // TODO: redo
     void TSDFMap::print_memory_usage() {
         using namespace chad::detail;
         double mem_dag_nodes = 0;
@@ -136,13 +137,13 @@ namespace chad {
 
         // estimate the normal of every point
         timestamp = std::chrono::steady_clock::now();
-        std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
+        const std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Normal estimation");
 
-        // add scan to the map optimizer (will handle sub-submapping)
+        // add scan to the map optimizer (will handle sub-/submapping)
         timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Added scan to map optimizer");
+        _map_optimizer_p->add_scan(*_dag_storage_p, std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Optimizer");
 
         MEASURE_TIME(beg, "-- Total insertion time");
     }

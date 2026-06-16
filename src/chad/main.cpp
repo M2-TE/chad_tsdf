@@ -52,7 +52,7 @@ void inline do_thingy() {
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
         { 0, 0, 0 },
-        // { +3.5, 0, 0 },
+        { 3.5, 0, 0 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i]);
@@ -61,21 +61,19 @@ void inline do_thingy() {
     }
 
 
-    std::exit(0);
+    // map.finalize_active_submap();
 
-    map.finalize_active_submap();
-
-    // glm::vec3 offset{ 0, 0, 0 };
-    // glm::vec3 offset{ 0.01, 0.01, 0.01 };
-    glm::vec3 offset{ 0.03, 0.03, 0.03 };
-    // glm::vec3 offset{ 0.05, 0.05, 0.05 };
-    // glm::vec3 offset{ 10, 10, 10 };
-    // sample_sphere(points, offset);
-    // sample_cube(points, offset);
-    for (auto& point: points) {
-        point += offset;
-    }
-    map.dothingy(points, offset);
+    // // glm::vec3 offset{ 0, 0, 0 };
+    // // glm::vec3 offset{ 0.01, 0.01, 0.01 };
+    // glm::vec3 offset{ 0.03, 0.03, 0.03 };
+    // // glm::vec3 offset{ 0.05, 0.05, 0.05 };
+    // // glm::vec3 offset{ 10, 10, 10 };
+    // // sample_sphere(points, offset);
+    // // sample_cube(points, offset);
+    // for (auto& point: points) {
+    //     point += offset;
+    // }
+    // map.dothingy(points, offset);
 
     // map.print_memory_usage();
     // map.reconstruct("mesh", true);

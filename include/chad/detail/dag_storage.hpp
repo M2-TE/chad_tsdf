@@ -242,5 +242,7 @@ namespace chad::detail {
         std::array<NodeLevel, MAX_DEPTH> _node_levels;
         // 1 level of leaf clusters
         LeafClusterLevel _leaf_clusters;
+        // mutex used for asyc operations (mostly during writing)
+        std::mutex _mutex;
     };
 } // chad::detail

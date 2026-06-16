@@ -29,6 +29,10 @@ namespace chad::detail::mapping {
         _submap_cor_threshhold(submap_cor_threshhold) {
     }
     Optimizer::~Optimizer() {
+        // wait for all threads to finish their work before exiting
+        for (auto& thread: _active_threads) {
+            if (thread.joinable()) thread.join();
+        }
     }
 
     // void Optimizer::add_scan_descriptor(const std::vector<glm::aligned_vec3>& points, const Pose& pose) {
