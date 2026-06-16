@@ -3,7 +3,7 @@
 #include "chad/tsdf_map.hpp"
 
 [[maybe_unused]]
-void inline sample_sphere(std::vector<glm::vec3>& points, glm::vec3 offset) {
+void inline sample_sphere(std::vector<glm::vec3>& points, glm::vec3 offset, double radius) {
     std::random_device rd;
     std::mt19937 gen(420);
     std::uniform_real_distribution<double> dis(-1.0f, 1.0f);
@@ -13,7 +13,7 @@ void inline sample_sphere(std::vector<glm::vec3>& points, glm::vec3 offset) {
             dis(gen),
             dis(gen),
         };
-        point = glm::vec3{ glm::normalize(pointd) * 5.0 };
+        point = glm::vec3{ glm::normalize(pointd) * radius };
         point += offset;
     }
 }
@@ -55,7 +55,7 @@ void inline do_thingy() {
         { 3.5, 0, 0 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
-        sample_sphere(points, positions[i]);
+        sample_sphere(points, positions[i], 20.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
     }

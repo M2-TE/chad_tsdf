@@ -38,7 +38,7 @@ namespace chad::detail::mapping {
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p, &dag]() {
                         auto timestamp = std::chrono::steady_clock::now();
                         on_submap_completion(*active_submap_p, dag);
-                        MEASURE_TIME(timestamp, "\t-> Optimizer: (async) submap completed");
+                        MEASURE_TIME(timestamp, "\t-> Optimizer: submap completed (async)");
                     }};
 
                     // swap submap chain to continue work

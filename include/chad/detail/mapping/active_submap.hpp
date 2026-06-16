@@ -3,6 +3,12 @@
 #include "chad/detail/mapping/octree2.hpp"
 #include "chad/detail/mapping/indices.hpp"
 
+
+
+#include "chad/detail/octree.hpp"
+
+
+
 namespace chad::detail::mapping {
     class ActiveSubmap {
     public:
@@ -114,6 +120,7 @@ namespace chad::detail::mapping {
                     signed_distance = std::clamp<float>(signed_distance, -sdf_trunc, +sdf_trunc);
                     // integrate truncated sd measurement into octree
                     _tsdf_octree.insert(morton_code, signed_distance);
+
                 }
                 traversed_voxels.clear();
             }
@@ -128,7 +135,7 @@ namespace chad::detail::mapping {
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
-        Octree2 _tsdf_octree;
+        Octree2<17, 2> _tsdf_octree;
         // mutex for async safety
         std::mutex _mutex;
     };

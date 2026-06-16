@@ -127,7 +127,7 @@ namespace chad {
             auto timestamp = std::chrono::steady_clock::now();
             // use copied points vector for thread safety
             descriptor = ndd::Descriptor{ points_xyz_copy, pose._position };
-            if (_debug_outputs) MEASURE_TIME(timestamp, "(async) Calculated descriptor");
+            if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated descriptor (async)");
         }};
 
         // sort points by their morton code, discretized to the voxel resolution

@@ -5,18 +5,18 @@
 
 namespace chad::detail {
     struct MortonCode {
-        MortonCode(std::uint64_t value): _value(value) {}
-        MortonCode(const glm::aligned_ivec3& vox_pos) {
+        constexpr MortonCode(std::uint64_t value): _value(value) {}
+        constexpr MortonCode(const glm::aligned_ivec3& vox_pos) {
             encode(vox_pos);
         }
-        MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) {
+        constexpr MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) {
             // convert to voxel coordinate and discretize with floor()
             glm::aligned_vec3 point_discretized = glm::floor(point * sdf_res_reciprocal);
             encode(glm::aligned_ivec3{ point_discretized });
         }
         // TODO: remove this once revamp is done
         [[deprecated]]
-        MortonCode(const glm::ivec3& vox_pos) {
+        constexpr MortonCode(const glm::ivec3& vox_pos) {
             encode(vox_pos);
         }
 
@@ -38,20 +38,36 @@ namespace chad::detail {
             return { static_cast<std::int32_t>(x), static_cast<std::int32_t>(y), static_cast<std::int32_t>(z) };
         }
 
-        bool inline operator==(const MortonCode& other) const {
+        auto constexpr inline operator==(MortonCode other) const -> bool {
             return _value == other._value;
         }
-        bool inline operator<(const MortonCode& other) const {
+        auto constexpr inline operator<(MortonCode other) const -> bool {
             return _value < other._value;
         }
-        bool inline operator>(const MortonCode& other) const {
+        auto constexpr inline operator>(MortonCode other) const -> bool {
             return _value > other._value;
         }
-        auto friend operator&(MortonCode lhs, const MortonCode& rhs) -> MortonCode {
-            return lhs._value & rhs._value;
+        auto constexpr inline operator&(MortonCode other) const -> MortonCode {
+            return _value & other._value;
         }
-        auto friend operator&(MortonCode lhs, const std::uint64_t& rhs) -> MortonCode {
-            return lhs._value & rhs;
+        auto constexpr inline operator>>(std::uint64_t shift) const -> MortonCode {
+            return _value >> shift;
+        }
+        auto constexpr inline operator<<(std::uint64_t shift) const -> MortonCode {
+            return _value << shift;
+        }
+
+        auto constexpr inline friend operator==(std::uint64_t lhs, MortonCode rhs) -> bool {
+            return lhs == rhs._value;
+        }
+        auto constexpr inline friend operator<(std::uint64_t lhs, MortonCode rhs) -> bool {
+            return lhs < rhs._value;
+        }
+        auto constexpr inline friend operator>(std::uint64_t lhs, MortonCode rhs) -> bool {
+            return lhs > rhs._value;
+        }
+        auto constexpr inline friend operator&(std::uint64_t lhs, MortonCode rhs) -> MortonCode {
+            return lhs & rhs._value;
         }
 
         std::uint64_t _value;
