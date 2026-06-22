@@ -117,7 +117,7 @@ namespace chad::detail {
             return _virtual_capacity;
         }
         void inline resize(std::size_t new_size) {
-            // if (_capacity < _size) reserve(new_size);
+            // if (_capacity < new_size) reserve(new_size);
             _size = new_size;
         }
         // TODO: actually free the pages if smaller than before? (shrink_to_fit)
@@ -133,7 +133,6 @@ namespace chad::detail {
             if (page_end_new > page_end) {
                 prefault_virtual(_virtual_p + page_beg, page_end_new - page_beg);
                 _capacity = page_end_new / sizeof(T);
-                // fmt::println("yep");
             }
             else {
                 // effectively just update _capacity to what the current last populated page is
@@ -145,7 +144,7 @@ namespace chad::detail {
             // MADV_FREE stuff
             _size = 0;
         }
-        
+
     private:
         T* const _virtual_p;
         const std::size_t _virtual_capacity; // maximum virtual capacity for T (not bytes!)

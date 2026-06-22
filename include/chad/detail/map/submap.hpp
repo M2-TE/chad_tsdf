@@ -1,9 +1,9 @@
 #pragma once
 #include "chad/detail/pose.hpp"
-#include "chad/detail/mapping/indices.hpp"
+#include "chad/detail/map/indices.hpp"
 #include "chad/detail/dag/root_indices.hpp"
 
-namespace chad::detail::mapping {
+namespace chad::detail::map {
     struct Submap {
         dag::RootIndices _root_indices; // roots for octrees in dag::Storage
         DescriptorIndex _ndd_beg; // iterator for Optimizer::_descriptors

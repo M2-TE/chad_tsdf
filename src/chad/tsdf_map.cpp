@@ -9,8 +9,8 @@
 #include "chad/detail/funcs/timing.hpp"
 #include "chad/detail/funcs/normals.hpp"
 #include "chad/detail/funcs/extract.hpp"
+#include "chad/detail/map/optimizer.hpp"
 #include "chad/detail/dag/root_indices.hpp"
-#include "chad/detail/mapping/optimizer.hpp"
 #include "chad/detail/reconstruction/ply.hpp"
 
 // TODO: put things into better folders (e.g. dag folder)
@@ -22,7 +22,8 @@ namespace chad {
         _sdf_trunc(sdf_trunc),
         _active_octree_p(std::make_unique<detail::Octree>()),
         _dag_storage_p(std::make_unique<detail::DAGStorage>()),
-        _map_optimizer_p(std::make_unique<detail::mapping::Optimizer>(sdf_res, sdf_trunc, submap_xyz_threshhold, submap_cor_threshhold)) {
+        _dag_p(std::make_unique<detail::dag::Storage>()),
+        _map_optimizer_p(std::make_unique<detail::map::Optimizer>(sdf_res, sdf_trunc, submap_xyz_threshhold, submap_cor_threshhold)) {
     }
     TSDFMap::~TSDFMap() {
     }
@@ -87,12 +88,12 @@ namespace chad {
 
         // recontruct multiple submaps as single mesh chunks
         Octree octree_base, octree;
-        const std::vector<mapping::Submap>& submaps = _map_optimizer_p->_submaps;
-        for (mapping::SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
+        const std::vector<map::Submap>& submaps = _map_optimizer_p->_submaps;
+        for (map::SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
             auto beg = std::chrono::steady_clock::now();
             // go over all submaps within this chunk
-            for (mapping::SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
-                const mapping::Submap& submap = submaps[chunk_i + submap_offset];
+            for (map::SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
+                const map::Submap& submap = submaps[chunk_i + submap_offset];
                 octree.insert(*_dag_storage_p, submap._root_indices, _sdf_trunc);
 
                 // invert error to get delta from octree to global coordinate frame (octree_base)
@@ -121,12 +122,12 @@ namespace chad {
         if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
 
         // create a scan context descriptor from the pointcloud
-        ndd::Descriptor descriptor;
+        detail::ndd::Descriptor descriptor;
         const std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz;
         std::jthread descriptor_thread{[&](){
             auto timestamp = std::chrono::steady_clock::now();
             // use copied points vector for thread safety
-            descriptor = ndd::Descriptor{ points_xyz_copy, pose._position };
+            descriptor = detail::ndd::Descriptor{ points_xyz_copy, pose._position };
             if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated descriptor (async)");
         }};
 
@@ -142,7 +143,7 @@ namespace chad {
 
         // add scan to the map optimizer (will handle sub-/submapping)
         timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(*_dag_storage_p, std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
+        _map_optimizer_p->add_scan(*_dag_p, std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Optimizer");
 
         MEASURE_TIME(beg, "-- Total insertion time");

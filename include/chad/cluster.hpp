@@ -13,7 +13,7 @@ namespace chad {
             void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
-                
+
                 float sd = signed_distance;
                 // scale signed distance to be normalized within truncation distance
                 sd = std::clamp(sd * sdf_trunc_recip, -1.0f, 1.0f);
@@ -80,25 +80,7 @@ namespace chad {
             }
             uint64_t _value;
         };
-        // Wrapper for cluster of 8 unsigned floats (+0.0f to +1.0f)
-        struct Ufloats {
-            // TODO
-        };
-        // Wrapper for cluster of 8 signed floats (-1.0f to +1.0f)
-        struct Sfloats {
-            // TODO
-        };
-        // Wrapper for cluster of 8 uint8_t values (0xff is reserved)
-        struct Uints {
-            // TODO
-        };
-        // Wrapper for cluster of 8 int8_t values (0xff is reserved)
-        struct Sints {
-            // TODO
-        };
 
-        LeafCluster(): _value(0) {
-        }
         bool inline is_empty() {
             return _value == std::numeric_limits<uint64_t>::max();
         }
@@ -107,13 +89,9 @@ namespace chad {
         }
 
         union {
-            uint64_t _value; // Raw cluster data as 64-bit uint
-            TSDFs    _tsdfs;
-            Weights  _weigh;
-            Ufloats  _ufloats;
-            Sfloats  _sfloats;
-            Uints    _uints;
-            Sints    _sints;
+            std::uint64_t _value; // Raw cluster data as 64-bit uint
+            TSDFs   _tsdfs;
+            Weights _weigh;
         };
     };
 }

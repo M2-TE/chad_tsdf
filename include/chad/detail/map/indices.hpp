@@ -1,7 +1,6 @@
 #pragma once
 
-namespace chad::detail::mapping {
-    using ScanIndex = std::uint32_t;
+namespace chad::detail::map {
     using SubmapIndex = std::uint32_t;
     using DescriptorIndex = std::uint32_t;
 }

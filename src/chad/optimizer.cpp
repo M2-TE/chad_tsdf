@@ -1,4 +1,4 @@
-#include "chad/detail/mapping/optimizer.hpp"
+#include "chad/detail/map/optimizer.hpp"
 
 // all the gtsam headers, mostly taken from their example
 #include <gtsam/geometry/Rot3.h>
@@ -13,7 +13,7 @@
 // KD-Tree for finding NDD matches
 #include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
-namespace chad::detail::mapping {
+namespace chad::detail::map {
     struct GTSAMData {
         static constexpr int _relinearize_skip = 1;
         static constexpr float _relinearize_threshold = 0.01;

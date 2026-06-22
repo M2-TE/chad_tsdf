@@ -13,10 +13,13 @@
 
 namespace chad {
     namespace detail {
-        struct Octree;
-        struct DAGStorage;
-        namespace mapping {
+        struct Octree; // DEPRECATED
+        struct DAGStorage; // DEPRECATED
+        namespace map {
             struct Optimizer;
+        }
+        namespace dag {
+            struct Storage;
         }
     }
 
@@ -124,8 +127,9 @@ namespace chad {
         [[deprecated]] std::uint32_t _active_scan_beg = 0; // index of first scan for active submap
         [[deprecated]] std::uint32_t _active_scan_end = 0; // past-the-end index of final scan for active submap
         [[deprecated]] std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
+        [[deprecated]] std::unique_ptr<detail::DAGStorage> _dag_storage_p; // storage for all hashed nodes
         // persistent
-        std::unique_ptr<detail::DAGStorage> _dag_storage_p; // storage for all hashed nodes
-        std::unique_ptr<detail::mapping::Optimizer> _map_optimizer_p; // loop closure detection and pose optimization
+        std::unique_ptr<detail::dag::Storage> _dag_p; // storage for persistent hashed nodes
+        std::unique_ptr<detail::map::Optimizer> _map_optimizer_p; // loop closure detection and pose optimization
     };
 }

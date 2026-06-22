@@ -43,7 +43,7 @@ void inline sample_cube(std::vector<glm::vec3>& points, glm::vec3 offset) {
 
 [[maybe_unused]]
 void inline do_thingy() {
-    std::vector<glm::vec3> points { 1'000'000 };
+    std::vector<glm::vec3> points { 10'000'000 };
 
     // create map with enabled debug outputs
     chad::TSDFMap map{ 0.05f, 0.1f, 3.0f };

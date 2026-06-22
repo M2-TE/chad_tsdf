@@ -1,9 +1,9 @@
 #pragma once
 #include "chad/detail/morton_code.hpp"
 
-namespace chad::detail::mapping {
-    // DEPTH_START (default 17) ->  how many depths a single node spans
-    // DEPTH_SPAN  (default  2) -> at which depth root nodes will start
+namespace chad::detail::map {
+    // DEPTH_START (default 17) -> at which depth root nodes will start
+    // DEPTH_SPAN  (default  2) -> how many depths a single node spans
     template<std::uint64_t DEPTH_START = 17, std::uint64_t DEPTH_SPAN = 2>
     struct Octree2 {
         static_assert((21 - DEPTH_START) % DEPTH_SPAN == 0);
@@ -23,6 +23,9 @@ namespace chad::detail::mapping {
         void inline clear() {
             _roots.clear();
             _nodes.clear();
+            for (auto& level: _level_cache) {
+                level.clear();
+            }
         }
         void inline insert(MortonCode morton_code, float signed_distance) {
             // mask out the bits relevant for hashmap lookup
@@ -77,5 +80,6 @@ namespace chad::detail::mapping {
 
         std::vector<Node> _nodes;
         gtl::parallel_flat_hash_map<MortonCode, NodeAddr> _roots; // tree begins at DEPTH_START
+        std::array<gtl::flat_hash_set<MortonCode>, DEPTH_START> _level_cache; // used for insertion into DAG
     };
 }

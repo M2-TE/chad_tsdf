@@ -1,15 +1,16 @@
 #pragma once
 #include "chad/detail/pose.hpp"
-#include "chad/detail/mapping/octree2.hpp"
-#include "chad/detail/mapping/indices.hpp"
+#include "chad/detail/map/indices.hpp"
 
 
 
 #include "chad/detail/octree.hpp"
+#include "chad/detail/map/octree2.hpp"
+#include "chad/detail/map/octree3.hpp"
 
 
 
-namespace chad::detail::mapping {
+namespace chad::detail::map {
     class ActiveSubmap {
     public:
         // clear only sub-submap related data
@@ -22,7 +23,9 @@ namespace chad::detail::mapping {
             clear_sub();
             _all_poses.clear();
             _descriptor_indices.clear();
-            _tsdf_octree.clear();
+            _tsdf_octree1.clear();
+            _tsdf_octree2.clear();
+            _tsdf_octree3.clear();
         }
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
@@ -46,29 +49,33 @@ namespace chad::detail::mapping {
             const glm::aligned_dvec3 position = pose._position;
             std::vector<MortonCode> traversed_voxels;
 
+            double time_total_a = 0.0f;
+            double time_total_b = 0.0f;
+
             // raycast from pose center to each point's voxel
             auto points_it = std::cbegin(points);
             auto normals_it = std::cbegin(normals);
             for (/**/; points_it < std::cend(points); points_it++, normals_it++) {
+                auto timestamp_start = std::chrono::steady_clock::now();
                 // make it easy to switch between single and double precision
                 using glm_float_t = T;
                 using glm_vec3f_t = glm::vec<3, glm_float_t, glm::aligned_highp>;
-                const glm_vec3f_t point = *points_it;
-                const glm_vec3f_t normal = *normals_it;
+                glm_vec3f_t point = *points_it;
+                glm_vec3f_t normal = *normals_it;
 
                 // calculate ray properties within truncation distance
-                const glm_vec3f_t ray_dir = glm::normalize(point - glm_vec3f_t{ position });
-                const glm_vec3f_t ray_pos = point - ray_dir * sdf_trunc;
-                const glm_vec3f_t ray_end = point + ray_dir * sdf_trunc;
+                glm_vec3f_t ray_dir = glm::normalize(point - glm_vec3f_t{ position });
+                glm_vec3f_t ray_pos = point - ray_dir * sdf_trunc;
+                glm_vec3f_t ray_end = point + ray_dir * sdf_trunc;
                 glm::aligned_ivec3 ray_pos_vox = glm::aligned_ivec3{ glm::floor(ray_pos * sdf_res_reciprocal) };
-                const glm::aligned_ivec3 ray_end_vox = glm::aligned_ivec3{ glm::floor(ray_end * sdf_res_reciprocal) };
+                glm::aligned_ivec3 ray_end_vox = glm::aligned_ivec3{ glm::floor(ray_end * sdf_res_reciprocal) };
 
                 // the step direction corresponding to ray direction
-                const glm_vec3f_t ray_step = glm::sign(ray_dir);
-                const glm::aligned_ivec3 ray_step_vox = glm::aligned_ivec3{ ray_step };
+                glm_vec3f_t ray_step = glm::sign(ray_dir);
+                glm::aligned_ivec3 ray_step_vox = glm::aligned_ivec3{ ray_step };
 
                 // the step distance to reach the next voxel in each dimension
-                const glm_vec3f_t ray_delta = glm::abs(sdf_res / ray_dir);
+                glm_vec3f_t ray_delta = glm::abs(sdf_res / ray_dir);
 
                 // the step distance needed to reach the next voxel from current ray_pos
                 glm_vec3f_t dim_step = ray_step * (glm_vec3f_t{ ray_pos_vox } * sdf_res - ray_pos);
@@ -119,7 +126,10 @@ namespace chad::detail::mapping {
                     float signed_distance = static_cast<float>(glm::dot(normal, point_to_voxel));
                     signed_distance = std::clamp<float>(signed_distance, -sdf_trunc, +sdf_trunc);
                     // integrate truncated sd measurement into octree
-                    _tsdf_octree.insert(morton_code, signed_distance);
+
+                    // _tsdf_octree1.insert(morton_code);
+                    // _tsdf_octree2.insert(morton_code, signed_distance);
+                    _tsdf_octree3.insert(morton_code, signed_distance);
 
                 }
                 traversed_voxels.clear();
@@ -135,7 +145,9 @@ namespace chad::detail::mapping {
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
-        Octree2<17, 2> _tsdf_octree;
+        Octree _tsdf_octree1; // DEBUG
+        Octree2<17, 2> _tsdf_octree2; // DEBUG
+        Octree3<17, 2> _tsdf_octree3;
         // mutex for async safety
         std::mutex _mutex;
     };

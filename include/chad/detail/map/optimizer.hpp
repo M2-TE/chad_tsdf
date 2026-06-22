@@ -1,18 +1,17 @@
 #pragma once
-#include "chad/detail/dag_storage.hpp"
-// #include "chad/detail/dag/storage.hpp"
 #include "chad/detail/ndd/ndd.hpp"
+#include "chad/detail/dag/storage.hpp"
 #include "chad/detail/funcs/timing.hpp"
-#include "chad/detail/mapping/submap.hpp"
-#include "chad/detail/mapping/indices.hpp"
-#include "chad/detail/mapping/active_submap.hpp"
+#include "chad/detail/map/submap.hpp"
+#include "chad/detail/map/indices.hpp"
+#include "chad/detail/map/active_submap.hpp"
 
-namespace chad::detail::mapping {
+namespace chad::detail::map {
     struct Optimizer {
         Optimizer(float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
 
-        void add_scan(DAGStorage& dag,
+        void add_scan(dag::Storage& dag,
                       std::vector<glm::aligned_vec3>&& points,
                       const std::vector<glm::aligned_vec3>& normals,
                       Pose pose,
@@ -38,7 +37,7 @@ namespace chad::detail::mapping {
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p, &dag]() {
                         auto timestamp = std::chrono::steady_clock::now();
                         on_submap_completion(*active_submap_p, dag);
-                        MEASURE_TIME(timestamp, "\t-> Optimizer: submap completed (async)");
+                        MEASURE_TIME(timestamp, "Submap completed (async)");
                     }};
 
                     // swap submap chain to continue work
@@ -50,7 +49,7 @@ namespace chad::detail::mapping {
             // wait for the descriptor construction to finish
             auto timestamp = std::chrono::steady_clock::now();
             descriptor_thread.join();
-            MEASURE_TIME(timestamp, "\t-> Optimizer: waited for descriptor");
+            MEASURE_TIME(timestamp, "Waited for descriptor");
 
             // Sub-Submap: check whether NDD correlation threshhold was crossed
             if (!active_submap_p->_sub_poses.empty()) {
@@ -60,7 +59,7 @@ namespace chad::detail::mapping {
                 if (correlation < _submap_cor_threshhold) {
                     // let main thread handle sub-submap completion (including loop closure)
                     on_sub_submap_completion(*active_submap_p, std::move(descriptor));
-                    MEASURE_TIME(timestamp, "\t-> Optimizer: sub-submap completion");
+                    MEASURE_TIME(timestamp, "Sub-submap completion");
                 }
             }
             // Sub-Submap: when empty, initialize it
@@ -68,18 +67,18 @@ namespace chad::detail::mapping {
                 auto timestamp = std::chrono::steady_clock::now();
                 // let main thread handle sub-submap completion (including loop closure)
                 on_sub_submap_completion(*active_submap_p, std::move(descriptor));
-                MEASURE_TIME(timestamp, "\t-> Optimizer: sub-submap initialization");
+                MEASURE_TIME(timestamp, "Sub-submap initialization");
             }
 
             // insert new data into active submap
             timestamp = std::chrono::steady_clock::now();
             active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
-            MEASURE_TIME(timestamp, "\t-> Optimizer: sub-submap integration");
+            MEASURE_TIME(timestamp, "Sub-submap integration");
         }
 
     private:
         // finish entire submap and create DAG octree (TODO)
-        void on_submap_completion(ActiveSubmap& submap, DAGStorage& dag) {
+        void on_submap_completion(ActiveSubmap& submap, dag::Storage& dag) {
             // writing data to the DAG should be done async, so we lock the mutex
             std::unique_lock lock_dag{ dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
@@ -95,8 +94,13 @@ namespace chad::detail::mapping {
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
 
-            // TODO: finalize as DAG octree
-            // TODO: gotta consider sub-submapping cases?
+
+            // construct earlier levels for octree (needed for bottom-up construction of DAG tree)
+            // TODO: should do that in octree itself (less allocation overhead)
+
+
+            // TODO: prefault memory ranges (virtual array) for better write speeds into DAG
+
 
             // // trackers for the traversed path and nodes
             // std::array<uint8_t, DAGStorage::MAX_DEPTH> path;
@@ -230,7 +234,6 @@ namespace chad::detail::mapping {
         std::unique_ptr<struct GTSAMData> _gtsam;
 
         // OLD
-        // [[deprecated]] ActiveSubmap _active_submap; // TODO: should have 2 of these for async purposes (akin to 2 frames in flight)
         [[deprecated]] std::vector<SubmapIndex> _merged_submaps;
         [[deprecated]] std::vector<Pose>        _scan_poses;
         [[deprecated]] std::vector<SubmapIndex> _scan_submap; // for easier association

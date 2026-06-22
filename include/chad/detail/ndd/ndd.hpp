@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ndd {
+namespace chad::detail::ndd {
     struct Descriptor {
         static constexpr uint32_t N_RINGS = 20;
         static constexpr uint32_t N_SECTORS = 60;
