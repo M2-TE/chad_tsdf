@@ -23,6 +23,7 @@ namespace chad::detail::funcs {
             return morton_codes[a] < morton_codes[b];
         });
         #else
+        #warning "__cpp_lib_execution" is unavailable, resorting to single-threaded std::execution
         std::sort(indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
             return morton_codes[a] < morton_codes[b];
         });

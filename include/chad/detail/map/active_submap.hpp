@@ -6,7 +6,6 @@
 
 #include "chad/detail/octree.hpp"
 #include "chad/detail/map/octree2.hpp"
-#include "chad/detail/map/octree3.hpp"
 
 
 
@@ -25,7 +24,6 @@ namespace chad::detail::map {
             _descriptor_indices.clear();
             _tsdf_octree1.clear();
             _tsdf_octree2.clear();
-            _tsdf_octree3.clear();
         }
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
@@ -49,14 +47,10 @@ namespace chad::detail::map {
             const glm::aligned_dvec3 position = pose._position;
             std::vector<MortonCode> traversed_voxels;
 
-            double time_total_a = 0.0f;
-            double time_total_b = 0.0f;
-
             // raycast from pose center to each point's voxel
             auto points_it = std::cbegin(points);
             auto normals_it = std::cbegin(normals);
             for (/**/; points_it < std::cend(points); points_it++, normals_it++) {
-                auto timestamp_start = std::chrono::steady_clock::now();
                 // make it easy to switch between single and double precision
                 using glm_float_t = T;
                 using glm_vec3f_t = glm::vec<3, glm_float_t, glm::aligned_highp>;
@@ -90,6 +84,7 @@ namespace chad::detail::map {
                 if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
                 if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
                 if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
+
                 while (completion_mask != 0b111) {
                     if (dim_step.x < dim_step.y) {
                         if (dim_step.x < dim_step.z) {
@@ -126,11 +121,12 @@ namespace chad::detail::map {
                     float signed_distance = static_cast<float>(glm::dot(normal, point_to_voxel));
                     signed_distance = std::clamp<float>(signed_distance, -sdf_trunc, +sdf_trunc);
                     // integrate truncated sd measurement into octree
+                    _tsdf_octree2.insert(morton_code, signed_distance);
 
-                    // _tsdf_octree1.insert(morton_code);
-                    // _tsdf_octree2.insert(morton_code, signed_distance);
-                    _tsdf_octree3.insert(morton_code, signed_distance);
-
+                    // auto& leaf = _tsdf_octree1.insert(morton_code);
+                    // leaf._signed_distance = leaf._signed_distance * static_cast<float>(leaf._weight) + signed_distance;
+                    // leaf._weight++;
+                    // leaf._signed_distance = leaf._signed_distance / static_cast<float>(leaf._weight);
                 }
                 traversed_voxels.clear();
             }
@@ -146,8 +142,7 @@ namespace chad::detail::map {
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
         Octree _tsdf_octree1; // DEBUG
-        Octree2<17, 2> _tsdf_octree2; // DEBUG
-        Octree3<17, 2> _tsdf_octree3;
+        Octree2<17, 2> _tsdf_octree2;
         // mutex for async safety
         std::mutex _mutex;
     };
