@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <numbers>
 #include <fstream>
 #include <algorithm>
 #include <execution>

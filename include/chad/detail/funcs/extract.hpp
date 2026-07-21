@@ -22,6 +22,7 @@ namespace chad::detail::funcs {
         return points;
     }
 
+    // copy xyz values from input array into a std::vector of glm::vec3
     template<std::size_t XYZ_BYTES>
     auto inline extract_xyz(const std::uint8_t* data_p, std::size_t data_bytes, chad::PointFlags data_flags) -> std::vector<glm::aligned_vec3> {
         // ensure that no RGB bit is set (not yet implemented)
@@ -35,6 +36,7 @@ namespace chad::detail::funcs {
         else                                            return extract_xyz<XYZ_BYTES, 0>(data_p, data_bytes, data_flags);
     }
 
+    // copy xyz values from input array into a std::vector of glm::vec3
     auto inline extract_xyz(const std::uint8_t* data_p, std::size_t data_bytes, chad::PointFlags data_flags) -> std::vector<glm::aligned_vec3> {
         // ensure exactly one XYZ bit is set
         constexpr PointFlags xyz_all = PointFlagBits::eXYZ_F32 | PointFlagBits::eXYZ_F64 | PointFlagBits::eXYZW_F32 | PointFlagBits::eXYZW_F64;

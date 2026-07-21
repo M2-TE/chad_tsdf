@@ -43,7 +43,7 @@ void inline sample_cube(std::vector<glm::vec3>& points, glm::vec3 offset) {
 
 [[maybe_unused]]
 void inline do_thingy() {
-    std::vector<glm::vec3> points { 10'000'000 };
+    std::vector<glm::vec3> points { 1'000'000 }; // goal should be 10'000'000 per second
 
     // create map with enabled debug outputs
     chad::TSDFMap map{ 0.05f, 0.1f, 3.0f };
@@ -52,8 +52,8 @@ void inline do_thingy() {
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
         { 0.0, 0, 0 },
-        { 3.5, 0, 0 },
-        { 7.0, 0, 0 },
+        // { 3.5, 0, 0 },
+        // { 7.0, 0, 0 },
     };
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i], 20.0);

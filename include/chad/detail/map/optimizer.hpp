@@ -77,16 +77,65 @@ namespace chad::detail::map {
         }
 
     private:
+        // get type dynamically, since it is templated
+        using octree_t = decltype(ActiveSubmap::_tsdf_octree);
+
+        // DAG will contain separate trees (e.g. currently TSDF and WEIGHT trees)
+        struct Thingymajib {
+            dag::ADDR_T addr_tsdf;
+            dag::ADDR_T addr_weight;
+        };
+
+        template<std::size_t DEPTH>
+        auto inline create_dag_node(dag::Storage& dag,
+                                    const octree_t::Node& node,
+                                    float sdf_trunc_reciprocal) -> Thingymajib {
+            std::array<uint32_t, 8> child_addresses; // TODO: need one for tsdf, one for weights
+            for (std::size_t child_i = 0; child_i < 8; child_i++) {
+                octree_t::NodeAddr child_addr = node._children[child_i];
+                if (child_addr != 0) {
+
+                }
+            }
+        }
+
+        // template specialization to create leaf clusters
+        template<>
+        auto inline create_dag_node<20>(dag::Storage& dag,
+                                        const octree_t::Node& node,
+                                        float sdf_trunc_reciprocal) -> Thingymajib {
+            // create a leaf cluster from all 8 leaves
+            LeafCluster lc_tsdfs, lc_weigh;
+            for (uint8_t leaf_i = 0; leaf_i < 8; leaf_i++) {
+                const octree_t::Leaf& leaf = node._leaves[leaf_i];
+                if (leaf._weight == 0) {
+                    lc_tsdfs._tsdfs.set_empty(leaf_i);
+                    lc_weigh._weigh.set_empty(leaf_i);
+                }
+                else {
+                    // weight can be above 255, so we cap it at the uint8_t limit
+                    std::uint8_t weight = std::min<std::uint32_t>(leaf._weight, std::numeric_limits<std::uint8_t>::max());
+                    lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, sdf_trunc_reciprocal);
+                    lc_weigh._weigh.set(leaf_i, weight);
+                }
+            }
+            // add the leaf clusters to DAG and remember their addresses
+            return Thingymajib {
+                .addr_tsdf   = dag.add_lc(lc_tsdfs),
+                .addr_weight = dag.add_lc(lc_weigh),
+            };
+        }
+
         // finish entire submap and create DAG octree (TODO)
         void on_submap_completion(ActiveSubmap& submap, dag::Storage& dag) {
-            // writing data to the DAG should be done async, so we lock the mutex
+            // lock DAG (writing)
             std::unique_lock lock_dag{ dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
                 lock_dag.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
             }
-            // same for the submap that we try to read
+            // lock submap (reading)
             std::unique_lock lock_sub{ submap._mutex, std::defer_lock };
             if (!lock_sub.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
@@ -94,15 +143,15 @@ namespace chad::detail::map {
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
 
-
-            // construct earlier levels for octree (needed for bottom-up construction of DAG tree)
-            // TODO: should do that in octree itself (less allocation overhead)
-
+            // constexpr std::uint64_t depth = DEPTH_START - 1;
+            // constexpr std::uint64_t highbit = std::uint64_t(1) << 63;
+            // constexpr std::uint64_t mask = (highbit >> depth * 3) - 1;
 
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG
 
+            // TODO: hashmap of nodes (can use DAG addresses already) with a morton code of stronger discretization to build lower levels after
 
-            // // trackers for the traversed path and nodes
+
             // std::array<uint8_t, DAGStorage::MAX_DEPTH> path;
             // std::array<uint32_t, DAGStorage::MAX_DEPTH> nodes_oct; // for reading
             // std::array<std::array<uint32_t, 8>, DAGStorage::MAX_DEPTH> nodes_tsdf;   // for writing
@@ -223,8 +272,7 @@ namespace chad::detail::map {
         constexpr static std::size_t ACTIVE_SUBMAP_COUNT = 2; // multiple frames-in-flight for smoother parallelization
         std::array<ActiveSubmap, ACTIVE_SUBMAP_COUNT> _active_submaps;
         std::array<std::jthread, ACTIVE_SUBMAP_COUNT> _active_threads;
-        std::size_t _active_i = 0; // index for currently active submap (TODO: atomic?)
-        std::jthread _dag_thread;
+        std::size_t _active_i = 0; // index for currently active submap
         // persistent data per submap
         std::vector<Submap> _submaps;
         // persistent data per sub-submap
