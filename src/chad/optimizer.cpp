@@ -22,9 +22,12 @@ namespace chad::detail::map {
         gtsam::SharedDiagonal _loop_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.02, 0.02, 0.02, 0.1, 0.1, 0.1).finished());
         gtsam::ISAM2 _isam{ gtsam::ISAM2Params{ gtsam::ISAM2GaussNewtonParams(), _relinearize_threshold, _relinearize_skip }};
     };
-    Optimizer::Optimizer(float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold):
+    Optimizer::Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold):
+        _dag(dag),
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
+        _sdf_res_reciprocal(1.0f / sdf_res),
+        _sdf_trunc_reciprocal(1.0f / sdf_trunc),
         _submap_xyz_threshhold(submap_xyz_threshhold),
         _submap_cor_threshhold(submap_cor_threshhold) {
     }

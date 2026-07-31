@@ -26,6 +26,7 @@ namespace chad::detail::map {
         auto static consteval get_span() -> std::uint64_t {
             return DEPTH_SPAN;
         }
+
         void inline clear() {
             _roots.clear();
             _nodes.clear();
@@ -56,6 +57,7 @@ namespace chad::detail::map {
                 return (morton_code >> shift & ~mask)._value;
             };
 
+            // lambda to obtain leaf index from morton code at final depth
             auto obtain_leaf_index = [](MortonCode morton_code) -> std::uint64_t {
                 // shift relevant bits for current depth to LSB
                 constexpr std::uint64_t shift = (21 - (21 - DEPTH_SPAN) - DEPTH_SPAN) * DEPTH_BITS; // TODO: untangle this mess

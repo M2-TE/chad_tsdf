@@ -10,9 +10,9 @@ namespace chad {
         // Wrapper for cluster of 8 TSDF values
         struct TSDFs {
             // set 8 bits to represent signed distance, normalized within truncation distance
-            void inline set(uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) {
+            void inline set(std::uint8_t leaf_i, float signed_distance, float sdf_trunc_recip) {
                 // absolute value range for signed distances stored as integers
-                static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
+                static constexpr std::uint64_t sd_range_abs = std::numeric_limits<std::uint8_t>::max() / 2;
 
                 float sd = signed_distance;
                 // scale signed distance to be normalized within truncation distance
@@ -23,15 +23,19 @@ namespace chad {
                 // TODO: verify that sd is never 0xff
 
                 // shove the bits into leaf cluster
-                _value |= uint64_t(sd) << uint64_t(leaf_i * 8);
+                _value |= std::uint64_t(sd) << std::uint64_t(leaf_i * 8);
             }
             // set 8 bits to represent an empty leaf
-            void inline set_empty(uint8_t leaf_i) {
+            void inline set_empty(std::uint8_t leaf_i) {
                 // bits 0xff for signed distance signify an empty leaf
-                _value |= uint64_t(0xff) << uint64_t(leaf_i * 8);
+                _value |= std::uint64_t(0xff) << std::uint64_t(leaf_i * 8);
+            }
+            // check if all leaves are empty
+            bool inline is_empty() {
+                return _value == std::numeric_limits<std::uint64_t>::max();
             }
             // retrieve signed distance from single leaf if it is not empty
-            auto inline try_get(uint8_t leaf_i, float sdf_trunc) const -> std::pair<float, bool> {
+            auto inline try_get(std::uint8_t leaf_i, float sdf_trunc) const -> std::pair<float, bool> {
                 // absolute value range for signed distances stored as integers
                 static constexpr uint64_t sd_range_abs = std::numeric_limits<uint8_t>::max() / 2;
 
@@ -50,7 +54,7 @@ namespace chad {
                 signed_distance *= sdf_trunc;
                 return { signed_distance, true };
             }
-            uint64_t _value;
+            std::uint64_t _value;
         };
         // Wrapper for cluster of 8 weights
         struct Weights {
@@ -61,6 +65,9 @@ namespace chad {
             }
             // set 8 bits to represent an empty leaf (does nothing, empty bits are 0x0)
             void inline set_empty(uint8_t) {
+            }
+            bool inline is_empty() {
+                return _value == 0;
             }
             // retrieve signed distance from single leaf if it is not empty
             auto try_get(uint8_t leaf_i) const -> std::pair<uint8_t, bool> {
@@ -80,16 +87,12 @@ namespace chad {
             }
             uint64_t _value;
         };
-
-        bool inline is_empty() {
-            return _value == std::numeric_limits<uint64_t>::max();
-        }
         bool inline operator==(const LeafCluster& other) const {
             return _value == other._value;
         }
 
         union {
-            std::uint64_t _value; // Raw cluster data as 64-bit uint
+            std::uint64_t _value = 0; // Raw cluster data as 64-bit uint
             TSDFs   _tsdfs;
             Weights _weigh;
         };

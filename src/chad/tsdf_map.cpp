@@ -23,7 +23,7 @@ namespace chad {
         _active_octree_p(std::make_unique<detail::Octree>()),
         _dag_storage_p(std::make_unique<detail::DAGStorage>()),
         _dag_p(std::make_unique<detail::dag::Storage>()),
-        _map_optimizer_p(std::make_unique<detail::map::Optimizer>(sdf_res, sdf_trunc, submap_xyz_threshhold, submap_cor_threshhold)) {
+        _map_optimizer_p(std::make_unique<detail::map::Optimizer>(*_dag_p, sdf_res, sdf_trunc, submap_xyz_threshhold, submap_cor_threshhold)) {
     }
     TSDFMap::~TSDFMap() {
     }
@@ -143,7 +143,7 @@ namespace chad {
 
         // add scan to the map optimizer (will handle sub-/submapping)
         timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(*_dag_p, std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
+        _map_optimizer_p->add_scan(std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Optimizer");
 
         MEASURE_TIME(beg, "-- Total insertion time");

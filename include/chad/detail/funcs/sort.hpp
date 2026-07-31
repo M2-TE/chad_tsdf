@@ -18,16 +18,9 @@ namespace chad::detail::funcs {
         std::vector<std::uint32_t> indices;
         indices.resize(points.size());
         std::iota(indices.begin(), indices.end(), 0);
-        #ifdef __cpp_lib_execution // prefer to use std::execution policy if available
         std::sort(std::execution::par, indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
             return morton_codes[a] < morton_codes[b];
         });
-        #else
-        #warning "__cpp_lib_execution" is unavailable, resorting to single-threaded std::execution
-        std::sort(indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
-            return morton_codes[a] < morton_codes[b];
-        });
-        #endif
 
         // sort using already sorted indices
         const auto points_copy = points;
