@@ -23,16 +23,19 @@ namespace chad::detail::ndd {
             for (auto& ring: _cells) ring.fill(0.0f);
 
             // just having 4 threads works perfectly for this workload
+            constexpr std::size_t thread_count = 4;
             std::vector<std::jthread> threads;
-            threads.reserve(4);
+            threads.reserve(thread_count);
 
-            // calculate the cell index for each point beforehand (spread out across 4 threads)
+            // have those 4 threads write all the cell indices
             std::vector<CellIndex> cell_indices;
             cell_indices.resize(points.size());
-            for (std::uint32_t thread_i = 0; thread_i < 4; thread_i++) {
-                std::uint32_t step = points.size() / 4;
+
+            // calculate the cell index for each point beforehand (spread out across 4 threads)
+            for (std::uint32_t thread_i = 0; thread_i < thread_count; thread_i++) {
+                std::uint32_t step = points.size() / thread_count;
                 std::uint32_t beg = step * thread_i;
-                std::uint32_t end = (thread_i == 3) ? (points.size() - 1) : (step + beg);
+                std::uint32_t end = (thread_i == thread_count - 1) ? (points.size() - 1) : (beg + step - 1);
                 threads.emplace_back([&points, &cell_indices, position, beg, end]() {
                     for (std::uint32_t point_i = beg; point_i < end; point_i++) {
                         // make sure points are centered around position
@@ -54,13 +57,14 @@ namespace chad::detail::ndd {
                         // clamp just for safety sake
                         ring_i = std::clamp<std::uint32_t>(ring_i, 1, N_RINGS);
                         sector_i = std::clamp<std::uint32_t>(sector_i, 1, N_SECTORS);
-                        cell_indices[point_i] = CellIndex{ ring_i - 1, sector_i - 1};
+                        cell_indices[point_i] = CellIndex{ ring_i - 1, sector_i - 1 };
                     }
                 });
             }
+            for (auto& thread: threads) thread.join();
 
             // count the number of points that will be stored in each cell
-            std::array<std::array<std::uint32_t, N_SECTORS>, N_RINGS> cell_pointcounts;
+            std::array<std::array<std::uint32_t, N_SECTORS>, N_RINGS> cell_pointcounts{};
             for (const auto& index: cell_indices) {
                 cell_pointcounts[index.ring_i][index.sector_i]++;
             }

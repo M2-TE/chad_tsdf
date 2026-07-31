@@ -87,15 +87,16 @@ namespace chad::detail::map {
             const octree_t::Node& node = octree._nodes[node_addr];
 
             // keep track of newly created dag nodes (to create their parents nodes after)
-            std::array<std::array<dag::ADDR_T, 8>, octree_t::get_span() - 1> new_nodes_tsdfs;
-            std::array<std::array<dag::ADDR_T, 8>, octree_t::get_span() - 1> new_nodes_weigh;
+            static_assert(octree_t::get_span() == 2);
+            std::array<dag::ADDR_T, 8> new_nodes_tsdfs{};
+            std::array<dag::ADDR_T, 8> new_nodes_weigh{};
 
             // node index will go from 0 to octree_t::Node::DEPTH_CHILDREN, e.g. 8 (span==1), 64 (span==2), etc
             for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {
                 // go over all 8 potential children
                 bool empty = true;
-                std::array<dag::ADDR_T, 8> new_children_tsdfs;
-                std::array<dag::ADDR_T, 8> new_children_weigh;
+                std::array<dag::ADDR_T, 8> new_children_tsdfs{};
+                std::array<dag::ADDR_T, 8> new_children_weigh{};
                 for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
                     // retrieve child address
                     octree_t::NodeAddr child_addr = node._children[node_i + child_i];
@@ -115,8 +116,8 @@ namespace chad::detail::map {
                     ._tsdfs = dag.add_node(new_children_tsdfs, real_depth),
                     ._weigh = dag.add_node(new_children_weigh, real_depth),
                 };
-                new_nodes_tsdfs.back()[node_i / 8] = addresses._tsdfs;
-                new_nodes_weigh.back()[node_i / 8] = addresses._weigh;
+                new_nodes_tsdfs[node_i / 8] = addresses._tsdfs;
+                new_nodes_weigh[node_i / 8] = addresses._weigh;
 
                 // DEBUG: would otherwise need to create parents here (and partially clear e.g. new_nodes_tsdfs)
                 static_assert(octree_t::get_span() <= 2);
@@ -124,8 +125,8 @@ namespace chad::detail::map {
 
             // create and return highest-level DAG node addresses
             return dag::Addresses {
-                ._tsdfs = dag.add_node(new_nodes_tsdfs.front(), DEPTH),
-                ._weigh = dag.add_node(new_nodes_weigh.front(), DEPTH),
+                ._tsdfs = dag.add_node(new_nodes_tsdfs, DEPTH),
+                ._weigh = dag.add_node(new_nodes_weigh, DEPTH),
             };
         }
 
@@ -137,8 +138,8 @@ namespace chad::detail::map {
 
             // this array contains up to octree_t::Node::DEPTH_CHILDREN leaves (e.g. 64 with span==2)
             const auto& leaves = octree._nodes[node_addr]._leaves;
-            std::array<dag::ADDR_T, 8> new_leaf_clusters_tsdfs;
-            std::array<dag::ADDR_T, 8> new_leaf_clusters_weigh;
+            std::array<dag::ADDR_T, 8> new_leaf_clusters_tsdfs{};
+            std::array<dag::ADDR_T, 8> new_leaf_clusters_weigh{};
 
             // node index will go from 0 to octree_t::Node::DEPTH_CHILDREN, e.g. 8 (span==1), 64 (span==2), etc
             for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {

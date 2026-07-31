@@ -121,13 +121,12 @@ namespace chad {
         std::vector<glm::aligned_vec3> points_xyz = detail::funcs::extract_xyz(data_p, data_bytes, data_flags);
         if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
 
-        // create a scan context descriptor from the pointcloud
+        // create a scan context descriptor from the pointcloud (copy points_xyz to avoid data race)
         detail::ndd::Descriptor descriptor;
-        const std::vector<glm::aligned_vec3> points_xyz_copy = points_xyz;
-        std::jthread descriptor_thread{[&](){
+        std::jthread descriptor_thread{[this, &descriptor, points_xyz, pose](){
             auto timestamp = std::chrono::steady_clock::now();
             // use copied points vector for thread safety
-            descriptor = detail::ndd::Descriptor{ points_xyz_copy, pose._position };
+            descriptor = detail::ndd::Descriptor{ points_xyz, pose._position };
             if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated descriptor (async)");
         }};
 
