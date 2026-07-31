@@ -86,8 +86,6 @@ namespace chad::detail::map {
         auto inline create_dag_node(dag::Storage& dag, const octree_t& octree, octree_t::NodeAddr node_addr) -> dag::Addresses {
             const octree_t::Node& node = octree._nodes[node_addr];
 
-            fmt::println("depth {}: beginning node ctor", DEPTH);
-
             // keep track of newly created dag nodes (to create their parents nodes after)
             std::array<std::array<dag::ADDR_T, 8>, octree_t::get_span() - 1> new_nodes_tsdfs;
             std::array<std::array<dag::ADDR_T, 8>, octree_t::get_span() - 1> new_nodes_weigh;
@@ -95,18 +93,21 @@ namespace chad::detail::map {
             // node index will go from 0 to octree_t::Node::DEPTH_CHILDREN, e.g. 8 (span==1), 64 (span==2), etc
             for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {
                 // go over all 8 potential children
+                bool empty = true;
                 std::array<dag::ADDR_T, 8> new_children_tsdfs;
                 std::array<dag::ADDR_T, 8> new_children_weigh;
                 for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
                     // retrieve child address
                     octree_t::NodeAddr child_addr = node._children[node_i + child_i];
                     if (child_addr == 0) continue;
+                    empty = false;
 
                     // if it exists, recursively continue at that node
                     dag::Addresses addresses = create_dag_node<DEPTH + octree_t::get_span()>(dag, octree, child_addr);
                     new_children_tsdfs[child_i] = addresses._tsdfs;
                     new_children_weigh[child_i] = addresses._weigh;
                 }
+                if (empty) continue;
 
                 // this node will always be the lowest-depth one
                 constexpr std::uint32_t real_depth = DEPTH + octree_t::get_span() - 1;
@@ -133,8 +134,6 @@ namespace chad::detail::map {
         auto inline create_dag_node<DEPTH_LEAVES>(dag::Storage& dag, const octree_t& octree, octree_t::NodeAddr node_addr) -> dag::Addresses {
             static_assert(octree_t::get_span() > 1); // this would otherwise needlessly complicate things even more
             static_assert(octree_t::get_span() == 2); // NOTE: would also otherwise complicate things, got more important things to work on
-
-            fmt::println("leaf");
 
             // this array contains up to octree_t::Node::DEPTH_CHILDREN leaves (e.g. 64 with span==2)
             const auto& leaves = octree._nodes[node_addr]._leaves;
@@ -197,12 +196,11 @@ namespace chad::detail::map {
             // TODO: hashmap of nodes (can use DAG addresses already) with a morton code of stronger discretization to build lower levels after
 
             octree_t& octree = submap._tsdf_octree;
+            gtl::flat_hash_map<MortonCode, dag::ADDR_T> addresses_TODO;
             for (const auto [morton_code, node_addr]: octree._roots) {
-                fmt::println("before");
                 create_dag_node<octree_t::get_start()>(_dag, octree, node_addr);
-                fmt::println("after");
-                std::exit(0);
             }
+            fmt::println("after");
 
             // std::array<std::uint8_t,               21> path;
             // std::array<octree_t::NodeAddr,         21> read_nodes;
