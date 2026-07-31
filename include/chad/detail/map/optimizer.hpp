@@ -1,7 +1,9 @@
 #pragma once
 #include "chad/detail/ndd/ndd.hpp"
 #include "chad/detail/dag/storage.hpp"
+#include "chad/detail/funcs/sort.hpp"
 #include "chad/detail/funcs/timing.hpp"
+#include "chad/detail/funcs/normals.hpp"
 #include "chad/detail/map/submap.hpp"
 #include "chad/detail/map/indices.hpp"
 #include "chad/detail/map/active_submap.hpp"
@@ -11,13 +13,33 @@ namespace chad::detail::map {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
 
-        void add_scan(std::vector<glm::aligned_vec3>&& points,
-                      const std::vector<glm::aligned_vec3>& normals,
-                      Pose pose,
-                      ndd::Descriptor& descriptor,
-                      std::jthread& descriptor_thread) {
+        void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
+            // create a scan context descriptor from the pointcloud (copy points to avoid data race)
+            detail::ndd::Descriptor descriptor;
+            std::jthread descriptor_thread{[&descriptor, points, pose]() {
+                auto timestamp = std::chrono::steady_clock::now();
+                // use copied points vector for thread safety
+                descriptor = detail::ndd::Descriptor{ points, pose._position };
+                MEASURE_TIME(timestamp, ">> async: Calculated descriptor");
+            }};
+
+            // sort points and estimate normals
+            std::vector<glm::aligned_vec3> normals;
+            std::jthread points_normals_thread{[this, &normals, &points, pose]() {
+                // sort points by their morton code, discretized to the voxel resolution
+                auto timestamp = std::chrono::steady_clock::now();
+                detail::funcs::sort(points, _sdf_res);
+                MEASURE_TIME(timestamp, ">> async: Points sorted by morton code");
+
+                // estimate the normal of every point
+                timestamp = std::chrono::steady_clock::now();
+                normals = detail::funcs::estimate_normals(points, pose._position, _sdf_res);
+                MEASURE_TIME(timestamp, ">> async: Normal estimation");
+            }};
+
             // get the active submap that is currently in use (basically a swap chain)
             ActiveSubmap* active_submap_p = &_active_submaps[_active_i];
+
             // make sure submap is not busy (should normally never wait, hence the try_lock)
             std::unique_lock lock{ active_submap_p->_mutex, std::defer_lock };
             if (!lock.try_lock()) {
@@ -36,7 +58,7 @@ namespace chad::detail::map {
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p]() {
                         auto timestamp = std::chrono::steady_clock::now();
                         on_submap_completion(*active_submap_p);
-                        MEASURE_TIME(timestamp, "Submap completed (async)");
+                        MEASURE_TIME(timestamp, ">> async: Submap completed");
                     }};
 
                     // swap submap chain to continue work
@@ -68,6 +90,11 @@ namespace chad::detail::map {
                 on_sub_submap_completion(*active_submap_p, std::move(descriptor));
                 MEASURE_TIME(timestamp, "Sub-submap initialization");
             }
+
+            // wait for the point sort and normal estimation to finish
+            timestamp = std::chrono::steady_clock::now();
+            points_normals_thread.join();
+            MEASURE_TIME(timestamp, "Waited for point sort and normal estimation");
 
             // insert new data into active submap
             timestamp = std::chrono::steady_clock::now();
@@ -188,20 +215,21 @@ namespace chad::detail::map {
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
 
-            // constexpr std::uint64_t depth = DEPTH_START - 1;
-            // constexpr std::uint64_t highbit = std::uint64_t(1) << 63;
-            // constexpr std::uint64_t mask = (highbit >> depth * 3) - 1;
-
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG
 
             // TODO: hashmap of nodes (can use DAG addresses already) with a morton code of stronger discretization to build lower levels after
 
             octree_t& octree = submap._tsdf_octree;
-            gtl::flat_hash_map<MortonCode, dag::ADDR_T> addresses_TODO;
+            gtl::flat_hash_map<MortonCode, dag::Addresses> address_cache_TODO;
             for (const auto [morton_code, node_addr]: octree._roots) {
-                create_dag_node<octree_t::get_start()>(_dag, octree, node_addr);
+                [[maybe_unused]] dag::Addresses addresses = create_dag_node<octree_t::get_start()>(_dag, octree, node_addr);
+
+                // constexpr std::uint64_t depth = octree_t::get_start() - 1;
+                // constexpr std::uint64_t highbit = std::uint64_t(1) << 63;
+                // constexpr std::uint64_t mask = (highbit >> depth * 3) - 1;
+
+                // TODO: output morton_code and see if mask fits or is off by 3 bits!
             }
-            fmt::println("after");
 
             // std::array<std::uint8_t,               21> path;
             // std::array<octree_t::NodeAddr,         21> read_nodes;

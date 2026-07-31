@@ -116,34 +116,13 @@ namespace chad {
         // convert position and rotation into glm structs for convenience
         const detail::Pose pose{ position, rotation };
 
-        // use templating for SIMD leverage (constexpr byte width)
+        // extract points from input -> use templating for SIMD leverage (constexpr byte width)
         auto timestamp = std::chrono::steady_clock::now();
         std::vector<glm::aligned_vec3> points_xyz = detail::funcs::extract_xyz(data_p, data_bytes, data_flags);
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Extracted XYZ data from input");
-
-        // create a scan context descriptor from the pointcloud (copy points_xyz to avoid data race)
-        detail::ndd::Descriptor descriptor;
-        std::jthread descriptor_thread{[this, &descriptor, points_xyz, pose](){
-            auto timestamp = std::chrono::steady_clock::now();
-            // use copied points vector for thread safety
-            descriptor = detail::ndd::Descriptor{ points_xyz, pose._position };
-            if (_debug_outputs) MEASURE_TIME(timestamp, "Calculated descriptor (async)");
-        }};
-
-        // sort points by their morton code, discretized to the voxel resolution
-        timestamp = std::chrono::steady_clock::now();
-        detail::funcs::sort(points_xyz, _sdf_res);
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Points sorted by morton code");
-
-        // estimate the normal of every point
-        timestamp = std::chrono::steady_clock::now();
-        const std::vector<glm::aligned_vec3> normals = detail::funcs::estimate_normals(points_xyz, pose._position, _sdf_res);
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Normal estimation");
+        if (_debug_outputs) MEASURE_TIME(timestamp, "Preprocessing: Extracted XYZ data from input");
 
         // add scan to the map optimizer (will handle sub-/submapping)
-        timestamp = std::chrono::steady_clock::now();
-        _map_optimizer_p->add_scan(std::move(points_xyz), std::move(normals), pose, descriptor, descriptor_thread);
-        if (_debug_outputs) MEASURE_TIME(timestamp, "Optimizer");
+        _map_optimizer_p->add_scan(std::move(points_xyz), pose);
 
         MEASURE_TIME(beg, "-- Total insertion time");
     }
