@@ -55,6 +55,7 @@ void inline do_thingy() {
         { 3.5, 0, 0 },
         // { 7.0, 0, 0 },
     };
+    // for (int i = 0; i < 100; i++) positions.push_back(positions.back() + glm::vec3{ 0.2, 0.2, 0.2 });
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i], 20.0);
         // sample_cube(points, positions[i]);

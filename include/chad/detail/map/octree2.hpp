@@ -33,8 +33,7 @@ namespace chad::detail::map {
         }
         void inline insert(MortonCode morton_code, float signed_distance) {
             // mask out the bits relevant for hashmap lookup
-            constexpr std::uint64_t DEPTH_BITS = 3; // every child in a single depth (2x2x2) is addressable by 3 bits
-            constexpr std::uint64_t shift_distance = sizeof(std::uint64_t) * 8 - DEPTH_START * DEPTH_BITS - 1;
+            constexpr std::uint64_t shift_distance = 63 - DEPTH_START * 3;
             constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> shift_distance << shift_distance;
 
             // obtain node using masked morton code as the key
@@ -46,32 +45,10 @@ namespace chad::detail::map {
             }
             NodeAddr node_addr = it->second;
 
-            // lambda to obtain child index from a morton code for a given node at a given depth
-            auto obtain_child_index = [](MortonCode morton_code, std::uint64_t depth) -> std::uint64_t {
-                // shift relevant bits for current depth to LSB
-                std::uint64_t shift = (21 - depth - DEPTH_SPAN) * DEPTH_BITS;
-                // mask out all the other bits (will be inverted in next step)
-                constexpr std::uint64_t mask_shift = DEPTH_SPAN * DEPTH_BITS;
-                constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> mask_shift << mask_shift;
-                // perform shift and mask on given morton code
-                return (morton_code >> shift & ~mask)._value;
-            };
-
-            // lambda to obtain leaf index from morton code at final depth
-            auto obtain_leaf_index = [](MortonCode morton_code) -> std::uint64_t {
-                // shift relevant bits for current depth to LSB
-                constexpr std::uint64_t shift = (21 - (21 - DEPTH_SPAN) - DEPTH_SPAN) * DEPTH_BITS; // TODO: untangle this mess
-                // mask out all the other bits (will be inverted in next step)
-                constexpr std::uint64_t mask_shift = DEPTH_SPAN * DEPTH_BITS;
-                constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> mask_shift << mask_shift;
-                // perform shift and mask on given morton code
-                return (morton_code >> shift & ~mask)._value;
-            };
-
             // walk through each node to reach leaves
             for (std::uint64_t depth = DEPTH_START; depth < 21 - DEPTH_SPAN; depth += DEPTH_SPAN) {
                 // walk to next child node
-                std::uint64_t child_index = obtain_child_index(morton_code, depth);
+                std::uint64_t child_index = morton_code.child<DEPTH_SPAN>(depth);
                 NodeAddr child_addr = _nodes[node_addr]._children[child_index];
                 // if one didn't exist yet, create it
                 if (child_addr == 0) {
@@ -83,7 +60,7 @@ namespace chad::detail::map {
             }
 
             // walk to the leaf node
-            std::uint64_t leaf_index = obtain_leaf_index(morton_code);
+            std::uint64_t leaf_index = morton_code.child<21 - DEPTH_SPAN, DEPTH_SPAN>();
             Leaf& leaf = _nodes[node_addr]._leaves[leaf_index];
 
             // weighted merge of signed distance and weight increment

@@ -14,27 +14,17 @@ namespace chad::detail::map {
         ~Optimizer();
 
         void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
-            // create a scan context descriptor from the pointcloud (copy points to avoid data race)
+            // async: create a scan context descriptor from the pointcloud (copy points to avoid data race)
             detail::ndd::Descriptor descriptor;
             std::jthread descriptor_thread{[&descriptor, points, pose]() {
-                auto timestamp = std::chrono::steady_clock::now();
-                // use copied points vector for thread safety
                 descriptor = detail::ndd::Descriptor{ points, pose._position };
-                MEASURE_TIME(timestamp, ">> async: Calculated descriptor");
             }};
 
-            // sort points and estimate normals
+            // async: sort points and estimate normals
             std::vector<glm::aligned_vec3> normals;
             std::jthread points_normals_thread{[this, &normals, &points, pose]() {
-                // sort points by their morton code, discretized to the voxel resolution
-                auto timestamp = std::chrono::steady_clock::now();
                 detail::funcs::sort(points, _sdf_res);
-                MEASURE_TIME(timestamp, ">> async: Points sorted by morton code");
-
-                // estimate the normal of every point
-                timestamp = std::chrono::steady_clock::now();
                 normals = detail::funcs::estimate_normals(points, pose._position, _sdf_res);
-                MEASURE_TIME(timestamp, ">> async: Normal estimation");
             }};
 
             // get the active submap that is currently in use (basically a swap chain)
@@ -47,13 +37,14 @@ namespace chad::detail::map {
                 lock.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: Optimizer waited for submap lock release");
             }
-            lock.unlock(); // TODO: really think about whether this should be unlocked early!
+            lock.unlock(); // safe to unlock early
 
             // Submap: check whether translational delta threshhold was crossed
             if (!active_submap_p->_all_poses.empty()) {
                 Pose pose_first = active_submap_p->_all_poses.front();
                 float distance = glm::distance(pose_first._position, pose._position);
                 if (distance > _submap_xyz_threshhold) {
+                    fmt::println("SUBMAP DONE");
                     // let another thread handle dag writes
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p]() {
                         auto timestamp = std::chrono::steady_clock::now();
@@ -220,76 +211,26 @@ namespace chad::detail::map {
             // TODO: hashmap of nodes (can use DAG addresses already) with a morton code of stronger discretization to build lower levels after
 
             octree_t& octree = submap._tsdf_octree;
-            gtl::flat_hash_map<MortonCode, dag::Addresses> address_cache_TODO;
+            gtl::flat_hash_map<MortonCode, std::array<dag::Addresses, 8>> address_cache;
             for (const auto [morton_code, node_addr]: octree._roots) {
-                [[maybe_unused]] dag::Addresses addresses = create_dag_node<octree_t::get_start()>(_dag, octree, node_addr);
+                // create dag nodes and leaves at lower depths than octree starter depth
+                constexpr std::uint64_t depth = octree_t::get_start();
+                dag::Addresses addresses = create_dag_node<depth>(_dag, octree, node_addr);
 
-                // constexpr std::uint64_t depth = octree_t::get_start() - 1;
-                // constexpr std::uint64_t highbit = std::uint64_t(1) << 63;
-                // constexpr std::uint64_t mask = (highbit >> depth * 3) - 1;
-
-                // TODO: output morton_code and see if mask fits or is off by 3 bits!
+                // write to address cache using higher discretization (to build parent node)
+                auto [it, b] = address_cache.try_emplace(morton_code.mask<depth - 1>());
+                // write address to correct child index within (still nonexistant) parent node
+                std::uint64_t child_index = morton_code.child<depth - 1>();
+                it->second[child_index] = addresses;
             }
-
-            // std::array<std::uint8_t,               21> path;
-            // std::array<octree_t::NodeAddr,         21> read_nodes;
-            // std::array<std::array<dag::ADDR_T, 8>, 21> write_nodes_tsdf;
-            // std::array<std::array<dag::ADDR_T, 8>, 21> write_nodes_weight;
-            // path.fill(0);
-            // nodes_oct.fill(0);
-            // // nodes_oct[0] = Octree::ROOT;
-            // nodes_tsdf.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
-            // nodes_weight.fill({ 0, 0, 0, 0, 0, 0, 0, 0 });
-
-            // // traverse octree to build DAG
-            // uint32_t depth = 0;
-            // detail::dag::RootIndices roots;
-            // while (true) {
-            //     uint8_t child_i = path[depth]++;
-
-            //     // when all children at this depth were iterated
-            //     if (child_i >= 8) {
-            //         // create/get nodes from current node level
-            //         uint32_t addr_tsdf   = dag.add_node(depth, nodes_tsdf  [depth]);
-            //         uint32_t addr_weight = dag.add_node(depth, nodes_weight[depth]);
-
-            //         // reset node tracker for handled nodes
-            //         nodes_tsdf  [depth].fill(0);
-            //         nodes_weight[depth].fill(0);
-
-            //         // check if it's the root node
-            //         if (depth == 0) {
-            //             roots._tsdfs   = addr_tsdf;
-            //             roots._weights = addr_weight;
-            //             break;
-            //         }
-            //         else {
-            //             // continue at parent depth
-            //             depth--;
-            //             // created nodes are standard tree nodes
-            //             uint32_t index_in_parent = path[depth] - 1;
-            //             nodes_tsdf  [depth][index_in_parent] = addr_tsdf;
-            //             nodes_weight[depth][index_in_parent] = addr_weight;
-            //         }
-            //     }
-            //     // node contains node children
-            //     else if (depth < DAGStorage::MAX_DEPTH - 1) {
-            //         // retrieve child address
-            //         uint32_t child_addr = octree.get_node(nodes_oct[depth])[child_i];
-            //         if (child_addr == 0) continue;
-
-            //         // walk deeper
-            //         depth++;
-            //         path[depth] = 0;
-            //         nodes_oct[depth] = child_addr;
-            //     }
-            //     // node contains leaf children
-            //     else {
-            //     }
-            // }
 
             // clean up everything to start a new submap
             submap.clear();
+            lock_sub.unlock();
+
+            // TODO: construct the rest of the DAG tree here
+
+            std::exit(0);
         }
 
         // finish only the sub-submap

@@ -38,35 +38,68 @@ namespace chad::detail {
             return { static_cast<std::int32_t>(x), static_cast<std::int32_t>(y), static_cast<std::int32_t>(z) };
         }
 
-        auto constexpr inline operator==(MortonCode other) const -> bool {
+        // mask out lower bits of the morton code, as per depth (basically higher discretization)
+        template<std::uint64_t depth>
+        auto constexpr inline mask() const noexcept -> MortonCode {
+            constexpr std::uint64_t shift_distance = 63 - depth * 3;
+            constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> shift_distance << shift_distance;
+            return _value & mask;
+        }
+        // mask out lower bits of the morton code, as per depth (basically higher discretization)
+        auto constexpr inline mask(std::uint64_t depth) const noexcept -> MortonCode {
+            std::uint64_t shift_distance = 63 - depth * 3;
+            std::uint64_t mask = static_cast<std::uint64_t>(-1) >> shift_distance << shift_distance;
+            return _value & mask;
+        }
+
+        // get child index at given depth
+        template<std::uint64_t DEPTH, std::uint64_t DEPTH_SPAN = 1>
+        auto constexpr inline child() const noexcept -> std::uint64_t {
+            // shift relevant bits for current depth to LSB
+            constexpr std::uint64_t shift = (21 - DEPTH - DEPTH_SPAN) * 3;
+            // mask out all the other bits (will be inverted in next step)
+            constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> DEPTH_SPAN * 3 << DEPTH_SPAN * 3;
+            return _value >> shift & ~mask;
+        }
+        // get child index at given depth
+        template<std::uint64_t DEPTH_SPAN = 1>
+        auto constexpr inline child(std::uint64_t depth) const noexcept -> std::uint64_t {
+            // shift relevant bits for current depth to LSB
+            std::uint64_t shift = (21 - depth - DEPTH_SPAN) * 3;
+            // mask out all the other bits (will be inverted in next step)
+            constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> DEPTH_SPAN * 3 << DEPTH_SPAN * 3;
+            return _value >> shift & ~mask;
+        }
+
+        auto constexpr inline operator==(MortonCode other) const noexcept -> bool {
             return _value == other._value;
         }
-        auto constexpr inline operator<(MortonCode other) const -> bool {
+        auto constexpr inline operator<(MortonCode other) const noexcept -> bool {
             return _value < other._value;
         }
-        auto constexpr inline operator>(MortonCode other) const -> bool {
+        auto constexpr inline operator>(MortonCode other) const noexcept -> bool {
             return _value > other._value;
         }
-        auto constexpr inline operator&(MortonCode other) const -> MortonCode {
+        auto constexpr inline operator&(MortonCode other) const noexcept -> MortonCode {
             return _value & other._value;
         }
-        auto constexpr inline operator>>(std::uint64_t shift) const -> MortonCode {
+        auto constexpr inline operator>>(std::uint64_t shift) const noexcept -> MortonCode {
             return _value >> shift;
         }
-        auto constexpr inline operator<<(std::uint64_t shift) const -> MortonCode {
+        auto constexpr inline operator<<(std::uint64_t shift) const noexcept -> MortonCode {
             return _value << shift;
         }
 
-        auto constexpr inline friend operator==(std::uint64_t lhs, MortonCode rhs) -> bool {
+        auto constexpr inline friend operator==(std::uint64_t lhs, MortonCode rhs) noexcept -> bool {
             return lhs == rhs._value;
         }
-        auto constexpr inline friend operator<(std::uint64_t lhs, MortonCode rhs) -> bool {
+        auto constexpr inline friend operator<(std::uint64_t lhs, MortonCode rhs) noexcept -> bool {
             return lhs < rhs._value;
         }
-        auto constexpr inline friend operator>(std::uint64_t lhs, MortonCode rhs) -> bool {
+        auto constexpr inline friend operator>(std::uint64_t lhs, MortonCode rhs) noexcept -> bool {
             return lhs > rhs._value;
         }
-        auto constexpr inline friend operator&(std::uint64_t lhs, MortonCode rhs) -> MortonCode {
+        auto constexpr inline friend operator&(std::uint64_t lhs, MortonCode rhs) noexcept -> MortonCode {
             return lhs & rhs._value;
         }
 

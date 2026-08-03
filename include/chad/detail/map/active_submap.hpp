@@ -21,6 +21,7 @@ namespace chad::detail::map {
         }
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
+            std::lock_guard lock{ _mutex };
             _all_poses.push_back(pose);
             _sub_poses.push_back(pose);
 
@@ -282,7 +283,7 @@ namespace chad::detail::map {
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
-        // Octree _tsdf_octree1; // DEBUG
+        // [[deprecated]] Octree _tsdf_octree1; // DEBUG
         Octree2<17, 2> _tsdf_octree;
         // mutex for async safety
         std::mutex _mutex;
