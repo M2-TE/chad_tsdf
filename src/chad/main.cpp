@@ -47,7 +47,6 @@ void inline do_thingy() {
 
     // create map with enabled debug outputs
     chad::TSDFMap map{ 0.05f, 0.1f, 3.0f };
-    map._debug_outputs = true;
 
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {

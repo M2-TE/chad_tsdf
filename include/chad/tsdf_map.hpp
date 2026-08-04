@@ -120,7 +120,6 @@ namespace chad {
     public:
         const float _sdf_res;
         const float _sdf_trunc;
-        bool _debug_outputs = false;
 
     private:
         // transient
@@ -129,7 +128,7 @@ namespace chad {
         [[deprecated]] std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
         [[deprecated]] std::unique_ptr<detail::DAGStorage> _dag_storage_p; // storage for all hashed nodes
         // persistent
-        std::unique_ptr<detail::dag::Storage> _dag_p; // storage for persistent hashed nodes
-        std::unique_ptr<detail::map::Optimizer> _map_optimizer_p; // loop closure detection and pose optimization
+        std::unique_ptr<struct detail::dag::Storage> _dag_p; // storage for persistent hashed nodes
+        std::unique_ptr<struct detail::map::Optimizer> _map_optimizer_p; // active mapping, including loop closure detection and pose optimization
     };
 }

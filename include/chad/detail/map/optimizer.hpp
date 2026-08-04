@@ -12,7 +12,6 @@ namespace chad::detail::map {
     struct Optimizer {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
-
         void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
             // async: create a scan context descriptor from the pointcloud (copy points to avoid data race)
             detail::ndd::Descriptor descriptor;
@@ -44,7 +43,6 @@ namespace chad::detail::map {
                 Pose pose_first = active_submap_p->_all_poses.front();
                 float distance = glm::distance(pose_first._position, pose._position);
                 if (distance > _submap_xyz_threshhold) {
-                    fmt::println("SUBMAP DONE");
                     // let another thread handle dag writes
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p]() {
                         auto timestamp = std::chrono::steady_clock::now();
@@ -190,7 +188,7 @@ namespace chad::detail::map {
         }
 
         // finish entire submap and create DAG octree (TODO)
-        void on_submap_completion(ActiveSubmap& submap) {
+        void on_submap_completion(ActiveSubmap& active_submap) {
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
@@ -199,43 +197,86 @@ namespace chad::detail::map {
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
             }
             // lock submap (reading)
-            std::unique_lock lock_sub{ submap._mutex, std::defer_lock };
+            std::unique_lock lock_sub{ active_submap._mutex, std::defer_lock };
             if (!lock_sub.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
                 lock_sub.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
 
-            // TODO: prefault memory ranges (virtual array) for better write speeds into DAG
+            // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
 
-            // TODO: hashmap of nodes (can use DAG addresses already) with a morton code of stronger discretization to build lower levels after
+            // since input octree does not store lower levels, we keep track of new nodes via hashmap (2 for swapping)
+            struct NodeBlueprint {
+                std::array<dag::ADDR_T, 8> _tsdfs;
+                std::array<dag::ADDR_T, 8> _weigh;
+            };
+            std::array<gtl::flat_hash_map<MortonCode, NodeBlueprint>, 2> blueprint_maps;
+            std::size_t blueprint_map_i = 0;
 
-            octree_t& octree = submap._tsdf_octree;
-            gtl::flat_hash_map<MortonCode, std::array<dag::Addresses, 8>> address_cache;
+            // first off, convert nodes from input octree into dag nodes (up to the level where it starts)
+            octree_t& octree = active_submap._tsdf_octree;
             for (const auto [morton_code, node_addr]: octree._roots) {
                 // create dag nodes and leaves at lower depths than octree starter depth
                 constexpr std::uint64_t depth = octree_t::get_start();
                 dag::Addresses addresses = create_dag_node<depth>(_dag, octree, node_addr);
 
                 // write to address cache using higher discretization (to build parent node)
-                auto [it, b] = address_cache.try_emplace(morton_code.mask<depth - 1>());
+                auto [it, _] = blueprint_maps[blueprint_map_i].try_emplace(morton_code.mask<depth - 1>());
                 // write address to correct child index within (still nonexistant) parent node
                 std::uint64_t child_index = morton_code.child<depth - 1>();
-                it->second[child_index] = addresses;
+                it->second._tsdfs[child_index] = addresses._tsdfs;
+                it->second._weigh[child_index] = addresses._weigh;
             }
 
-            // clean up everything to start a new submap
-            submap.clear();
+            // construct final submap (DAG root indices will come later)
+            Submap submap{ active_submap };
+
+            // clean up active submap to be able to continue writing to it in main thread
+            active_submap.clear();
             lock_sub.unlock();
 
-            // TODO: construct the rest of the DAG tree here
+            // build the rest of the DAG levels
+            std::uint64_t depth = octree_t::get_start() - 1;
+            while (depth > 0) {
+                // read from map A, while writing to map B
+                auto& blueprint_map_read = blueprint_maps[blueprint_map_i];
+                blueprint_map_i = (blueprint_map_i + 1) % 2;
+                auto& blueprint_map_write = blueprint_maps[blueprint_map_i];
 
-            std::exit(0);
+                // TODO: prefault upcoming DAG level, since we know how many nodes there will be?
+
+                // address cache will contain up to 8 addresses per morton code entry
+                for (const auto& [morton_code, blueprint]: blueprint_map_read) {
+                    // discretize morton code further
+                    auto [it, _] = blueprint_map_write.try_emplace(morton_code.mask(depth - 1));
+                    // write address to correct child index within (still nonexistant) parent node
+                    std::uint64_t child_index = morton_code.child(depth - 1);
+                    it->second._tsdfs[child_index] = _dag.add_node(blueprint._tsdfs, depth);
+                    it->second._weigh[child_index] = _dag.add_node(blueprint._weigh, depth);
+                }
+
+                // proceed to previous depth above
+                blueprint_map_read.clear();
+                depth--;
+            }
+
+            // create final root node. should only be one!
+            auto& blueprint_map = blueprint_maps[blueprint_map_i];
+            if (blueprint_map.size() != 1) {
+                throw std::logic_error("More than one DAG root for a single submap. Did not happen during my testing yet; either your map is too wide or some inserted points have corrupted positions.");
+            }
+            for (const auto& [morton_code, blueprint]: blueprint_map) {
+                submap._roots = dag::Addresses{
+                    ._tsdfs = _dag.add_node(blueprint._tsdfs, depth),
+                    ._weigh = _dag.add_node(blueprint._weigh, depth),
+                };
+            }
         }
 
         // finish only the sub-submap
-        void on_sub_submap_completion(ActiveSubmap& submap, ndd::Descriptor&& descriptor) {
-            std::unique_lock lock{ submap._mutex, std::defer_lock };
+        void on_sub_submap_completion(ActiveSubmap& active_submap, ndd::Descriptor&& descriptor) {
+            std::unique_lock lock{ active_submap._mutex, std::defer_lock };
             if (!lock.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
                 lock.lock();
@@ -247,12 +288,15 @@ namespace chad::detail::map {
             // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished
             // -> relying on single sub-submap to sub-submap matches would be too unreliable
 
+            // TODO: store current position alongside descriptor index in active submap. this is important information for later!
+
             // clear out all sub-submap data
-            submap.clear_sub();
+            active_submap.clear_sub();
             // add index to the descriptor referring to this new sub-submap
-            submap._descriptor_indices.push_back(_descriptors.size());
+            active_submap._descriptor_indices.push_back(_descriptors.size());
             _lookup_keys.push_back(descriptor.get_lookup_key());
             _descriptors.push_back(std::move(descriptor));
+
         }
 
     public:

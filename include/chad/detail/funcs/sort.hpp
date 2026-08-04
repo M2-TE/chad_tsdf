@@ -18,11 +18,13 @@ namespace chad::detail::funcs {
         std::vector<std::uint32_t> indices;
         indices.resize(points.size());
         std::iota(indices.begin(), indices.end(), 0);
-        std::sort(std::execution::par, indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
+
+        // sort indices based on contents of morton_codes
+        std::sort(std::execution::par, indices.begin(), indices.end(), [&morton_codes](const std::uint32_t& a, const std::uint32_t& b) -> bool {
             return morton_codes[a] < morton_codes[b];
         });
 
-        // sort using already sorted indices
+        // use sorted indices to cheaply sort points as per their morton codes
         const auto points_copy = points;
         for (std::uint32_t i = 0; i < points.size(); i++) {
             std::uint32_t sorted_index = indices[i];
