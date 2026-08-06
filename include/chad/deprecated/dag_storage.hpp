@@ -1,0 +1,248 @@
+#pragma once
+#include "chad/cluster.hpp"
+#include "chad/detail/morton_code.hpp"
+#include "chad/detail/virtual_array.hpp"
+
+namespace chad::detail {
+    struct NodeHead {
+        uint8_t child_mask;
+        uint8_t _; // padding
+        uint16_t ref_count;
+    };
+    static_assert(sizeof(NodeHead) == 4);
+
+    struct NodeSegment {
+        NodeSegment(uint32_t val) {
+            child_addr = val;
+        };
+        union {
+            NodeHead head;
+            uint32_t child_addr;
+        };
+    };
+    static_assert(sizeof(NodeSegment) == 4);
+
+    struct Node {
+        NodeHead head;
+        std::array<uint32_t, 8> children; // actual size may be smaller, accessing without checking child mask is UB
+    };
+    static_assert(sizeof(Node) == 36);
+
+    struct NodeLevel {
+        struct FncHash {
+            FncHash(const VirtualArray<NodeSegment>& node_data): _node_data(node_data) {
+            }
+
+            auto inline operator()(const uint32_t addr) const -> uint64_t {
+                // get node
+                const void* raw_addr_p = &_node_data[addr];
+                const Node& node = *static_cast<const Node*>(raw_addr_p);
+                // count children
+                uint32_t child_count = std::popcount(node.head.child_mask);
+                // hash entire node
+                uint64_t hash = 0;
+                for (uint32_t i = 0; i < child_count; i++) {
+                    hash = gtl::HashState::combine(hash, node.children[i]);
+                }
+                return hash;
+            }
+
+            const VirtualArray<NodeSegment>& _node_data;
+        };
+        struct FncEq {
+            FncEq(const VirtualArray<NodeSegment>& node_data): _node_data(node_data) {
+            }
+
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const {
+                // compare child masks
+                if (_node_data[addr_a].head.child_mask != _node_data[addr_b].head.child_mask) return false;
+
+                // count children (only need the count for a)
+                uint8_t child_count_a = std::popcount(_node_data[addr_a].head.child_mask);
+
+                // compare entire nodes
+                int cmp = std::memcmp(
+                    &_node_data[addr_a + 1],
+                    &_node_data[addr_b + 1],
+                    child_count_a * sizeof(uint32_t));
+                return cmp == 0;
+            }
+
+            const VirtualArray<NodeSegment>& _node_data;
+        };
+
+        NodeLevel():
+            _uniques_n(0), _dupes_n(0), _occupied_n(0), _raw_data(0xffffffff * sizeof(uint32_t)),
+            _addr_set(0, FncHash(_raw_data), FncEq(_raw_data))
+        {
+            // reserve first index
+            _raw_data.push_back(0);
+            _occupied_n = _raw_data.size();
+        }
+
+        uint32_t _uniques_n, _dupes_n;
+        uint32_t _occupied_n; // number of occupied 32-bit values in _raw_data vector
+        VirtualArray<NodeSegment> _raw_data; // raw unaligned node data
+        gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
+    };
+    struct LeafClusterLevel {
+        struct FncHash {
+            FncHash(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
+            }
+
+            auto inline operator()(const uint32_t addr) const -> uint64_t {
+                // use the 64-bit value of the leaf cluster as the hash
+                return _lc_data[addr]._value;
+            }
+
+            const VirtualArray<LeafCluster>& _lc_data;
+        };
+        struct FncEq {
+            FncEq(const VirtualArray<LeafCluster>& lc_data): _lc_data(lc_data) {
+            }
+
+            bool inline operator()(const uint32_t addr_a, const uint32_t addr_b) const {
+                // compare leaf clusters values directly
+                return _lc_data[addr_a]._value == _lc_data[addr_b]._value;
+            }
+
+            const VirtualArray<LeafCluster>& _lc_data;
+        };
+
+        LeafClusterLevel():
+            _uniques_n(0), _dupes_n(0), _raw_data(0xffffffff * sizeof(LeafCluster)),
+            _addr_set(0, FncHash(_raw_data), FncEq(_raw_data))
+        {
+            // reserve first index
+            _raw_data.push_back({});
+        }
+
+        uint32_t _uniques_n, _dupes_n;
+        VirtualArray<LeafCluster> _raw_data; // leaf cluster data
+        gtl::parallel_flat_hash_set<uint32_t, FncHash, FncEq> _addr_set; // set of addresses
+    };
+} // chad::detail
+
+namespace chad::detail {
+    struct DAGStorage {
+        public:
+        // add a DAG leaf cluster and return address of new or existing one
+        auto inline add_lc(LeafCluster lc) -> uint32_t {
+            auto& lcs = _leaf_clusters;
+
+            // append a placeholder node
+            uint32_t new_addr = lcs._uniques_n + 1;
+            if (lcs._raw_data.size() <= new_addr) lcs._raw_data.push_back(lc);
+            else                                  lcs._raw_data.back() = lc;
+
+            // emplace placeholder node if it's a new one
+            auto [old_addr_it, new_addr_b] = lcs._addr_set.emplace(new_addr);
+            if (new_addr_b) {
+                lcs._uniques_n++;
+                return new_addr;
+            }
+            else {
+                lcs._dupes_n++;
+                return *old_addr_it;
+            }
+        }
+        // add a DAG node and return address of new or existing one
+        auto inline add_node(uint32_t depth, const std::array<uint32_t, 8>& children) -> uint32_t {
+            auto& nodes = _node_levels[depth];
+            // check if theres enough space for a placeholder node
+            if (nodes._occupied_n + 9 >= nodes._raw_data.size()) {
+                nodes._raw_data.resize(nodes._raw_data.size() + 9);
+            }
+
+            // write placerholder node into raw data vector
+            uint32_t placeholder_addr = nodes._occupied_n;
+            void* raw_addr_p = &nodes._raw_data[placeholder_addr];
+            Node& placeholder = *static_cast<Node*>(raw_addr_p);
+            placeholder.head.child_mask = 0; // first element is child mask
+            placeholder.head.ref_count = 1;
+
+            // gather only valid children
+            uint8_t children_n = 0;
+            for (uint8_t i = 0; i < 8; i++) {
+                if (children[i] == 0) continue;
+                placeholder.children[children_n] = children[i];
+                placeholder.head.child_mask |= 1 << i;
+                children_n++;
+            }
+
+            // emplace placeholder node if it's a new one
+            auto [old_addr_it, new_addr_b] = nodes._addr_set.emplace(placeholder_addr);
+            if (new_addr_b) {
+                nodes._uniques_n++;
+                nodes._occupied_n += children_n + 1;
+                return placeholder_addr;
+            }
+            else {
+                uint32_t old_addr = *old_addr_it;
+                nodes._raw_data[old_addr].head.ref_count++;
+                nodes._dupes_n++;
+                return old_addr;
+            }
+        }
+
+        // get leaf cluster via its address
+        auto inline get_lc(uint32_t lc_addr) const -> LeafCluster {
+            return _leaf_clusters._raw_data[lc_addr];
+        }
+        // get node via its address
+        auto inline get_node(uint32_t depth, uint32_t addr) const -> const Node& {
+            const void* raw_addr_p = &_node_levels[depth]._raw_data[addr];
+            const Node& node = *static_cast<const Node*>(raw_addr_p);
+            return node;
+        }
+        // get child address of given node; returns 0 if none is found
+        auto inline get_child_addr(uint32_t parent_depth, uint32_t parent_addr, uint8_t child_i) const -> uint32_t {
+            // fetch node data
+            const void* raw_addr_p = &_node_levels[parent_depth]._raw_data[parent_addr];
+            const Node& parent = *static_cast<const Node*>(raw_addr_p);
+            uint32_t child_bit = 1 << child_i;
+
+            // check if the child exists
+            if (parent.head.child_mask & child_bit) {
+                // count the number of children that are stored before this one
+                uint8_t masked = uint8_t(parent.head.child_mask & (child_bit - 1));
+                uint8_t child_count = std::popcount(masked);
+                // child count will correspond to the requested child's index + 1 (accounting for child mask index)
+                uint32_t raw_data_addr = parent_addr + uint32_t(child_count + 1);
+                uint32_t child_addr = _node_levels[parent_depth]._raw_data[raw_data_addr].child_addr;
+                return child_addr;
+            }
+            else return 0;
+        }
+
+        // get TSDF leaf (not cluster!) via MortonCode index
+        auto inline get_tsdf(uint32_t root_addr, float sdf_trunc, MortonCode mc) const -> std::pair<float, bool> {
+            uint32_t node_addr = root_addr;
+            for (uint32_t depth = 0; depth <= MAX_DEPTH; depth++) {
+                uint8_t child_i = (mc._value >> (20 - depth) * 3) & 0b111;
+
+                if (depth < MAX_DEPTH) {
+                    node_addr = get_child_addr(depth, node_addr, child_i);
+                    if (node_addr == 0) return { 0, false };
+                    continue;
+                }
+                else {
+                    const LeafCluster& lc = get_lc(node_addr);
+                    return lc._tsdfs.try_get(child_i, sdf_trunc);
+                }
+            }
+
+            throw std::runtime_error("This should be unreachable (chad::detail::get_lc_tsdf)");
+        }
+
+        public:
+        // 21 levels total
+        static constexpr uint64_t MAX_DEPTH = 20;
+        // 20 levels of standard nodes
+        std::array<NodeLevel, MAX_DEPTH> _node_levels;
+        // 1 level of leaf clusters
+        LeafClusterLevel _leaf_clusters;
+        // mutex used for asyc operations (mostly during writing)
+        std::mutex _mutex;
+    };
+} // chad::detail
