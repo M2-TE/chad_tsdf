@@ -13,8 +13,6 @@
 
 namespace chad {
     namespace detail {
-        struct Octree; // DEPRECATED
-        struct DAGStorage; // DEPRECATED
         namespace map {
             struct Optimizer;
         }
@@ -91,9 +89,6 @@ namespace chad {
             insert_internal(data_p, data_bytes, data_flags, position, rotation);
         }
 
-        // checks whether a submap is currently active (i.e. latest scans not having been finalized into a submap yet)
-        [[deprecated]] bool inline is_submap_active() const { return _active_scan_end != _active_scan_beg; }
-
         // clear all data and release memory
         void clear();
         // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
@@ -114,20 +109,12 @@ namespace chad {
     private:
         // insert pointcloud (internal function used by all insert(...) calls)
         void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation);
-        // insert finalized octree as read-only tree of hashed nodes and return the dag root indices
-        [[deprecated]] auto insert_internal_octree(const std::unique_ptr<detail::Octree>& octree_p) -> std::pair<std::uint32_t, std::uint32_t>;
 
     public:
         const float _sdf_res;
         const float _sdf_trunc;
 
     private:
-        // transient
-        [[deprecated]] std::uint32_t _active_scan_beg = 0; // index of first scan for active submap
-        [[deprecated]] std::uint32_t _active_scan_end = 0; // past-the-end index of final scan for active submap
-        [[deprecated]] std::unique_ptr<detail::Octree> _active_octree_p; // currently active octree storing TSDF voxels
-        [[deprecated]] std::unique_ptr<detail::DAGStorage> _dag_storage_p; // storage for all hashed nodes
-        // persistent
         std::unique_ptr<struct detail::dag::Storage> _dag_p; // storage for persistent hashed nodes
         std::unique_ptr<struct detail::map::Optimizer> _map_optimizer_p; // active mapping, including loop closure detection and pose optimization
     };

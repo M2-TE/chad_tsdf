@@ -1,5 +1,5 @@
 #pragma once
-#include "chad/detail/morton_code.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 
 namespace {
     // sourced from: https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html

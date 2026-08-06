@@ -1,5 +1,5 @@
 #pragma once
-#include "chad/detail/morton_code.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 
 namespace chad::detail::funcs {
     // sort points by their morton code
@@ -18,11 +18,17 @@ namespace chad::detail::funcs {
         std::vector<std::uint32_t> indices;
         indices.resize(points.size());
         std::iota(indices.begin(), indices.end(), 0);
-
-        // sort indices based on contents of morton_codes
-        std::sort(std::execution::par, indices.begin(), indices.end(), [&morton_codes](const std::uint32_t& a, const std::uint32_t& b) -> bool {
+        // prefer to use std::execution policy if available (still experimental on clang libc++)
+        #ifdef __cpp_lib_execution
+        std::sort(std::execution::par, indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
             return morton_codes[a] < morton_codes[b];
         });
+        #else
+        #warning Could not find __cpp_lib_execution, falling back to single threaded sorting. Are you using libc++?
+        std::sort(indices.begin(), indices.end(), [&](std::uint32_t a, std::uint32_t b) -> bool {
+            return morton_codes[a] < morton_codes[b];
+        });
+        #endif
 
         // use sorted indices to cheaply sort points as per their morton codes
         const auto points_copy = points;

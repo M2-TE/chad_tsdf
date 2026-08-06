@@ -1,5 +1,5 @@
 #pragma once
-#include "chad/detail/morton_code.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 
 namespace chad::detail::map {
     // DEPTH_START (default 17) -> at which depth root nodes will start
@@ -19,13 +19,6 @@ namespace chad::detail::map {
                 std::array<NodeAddr, DEPTH_CHILDREN> _children;
             };
         };
-
-        auto static consteval get_start() -> std::uint64_t {
-            return DEPTH_START;
-        }
-        auto static consteval get_span() -> std::uint64_t {
-            return DEPTH_SPAN;
-        }
 
         void inline clear() {
             _roots.clear();
@@ -71,5 +64,7 @@ namespace chad::detail::map {
 
         std::vector<Node> _nodes;
         gtl::parallel_flat_hash_map<MortonCode, NodeAddr> _roots; // tree begins at DEPTH_START
+        static constexpr std::uint64_t _DEPTH_START = DEPTH_START;
+        static constexpr std::uint64_t _DEPTH_SPAN = DEPTH_SPAN;
     };
 }

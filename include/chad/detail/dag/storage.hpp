@@ -15,16 +15,16 @@ namespace chad::detail::dag {
             // write placeholder node into raw data vector
             ADDR_T placeholder_addr = level._occupied_segments_n;
             NodeSegment* placeholder_p = level._segments.data() + placeholder_addr;
-            placeholder_p->head._child_mask = 0;
-            placeholder_p->head._depth = depth;
-            placeholder_p->head._ref_count = 1;
+            placeholder_p->_head._child_mask = 0;
+            placeholder_p->_head._depth = depth;
+            placeholder_p->_head._ref_count = 1;
 
             // add only valid children to save space
             std::uint8_t children_n = 0;
             for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
                 if (children[child_i] == 0) continue;
-                placeholder_p[children_n].child_addr = children[child_i];
-                placeholder_p->head._child_mask |= 1 << child_i;
+                placeholder_p[children_n]._child_addr = children[child_i];
+                placeholder_p->_head._child_mask |= 1 << child_i;
                 children_n++;
             }
 
@@ -37,7 +37,7 @@ namespace chad::detail::dag {
             }
             else {
                 ADDR_T old_addr = *old_addr_it;
-                level._segments[old_addr].head._ref_count++;
+                level._segments[old_addr]._head._ref_count++;
                 level._dupes_n++;
                 return old_addr;
             }
@@ -63,8 +63,33 @@ namespace chad::detail::dag {
             }
         }
 
+        // get child address of given node; returns 0 if none is found
+        auto inline get_node(std::uint32_t parent_depth, ADDR_T parent_addr, std::uint8_t child_i) const -> ADDR_T {
+            // fetch node data
+            NodeSegment parent_segment = _node_levels[parent_depth]._segments[parent_addr];
+
+            // check if the child exists
+            std::uint8_t child_bit = 1 << child_i;
+            if (parent_segment._head._child_mask & child_bit) {
+                // count the number of children that are stored before this one
+                std::uint8_t masked = parent_segment._head._child_mask & (child_bit - 1);
+                std::uint8_t child_count = std::popcount(masked);
+                // child count will correspond to the requested child's index + 1 (accounting for child mask index)
+                ADDR_T child_segment_addr = parent_addr + static_cast<ADDR_T>(child_count + 1);
+                ADDR_T child_addr = _node_levels[parent_depth]._segments[child_segment_addr]._child_addr;
+                return child_addr;
+            }
+            else return 0;
+        }
+
+        // get leaf cluster via its address
+        auto inline get_lc(ADDR_T lc_addr) const -> LeafCluster {
+            return _leaf_cluster_level._leaf_clusters[lc_addr];
+        }
+
+        static constexpr std::uint64_t MAX_DEPTH = 21;
         // 20 levels of standard nodes
-        std::array<NodeLevel, 20> _node_levels;
+        std::array<NodeLevel, MAX_DEPTH - 1> _node_levels;
         // 1 level of leaf clusters
         LeafClusterLevel _leaf_cluster_level;
         // for synchronization during async operations

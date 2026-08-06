@@ -24,7 +24,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/i
 target_compile_options(${PROJECT_NAME} PRIVATE
     # warnings
     $<$<CXX_COMPILER_ID:MSVC>: "/W4">
-    $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wall" "-Wextra" "-Wpedantic" "-Wno-deprecated-declarations" "-Wno-unused-parameter"> # TODO: disabled deprecated warnings during revamp, disabled unused param warning bcs gtsam
+    $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wall" "-Wextra" "-Wpedantic" "-Wno-deprecated-declarations" "-Wno-unused-parameter">
+    # $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wno-deprecated-declarations"> # disabled deprecated warnings during revamp (TODO: remove this later)
     # warning errors
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "/WX">
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "-Werror">
@@ -36,7 +37,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:$<IF:$<BOOL:${CHAD_USE_ARCH_NATIVE}>, "-march=native", "-mbmi2" "-msse2">>
     # misc
     $<$<CXX_COMPILER_ID:GNU,Clang>: "-mfpmath=sse">
-    $<$<CXX_COMPILER_ID:Clang>: "-fexperimental-library"> # to access parallel algorithms in <execution>
+    # $<$<CXX_COMPILER_ID:Clang>: "-fexperimental-library"> # to access parallel algorithms in <execution> (disabled due to perf regression)
     $<$<CXX_COMPILER_ID:MSVC>: "/diagnostics:classic" "/Zc:__cplusplus" "/Zc:inline" "/fp:except-" "/FC" "/Gm-" "/MP" "/nologo">)
 target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: "/SUBSYSTEM:CONSOLE">

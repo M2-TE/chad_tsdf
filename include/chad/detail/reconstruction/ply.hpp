@@ -1,8 +1,8 @@
 #pragma once
-#include "chad/detail/octree.hpp"
-#include "chad/detail/dag_storage.hpp"
-#include "chad/detail/morton_code.hpp"
-#include "chad/detail/dag/root_indices.hpp"
+#include "chad/detail/dag/node.hpp"
+#include "chad/detail/dag/storage.hpp"
+#include "chad/detail/map/octree2.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 #include "chad/detail/reconstruction/marching_cubes.hpp"
 
 // helpers
@@ -77,17 +77,17 @@ namespace chad::detail::reconstruction {
     }
 
     // Step 1 (DAG tree): create a hashmap that is used to perform more efficient neighbour lookups later
-    auto inline create_hashmap(const DAGStorage& dag, dag::RootIndices roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
+    auto inline create_hashmap(const dag::Storage& dag, dag::Addresses roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
         // read-only trackers for submap
         gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
-        std::array<uint8_t, DAGStorage::MAX_DEPTH> path_child; // child indices along path
-        std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
-        std::array<uint32_t, DAGStorage::MAX_DEPTH> addr_wght; // weight addresses along path
+        std::array<std::uint8_t, dag::Storage::MAX_DEPTH> path_child; // child indices along path
+        std::array<std::uint32_t, dag::Storage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
+        std::array<std::uint32_t, dag::Storage::MAX_DEPTH> addr_wght; // weight addresses along path
         path_child.fill(0);
         addr_tsdf.fill(0);
         addr_wght.fill(0);
         addr_tsdf[0] = roots._tsdfs;
-        addr_wght[0] = roots._weights;
+        addr_wght[0] = roots._weigh;
 
         // iterate both trees to build separate octrees
         uint32_t depth = 0;
@@ -100,14 +100,14 @@ namespace chad::detail::reconstruction {
                 else break; // exit main loop
             }
             // node contains node children
-            else if (depth < DAGStorage::MAX_DEPTH - 1) {
+            else if (depth < dag::Storage::MAX_DEPTH - 1) {
                 // try to find the child in current node
-                uint32_t child_addr_tsdf = dag.get_child_addr(depth, addr_tsdf[depth], child_i);
+                uint32_t child_addr_tsdf = dag.get_node(depth, addr_tsdf[depth], child_i);
 
                 // check if child address is valid (only need to check one)
                 if (child_addr_tsdf > 0) {
                     // no need to verify
-                    uint32_t child_addr_wght = dag.get_child_addr(depth, addr_wght[depth], child_i);
+                    uint32_t child_addr_wght = dag.get_node(depth, addr_wght[depth], child_i);
 
                     depth++;
                     path_child[depth] = 0; // reset child index for new depth
@@ -118,9 +118,9 @@ namespace chad::detail::reconstruction {
             // node contains leaf children
             else {
                 // try to get the leaf cluster, skip if it doesn't exist
-                uint32_t child_addr_tsdf = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
                 if (child_addr_tsdf == 0) continue; // only need to check one
-                uint32_t child_addr_wght = dag.get_child_addr(DAGStorage::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_wght[depth], child_i);
 
                 // fetch actual leaf cluster
                 const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
@@ -153,61 +153,6 @@ namespace chad::detail::reconstruction {
             }
         }
 
-        return leaves;
-    }
-
-    // Step 1 (octree): create a hashmap that is used to perform more efficient neighbour lookups later
-    auto inline create_hashmap(const Octree& octree) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
-        gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
-        // track node traversal
-        std::array<uint8_t, DAGStorage::MAX_DEPTH + 1> path_child;
-        std::array<const Octree::Node*, DAGStorage::MAX_DEPTH + 1> path_nodes;
-        path_child.fill(0);
-        path_nodes.fill(nullptr);
-        path_nodes[0] = &octree.get_node(Octree::ROOT);
-
-        uint32_t depth = 0;
-        while (true) {
-            uint8_t child_i = path_child[depth]++;
-
-            // when all children at this depth were iterated
-            if (child_i >= 8) {
-                if (depth > 0) depth--;
-                else break; // exit main loop
-            }
-
-            // node contains node children
-            else if (depth < DAGStorage::MAX_DEPTH) {
-                const Octree::Node& node = *path_nodes[depth];
-                uint32_t child_addr = node[child_i];
-
-                // check if child address is valid
-                if (child_addr > 0) {
-                    depth++;
-                    path_child[depth] = 0; // reset child index for new depth
-                    path_nodes[depth] = &octree.get_node(child_addr);
-                }
-            }
-
-            // node contains leaf children
-            else {
-                const Octree::Node& node = *path_nodes[depth];
-                uint32_t child_addr = node[child_i];
-                if (child_addr == 0) continue;
-
-                // reconstruct morton code from path
-                uint64_t code = 0;
-                for (uint64_t k = 0; k < DAGStorage::MAX_DEPTH + 1; k++) {
-                    uint64_t part = path_child[k] - 1;
-                    code |= part << uint64_t(60 - k*3);
-                }
-                MortonCode mc{ code };
-
-                // obtain leaf and add it to hashmap
-                const Octree::Leaf& leaf = octree.get_leaf(child_addr);
-                leaves.emplace(mc, LeafCopy{ leaf._signed_distance, leaf._weight });
-            }
-        }
         return leaves;
     }
 
@@ -410,20 +355,8 @@ namespace chad::detail::reconstruction {
 }
 
 namespace chad::detail::reconstruction {
-    // reconstruct ply mesh from octree
-    void inline reconstruct(const std::string& filename, const Octree& octree, float sdf_res) {
-        std::ofstream ofs{ filename, std::ios::binary };
-        if (!ofs.is_open()) fmt::println("Failed to open {} for writing", filename);
-
-        write_header(ofs);
-        auto leaves = create_hashmap(octree);
-        uint32_t vertex_count = create_vertices(ofs, leaves, sdf_res);
-        uint32_t face_count = create_faces(ofs, leaves);
-        update_header(ofs, vertex_count, face_count);
-        ofs.close();
-    }
     // reconstruct ply mesh from hashed DAG tree
-    void inline reconstruct(const std::string& filename, const DAGStorage& dag, dag::RootIndices roots, float sdf_res, float sdf_trunc) {
+    void inline reconstruct(const std::string& filename, const dag::Storage& dag, dag::Addresses roots, float sdf_res, float sdf_trunc) {
         std::ofstream ofs{ filename, std::ios::binary };
         if (!ofs.is_open()) fmt::println("Failed to open {} for writing", filename);
 

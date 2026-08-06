@@ -12,16 +12,16 @@ namespace chad::detail::dag {
 
     // the header of every node to store metadata
     struct alignas(ADDR_T) NodeHead {
-        uint8_t  _child_mask;
-        uint8_t  _depth; // helps debugging (could be replaced)
-        uint16_t _ref_count;
+        std::uint8_t  _child_mask;
+        std::uint8_t  _depth; // helps debugging (could be replaced)
+        std::uint16_t _ref_count;
     };
     static_assert(sizeof(NodeHead) == sizeof(ADDR_T));
 
     // node segments are the raw data that DAGs store, containing either a header or body segment
     union alignas(ADDR_T) NodeSegment {
-        NodeHead head;
-        ADDR_T child_addr;
+        NodeHead _head;
+        ADDR_T _child_addr;
     };
     static_assert(sizeof(NodeSegment) == sizeof(ADDR_T));
 }

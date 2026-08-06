@@ -95,7 +95,7 @@ namespace chad::detail::map {
         // get type dynamically, since it is templated
         using octree_t = decltype(ActiveSubmap::_tsdf_octree);
         // at which depth the leaf nodes start
-        constexpr static std::size_t DEPTH_LEAVES = 21 - octree_t::get_span();
+        constexpr static std::size_t DEPTH_LEAVES = 21 - octree_t::_DEPTH_SPAN;
 
         // create standard node in DAG tree, multiple if input octree has DEPTH_SPAN > 1
         template<std::size_t DEPTH> // TODO: template spec for leaf nodes!
@@ -103,7 +103,7 @@ namespace chad::detail::map {
             const octree_t::Node& node = octree._nodes[node_addr];
 
             // keep track of newly created dag nodes (to create their parents nodes after)
-            static_assert(octree_t::get_span() == 2);
+            static_assert(octree_t::_DEPTH_SPAN == 2);
             std::array<dag::ADDR_T, 8> new_nodes_tsdfs{};
             std::array<dag::ADDR_T, 8> new_nodes_weigh{};
 
@@ -120,14 +120,14 @@ namespace chad::detail::map {
                     empty = false;
 
                     // if it exists, recursively continue at that node
-                    dag::Addresses addresses = create_dag_node<DEPTH + octree_t::get_span()>(dag, octree, child_addr);
+                    dag::Addresses addresses = create_dag_node<DEPTH + octree_t::_DEPTH_SPAN>(dag, octree, child_addr);
                     new_children_tsdfs[child_i] = addresses._tsdfs;
                     new_children_weigh[child_i] = addresses._weigh;
                 }
                 if (empty) continue;
 
                 // this node will always be the lowest-depth one
-                constexpr std::uint32_t real_depth = DEPTH + octree_t::get_span() - 1;
+                constexpr std::uint32_t real_depth = DEPTH + octree_t::_DEPTH_SPAN - 1;
                 dag::Addresses addresses {
                     ._tsdfs = dag.add_node(new_children_tsdfs, real_depth),
                     ._weigh = dag.add_node(new_children_weigh, real_depth),
@@ -136,7 +136,7 @@ namespace chad::detail::map {
                 new_nodes_weigh[node_i / 8] = addresses._weigh;
 
                 // DEBUG: would otherwise need to create parents here (and partially clear e.g. new_nodes_tsdfs)
-                static_assert(octree_t::get_span() <= 2);
+                static_assert(octree_t::_DEPTH_SPAN <= 2);
             }
 
             // create and return highest-level DAG node addresses
@@ -146,11 +146,11 @@ namespace chad::detail::map {
             };
         }
 
-        // template specialization to create leaf clusters
+        // template specialization to create leaf clusters (bugged on gcc, see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85282)
         template<>
         auto inline create_dag_node<DEPTH_LEAVES>(dag::Storage& dag, const octree_t& octree, octree_t::NodeAddr node_addr) -> dag::Addresses {
-            static_assert(octree_t::get_span() > 1); // this would otherwise needlessly complicate things even more
-            static_assert(octree_t::get_span() == 2); // NOTE: would also otherwise complicate things, got more important things to work on
+            static_assert(octree_t::_DEPTH_SPAN > 1); // this would otherwise needlessly complicate things even more
+            static_assert(octree_t::_DEPTH_SPAN == 2); // NOTE: would also otherwise complicate things, got more important things to work on
 
             // this array contains up to octree_t::Node::DEPTH_CHILDREN leaves (e.g. 64 with span==2)
             const auto& leaves = octree._nodes[node_addr]._leaves;
@@ -218,7 +218,7 @@ namespace chad::detail::map {
             octree_t& octree = active_submap._tsdf_octree;
             for (const auto [morton_code, node_addr]: octree._roots) {
                 // create dag nodes and leaves at lower depths than octree starter depth
-                constexpr std::uint64_t depth = octree_t::get_start();
+                constexpr std::uint64_t depth = octree_t::_DEPTH_START;
                 dag::Addresses addresses = create_dag_node<depth>(_dag, octree, node_addr);
 
                 // write to address cache using higher discretization (to build parent node)
@@ -237,7 +237,7 @@ namespace chad::detail::map {
             lock_sub.unlock();
 
             // build the rest of the DAG levels
-            std::uint64_t depth = octree_t::get_start() - 1;
+            std::uint64_t depth = octree_t::_DEPTH_START - 1;
             while (depth > 0) {
                 // read from map A, while writing to map B
                 auto& blueprint_map_read = blueprint_maps[blueprint_map_i];
@@ -272,6 +272,7 @@ namespace chad::detail::map {
                     ._weigh = _dag.add_node(blueprint._weigh, depth),
                 };
             }
+            _submaps.push_back(submap);
         }
 
         // finish only the sub-submap

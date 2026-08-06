@@ -1,6 +1,6 @@
 #pragma once
 #include "chad/detail/dag/node.hpp"
-#include "chad/detail/virtual_array.hpp"
+#include "chad/detail/misc/virtual_array.hpp"
 
 namespace chad::detail::dag {
     struct NodeLevel {
@@ -8,12 +8,12 @@ namespace chad::detail::dag {
             FncHash(const VirtualArray<NodeSegment>& segments): _segments(segments) {}
             auto inline operator()(ADDR_T addr) const noexcept -> std::uint64_t {
                 // read node header
-                NodeHead head = _segments[addr].head;
+                NodeHead head = _segments[addr]._head;
                 std::size_t child_count = std::popcount(head._child_mask);
                 // hash entire node
                 std::uint64_t hash = 0;
                 for (std::size_t i = 1; i <= child_count; i++) {
-                    ADDR_T child_addr = _segments[addr + i].child_addr;
+                    ADDR_T child_addr = _segments[addr + i]._child_addr;
                     hash = gtl::HashState::combine(hash, child_addr);
                 }
                 return hash;
@@ -24,8 +24,8 @@ namespace chad::detail::dag {
             FncEq(const VirtualArray<NodeSegment>& segments): _segments(segments) {}
             auto inline operator()(ADDR_T addr_a, ADDR_T addr_b) const noexcept -> bool {
                 // compare child masks
-                std::uint8_t mask_a = _segments[addr_a].head._child_mask;
-                if (mask_a != _segments[addr_b].head._child_mask) {
+                std::uint8_t mask_a = _segments[addr_a]._head._child_mask;
+                if (mask_a != _segments[addr_b]._head._child_mask) {
                     return false;
                 }
                 else {

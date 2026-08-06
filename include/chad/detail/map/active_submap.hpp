@@ -1,5 +1,5 @@
 #pragma once
-#include "chad/detail/pose.hpp"
+#include "chad/detail/misc/pose.hpp"
 #include "chad/detail/map/indices.hpp"
 #include "chad/detail/map/octree2.hpp"
 
@@ -165,7 +165,7 @@ namespace chad::detail::map {
 
                 auto points_it = std::cbegin(points);
                 auto normals_it = std::cbegin(normals);
-                for (/**/; points_it < std::cend(points); points_it++, normals_it++) {
+                for (; points_it < std::cend(points); points_it++, normals_it++) {
                     glm_vec3f_t point = *points_it;
                     glm_vec3f_t normal = *normals_it;
 
@@ -267,12 +267,11 @@ namespace chad::detail::map {
                 }
             }};
         }
-
     public:
         // accumulated poses for current submap
         std::vector<Pose> _all_poses;
         // accumulated data for current sub-submap (used for point-to-tsdf loop closure)
-        std::vector<Pose> _sub_poses;
+        [[deprecated]] std::vector<Pose> _sub_poses; // TODO: these poses might be unnecessary
         std::vector<glm::aligned_vec3> _sub_points;
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;

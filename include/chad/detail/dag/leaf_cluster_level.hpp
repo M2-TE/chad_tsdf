@@ -1,7 +1,7 @@
 #pragma once
 #include "chad/cluster.hpp"
 #include "chad/detail/dag/node.hpp"
-#include "chad/detail/virtual_array.hpp"
+#include "chad/detail/misc/virtual_array.hpp"
 
 namespace chad::detail::dag {
     struct LeafClusterLevel {
