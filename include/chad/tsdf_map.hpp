@@ -44,7 +44,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_xyz_threshhold = 5.0f, float submap_cor_threshhold = 0.95);
+        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_xyz_threshhold = 5.0f, float submap_cor_threshhold = 0.95f);
         // explicit destructor to free forward-declared allocations
         ~TSDFMap();
 
@@ -58,10 +58,10 @@ namespace chad {
                 else if constexpr (sizeof(glm::vec3) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
 
                 // points will be passed as a raw byte array to avoid aliasing violations
-                const std::size_t data_bytes = points.size() * sizeof(glm::vec3);
+                std::size_t data_bytes = points.size() * sizeof(glm::vec3);
                 const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
-                const std::array<double, 3> position_arr{ position.x, position.y, position.z };
-                const std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
+                std::array<double, 3> position_arr{ position.x, position.y, position.z };
+                std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
                 insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
             }
         #endif
@@ -76,10 +76,10 @@ namespace chad {
                 else if constexpr (sizeof(Eigen::Vector3f) == sizeof(float) * 4) data_flags = PointFlagBits::eXYZW_F32;
 
                 // points will be passed as a raw byte array to avoid aliasing violations
-                const std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
+                std::size_t data_bytes = points.size() * sizeof(Eigen::Vector3f);
                 const std::uint8_t* data_p = reinterpret_cast<const std::uint8_t*>(points.data());
-                const std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
-                const std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
+                std::array<double, 3> position_arr{ position.x(), position.y(), position.z() };
+                std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
                 insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
             }
         #endif

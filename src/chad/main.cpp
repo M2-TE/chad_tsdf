@@ -1,4 +1,5 @@
 #include <random>
+#include <iostream>
 #include <glm/glm.hpp>
 #include "chad/tsdf_map.hpp"
 
@@ -52,13 +53,15 @@ void inline do_thingy() {
     std::vector<glm::vec3> positions {
         { 0.0, 0, 0 },
         { 3.5, 0, 0 },
-        // { 7.0, 0, 0 },
+        { 7.0, 0, 0 },
+        { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
     // for (int i = 0; i < 100; i++) positions.push_back(positions.back() + glm::vec3{ 0.2, 0.2, 0.2 });
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i], 20.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
+        std::cout << i << std::endl;
     }
 
 
