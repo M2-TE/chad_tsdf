@@ -20,7 +20,6 @@ namespace chad::detail::map {
         }
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
-            std::lock_guard lock{ _mutex };
             _all_poses.push_back(pose);
             _sub_poses.push_back(pose);
 

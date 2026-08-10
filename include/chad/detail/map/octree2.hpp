@@ -21,8 +21,8 @@ namespace chad::detail::map {
         };
 
         void inline clear() {
-            _roots.clear();
             _nodes.clear();
+            _roots.clear();
         }
         void inline insert(MortonCode morton_code, float signed_distance) {
             // mask out the bits relevant for hashmap lookup

@@ -8,6 +8,12 @@
 #include "chad/detail/map/indices.hpp"
 #include "chad/detail/map/active_submap.hpp"
 
+#if false
+#define MEASURE_DEBUG(a) a
+#else
+#define MEASURE_DEBUG(a)
+#endif
+
 namespace chad::detail::map {
     struct Optimizer {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
@@ -36,7 +42,6 @@ namespace chad::detail::map {
                 lock.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: Optimizer waited for submap lock release");
             }
-            lock.unlock(); // safe to unlock early
 
             // Submap: check whether translational delta threshhold was crossed
             if (!active_submap_p->_all_poses.empty()) {
@@ -44,22 +49,28 @@ namespace chad::detail::map {
                 float distance = glm::distance(pose_first._position, pose._position);
                 if (distance > _submap_xyz_threshhold) {
                     // let another thread handle dag writes
+                    lock.unlock();
                     _active_threads[_active_i] = std::jthread{ [this, active_submap_p]() {
-                        auto timestamp = std::chrono::steady_clock::now();
                         on_submap_completion(*active_submap_p);
-                        MEASURE_TIME(timestamp, ">> async: Submap completed");
                     }};
 
                     // swap submap chain to continue work
                     _active_i = (_active_i + 1) % ACTIVE_SUBMAP_COUNT;
                     active_submap_p = &_active_submaps[_active_i];
+
+                    lock = std::unique_lock{ active_submap_p->_mutex, std::defer_lock };
+                    if (!lock.try_lock()) {
+                        auto timestamp = std::chrono::steady_clock::now();
+                        lock.lock();
+                        MEASURE_TIME(timestamp, "\t-> WARNING: optimizer::add_scan() waited for active_submap lock release");
+                    }
                 }
             }
 
             // wait for the descriptor construction to finish
-            auto timestamp = std::chrono::steady_clock::now();
+            MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
             descriptor_thread.join();
-            MEASURE_TIME(timestamp, "Waited for descriptor");
+            MEASURE_DEBUG(MEASURE_TIME(timestamp, "Waited for descriptor"));
 
             // Sub-Submap: check whether NDD correlation threshhold was crossed
             if (!active_submap_p->_sub_poses.empty()) {
@@ -74,21 +85,21 @@ namespace chad::detail::map {
             }
             // Sub-Submap: when empty, initialize it
             else {
-                auto timestamp = std::chrono::steady_clock::now();
+                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
                 // let main thread handle sub-submap completion (including loop closure)
                 on_sub_submap_completion(*active_submap_p, std::move(descriptor));
-                MEASURE_TIME(timestamp, "Sub-submap initialization");
+                MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap initialization"));
             }
 
             // wait for the point sort and normal estimation to finish
-            timestamp = std::chrono::steady_clock::now();
+            MEASURE_DEBUG(timestamp = std::chrono::steady_clock::now());
             points_normals_thread.join();
-            MEASURE_TIME(timestamp, "Waited for point sort and normal estimation");
+            MEASURE_DEBUG(MEASURE_TIME(timestamp, "Waited for point sort and normal estimation"));
 
             // insert new data into active submap
-            timestamp = std::chrono::steady_clock::now();
+            MEASURE_DEBUG(timestamp = std::chrono::steady_clock::now());
             active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
-            MEASURE_TIME(timestamp, "Sub-submap integration");
+            MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
         }
 
     private:
@@ -187,7 +198,7 @@ namespace chad::detail::map {
             };
         }
 
-        // finish entire submap and create DAG octree (TODO)
+        // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
@@ -203,6 +214,7 @@ namespace chad::detail::map {
                 lock_sub.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
+            auto timestamp = std::chrono::steady_clock::now();
 
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
 
@@ -273,17 +285,11 @@ namespace chad::detail::map {
                 };
             }
             _submaps.push_back(submap);
+            MEASURE_TIME(timestamp, ">> async: Submap completed");
         }
 
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, ndd::Descriptor&& descriptor) {
-            std::unique_lock lock{ active_submap._mutex, std::defer_lock };
-            if (!lock.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_sub_submap_completion() waited for submap lock release");
-            }
-
             // TODO: LOOP CLOSURE HERE! -> only need to update the lookup_key kd tree after every ~5 (or all above threshhold) descriptor insertions (based on how many prev ones to skip)
             // TODO: use point-to-tsdf for more accurate err estimation after loop closure
             // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished

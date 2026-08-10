@@ -104,9 +104,7 @@ namespace chad {
         const detail::Pose pose{ position, rotation };
 
         // extract points from input -> use templating for SIMD leverage (constexpr byte width)
-        auto timestamp = std::chrono::steady_clock::now();
         std::vector<glm::aligned_vec3> points_xyz = detail::funcs::extract_xyz(data_p, data_bytes, data_flags);
-        MEASURE_TIME(timestamp, "Preprocessing: Extracted XYZ data from input");
 
         // add scan to the map optimizer (will handle sub-/submapping)
         _map_optimizer_p->add_scan(std::move(points_xyz), pose);

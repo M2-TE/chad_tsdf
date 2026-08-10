@@ -52,16 +52,16 @@ void inline do_thingy() {
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
         { 0.0, 0, 0 },
-        { 3.5, 0, 0 },
-        { 7.0, 0, 0 },
-        { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
+        // { 3.5, 0, 0 },
+        // { 7.0, 0, 0 },
+        // { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
-    // for (int i = 0; i < 100; i++) positions.push_back(positions.back() + glm::vec3{ 0.2, 0.2, 0.2 });
+    for (int i = 0; i < 100; i++) positions.push_back(positions.back() + glm::vec3{ 0.1, 0.1, 0.1 });
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i], 20.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
-        std::cout << i << std::endl;
+        // std::cout << i << std::endl;
     }
 
 
