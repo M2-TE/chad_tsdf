@@ -23,7 +23,8 @@ namespace chad::detail::dag {
             std::uint8_t children_n = 0;
             for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
                 if (children[child_i] == 0) continue;
-                placeholder_p[children_n]._child_addr = children[child_i];
+                // append valid child to placeholder node
+                placeholder_p[children_n + 1]._child_addr = children[child_i];
                 placeholder_p->_head._child_mask |= 1 << child_i;
                 children_n++;
             }

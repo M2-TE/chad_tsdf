@@ -200,6 +200,7 @@ namespace chad::detail::map {
 
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
+            fmt::println("BEGUN");
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
@@ -226,19 +227,77 @@ namespace chad::detail::map {
             std::array<gtl::flat_hash_map<MortonCode, NodeBlueprint>, 2> blueprint_maps;
             std::size_t blueprint_map_i = 0;
 
+            // NOTE: hardcoded during dev
+            static_assert(octree_t::_DEPTH_SPAN == 2);
+            static_assert(octree_t::_DEPTH_START == 17);
+
+            // keep track of newly created dag nodes (to create their parents nodes after)
+            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_tsdfs;
+            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_weigh;
+
             // first off, convert nodes from input octree into dag nodes (up to the level where it starts)
+            // this is a bit messy since octree levels span multiple depths, whereas DAG levels are 1 depth each
             octree_t& octree = active_submap._tsdf_octree;
-            for (const auto [morton_code, node_addr]: octree._roots) {
-                // create dag nodes and leaves at lower depths than octree starter depth
+            for (const auto& [morton_code, node_addr]: octree._roots) {
                 constexpr std::uint64_t depth = octree_t::_DEPTH_START;
-                dag::Addresses addresses = create_dag_node<depth>(_dag, octree, node_addr);
+                const octree_t::Node& node = octree._nodes[node_addr];
+                new_nodes_tsdfs[0].fill(0); // reset
+                new_nodes_weigh[0].fill(0); // reset
+
+                // iterate over 64 children
+                for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {
+                    new_nodes_tsdfs[1].fill(0); // reset
+                    new_nodes_weigh[1].fill(0); // reset
+                    // go over 8 of the children
+                    bool empty = true;
+                    for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
+                        new_nodes_tsdfs[2].fill(0); // reset
+                        new_nodes_weigh[2].fill(0); // reset
+                        // retrieve child address
+                        octree_t::NodeAddr child_addr = node._children[node_i + child_i];
+                        if (child_addr == 0) continue;
+                        const auto& leaves = octree._nodes[child_addr]._leaves;
+                        empty = false;
+
+                        // iterate over the 64 children (leaves)
+                        for (std::uint32_t lc_i = 0; lc_i < octree_t::Node::DEPTH_CHILDREN; lc_i += 8) {
+                            // 8 leaves will form a leaf cluster
+                            LeafCluster lc_tsdfs{};
+                            LeafCluster lc_weigh{};
+                            for (std::uint32_t leaf_i = 0; leaf_i < 8; leaf_i++) {
+                                const octree_t::Leaf& leaf = leaves[lc_i + leaf_i];
+                                if (leaf._weight == 0) {
+                                    lc_tsdfs._tsdfs.set_empty(leaf_i);
+                                    lc_weigh._weigh.set_empty(leaf_i);
+                                }
+                                else {
+                                    // weight can be above 255, so we cap it at the uint8_t limit
+                                    std::uint8_t weight = std::min<std::uint32_t>(leaf._weight, std::numeric_limits<std::uint8_t>::max());
+                                    lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, _sdf_trunc_reciprocal);
+                                    lc_weigh._weigh.set(leaf_i, weight);
+                                }
+                            }
+                            if (lc_weigh._weigh.is_empty()) continue;
+                            // create DAG node and store its address for later
+                            new_nodes_tsdfs[2][lc_i / 8] = _dag.add_lc(lc_tsdfs);
+                            new_nodes_weigh[2][lc_i / 8] = _dag.add_lc(lc_weigh);
+                        }
+                        // create DAG node and store its address for later
+                        new_nodes_tsdfs[1][child_i] = _dag.add_node(new_nodes_tsdfs[2], depth + 2);
+                        new_nodes_weigh[1][child_i] = _dag.add_node(new_nodes_weigh[2], depth + 2);
+                    }
+                    if (empty) continue;
+                    // create DAG node and store its address for later
+                    new_nodes_tsdfs[0][node_i / 8] = _dag.add_node(new_nodes_tsdfs[1], depth + 1);
+                    new_nodes_weigh[0][node_i / 8] = _dag.add_node(new_nodes_weigh[1], depth + 1);
+                }
 
                 // write to address cache using higher discretization (to build parent node)
                 auto [it, _] = blueprint_maps[blueprint_map_i].try_emplace(morton_code.mask<depth - 1>());
                 // write address to correct child index within (still nonexistant) parent node
                 std::uint64_t child_index = morton_code.child<depth - 1>();
-                it->second._tsdfs[child_index] = addresses._tsdfs;
-                it->second._weigh[child_index] = addresses._weigh;
+                it->second._tsdfs[child_index] = _dag.add_node(new_nodes_tsdfs[0], depth);
+                it->second._weigh[child_index] = _dag.add_node(new_nodes_weigh[0], depth);
             }
 
             // construct final submap (DAG root indices will come later)
@@ -286,6 +345,7 @@ namespace chad::detail::map {
             }
             _submaps.push_back(submap);
             MEASURE_TIME(timestamp, ">> async: Submap completed");
+            std::exit(0);
         }
 
         // finish only the sub-submap
