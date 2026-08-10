@@ -103,104 +103,9 @@ namespace chad::detail::map {
         }
 
     private:
-        // get type dynamically, since it is templated
-        using octree_t = decltype(ActiveSubmap::_tsdf_octree);
-        // at which depth the leaf nodes start
-        constexpr static std::size_t DEPTH_LEAVES = 21 - octree_t::_DEPTH_SPAN;
-
-        // create standard node in DAG tree, multiple if input octree has DEPTH_SPAN > 1
-        template<std::size_t DEPTH> // TODO: template spec for leaf nodes!
-        auto inline create_dag_node(dag::Storage& dag, const octree_t& octree, octree_t::NodeAddr node_addr) -> dag::Addresses {
-            const octree_t::Node& node = octree._nodes[node_addr];
-
-            // keep track of newly created dag nodes (to create their parents nodes after)
-            static_assert(octree_t::_DEPTH_SPAN == 2);
-            std::array<dag::ADDR_T, 8> new_nodes_tsdfs{};
-            std::array<dag::ADDR_T, 8> new_nodes_weigh{};
-
-            // node index will go from 0 to octree_t::Node::DEPTH_CHILDREN, e.g. 8 (span==1), 64 (span==2), etc
-            for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {
-                // go over all 8 potential children
-                bool empty = true;
-                std::array<dag::ADDR_T, 8> new_children_tsdfs{};
-                std::array<dag::ADDR_T, 8> new_children_weigh{};
-                for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
-                    // retrieve child address
-                    octree_t::NodeAddr child_addr = node._children[node_i + child_i];
-                    if (child_addr == 0) continue;
-                    empty = false;
-
-                    // if it exists, recursively continue at that node
-                    dag::Addresses addresses = create_dag_node<DEPTH + octree_t::_DEPTH_SPAN>(dag, octree, child_addr);
-                    new_children_tsdfs[child_i] = addresses._tsdfs;
-                    new_children_weigh[child_i] = addresses._weigh;
-                }
-                if (empty) continue;
-
-                // this node will always be the lowest-depth one
-                constexpr std::uint32_t real_depth = DEPTH + octree_t::_DEPTH_SPAN - 1;
-                dag::Addresses addresses {
-                    ._tsdfs = dag.add_node(new_children_tsdfs, real_depth),
-                    ._weigh = dag.add_node(new_children_weigh, real_depth),
-                };
-                new_nodes_tsdfs[node_i / 8] = addresses._tsdfs;
-                new_nodes_weigh[node_i / 8] = addresses._weigh;
-
-                // DEBUG: would otherwise need to create parents here (and partially clear e.g. new_nodes_tsdfs)
-                static_assert(octree_t::_DEPTH_SPAN <= 2);
-            }
-
-            // create and return highest-level DAG node addresses
-            return dag::Addresses {
-                ._tsdfs = dag.add_node(new_nodes_tsdfs, DEPTH),
-                ._weigh = dag.add_node(new_nodes_weigh, DEPTH),
-            };
-        }
-
-        // template specialization to create leaf clusters (bugged on gcc, see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85282)
-        template<>
-        auto inline create_dag_node<DEPTH_LEAVES>(dag::Storage& dag, const octree_t& octree, octree_t::NodeAddr node_addr) -> dag::Addresses {
-            static_assert(octree_t::_DEPTH_SPAN > 1); // this would otherwise needlessly complicate things even more
-            static_assert(octree_t::_DEPTH_SPAN == 2); // NOTE: would also otherwise complicate things, got more important things to work on
-
-            // this array contains up to octree_t::Node::DEPTH_CHILDREN leaves (e.g. 64 with span==2)
-            const auto& leaves = octree._nodes[node_addr]._leaves;
-            std::array<dag::ADDR_T, 8> new_leaf_clusters_tsdfs{};
-            std::array<dag::ADDR_T, 8> new_leaf_clusters_weigh{};
-
-            // node index will go from 0 to octree_t::Node::DEPTH_CHILDREN, e.g. 8 (span==1), 64 (span==2), etc
-            for (std::uint32_t node_i = 0; node_i < octree_t::Node::DEPTH_CHILDREN; node_i += 8) {
-                // 8 leaves will form a leaf cluster
-                LeafCluster lc_tsdfs, lc_weigh;
-                for (std::uint32_t leaf_i = 0; leaf_i < 8; leaf_i++) {
-                    const octree_t::Leaf& leaf = leaves[node_i + leaf_i];
-                    if (leaf._weight == 0) {
-                        lc_tsdfs._tsdfs.set_empty(leaf_i);
-                        lc_weigh._weigh.set_empty(leaf_i);
-                    }
-                    else {
-                        // weight can be above 255, so we cap it at the uint8_t limit
-                        std::uint8_t weight = std::min<std::uint32_t>(leaf._weight, std::numeric_limits<std::uint8_t>::max());
-                        lc_tsdfs._tsdfs.set(leaf_i, leaf._signed_distance, _sdf_trunc_reciprocal);
-                        lc_weigh._weigh.set(leaf_i, weight);
-                    }
-                }
-                if (!lc_weigh._weigh.is_empty()) {
-                    new_leaf_clusters_tsdfs[node_i / 8] = dag.add_lc(lc_tsdfs);
-                    new_leaf_clusters_weigh[node_i / 8] = dag.add_lc(lc_weigh);
-                }
-            }
-            // NOTE: creating another dag node that contains all the leaf cluster children is only necessary when span > 1
-            // create and return highest-level DAG node addresses
-            return dag::Addresses {
-                ._tsdfs = dag.add_node(new_leaf_clusters_tsdfs, DEPTH_LEAVES),
-                ._weigh = dag.add_node(new_leaf_clusters_weigh, DEPTH_LEAVES),
-            };
-        }
 
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
-            fmt::println("BEGUN");
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
@@ -227,7 +132,10 @@ namespace chad::detail::map {
             std::array<gtl::flat_hash_map<MortonCode, NodeBlueprint>, 2> blueprint_maps;
             std::size_t blueprint_map_i = 0;
 
-            // NOTE: hardcoded during dev
+            // get type dynamically, since it is templated
+            using octree_t = decltype(ActiveSubmap::_tsdf_octree);
+
+            // NOTE: hardcoded assumptions during dev to make things easier
             static_assert(octree_t::_DEPTH_SPAN == 2);
             static_assert(octree_t::_DEPTH_START == 17);
 
@@ -345,7 +253,6 @@ namespace chad::detail::map {
             }
             _submaps.push_back(submap);
             MEASURE_TIME(timestamp, ">> async: Submap completed");
-            std::exit(0);
         }
 
         // finish only the sub-submap
