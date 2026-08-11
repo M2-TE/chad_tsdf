@@ -41,17 +41,14 @@
                 throw std::runtime_error(err_message);
             }
         }
-        // TODO: the idea is to release pages that are no longer needed, not the entire memory range like with deallocate_virtual()
-        // void free_virtual(void* virtual_p, size_t bytes) {
-        //     size_t page_size = getpagesize();
-
-        //     int res = madvise(virtual_p, bytes, MADV_FREE);
-        //     if (res == -1) {
-        //         std::string err_message = "chad::detail::free_virtual -> madvise with MADV_FREE failed: ";
-        //         err_message += std::strerror(errno);
-        //         throw std::runtime_error(err_message);
-        //     }
-        // }
+        void free_virtual(void* virtual_p, size_t bytes) {
+            int res = madvise(virtual_p, bytes, MADV_FREE);
+            if (res == -1) {
+                std::string err_message = "chad::detail::free_virtual -> madvise with MADV_FREE failed: ";
+                err_message += std::strerror(errno);
+                throw std::runtime_error(err_message);
+            }
+        }
     }
 #elif defined(_WIN32) || defined(_WIN64)
 #   error "Windows is not yet supported. Implement chad::detail::allocate_virtual(size_t)->void*, chad::detail::deallocate_virtual(void*, size_t)->void and chad::detail::prefault_virtual(void*, size_t)->void."

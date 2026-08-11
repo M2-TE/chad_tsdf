@@ -5,8 +5,9 @@ namespace chad::detail {
     auto allocate_virtual(size_t bytes) -> void*;
     void deallocate_virtual(void* virtual_p, size_t bytes);
     void prefault_virtual(void* virtual_p, size_t bytes);
+    void free_virtual(void* virtual_p, size_t bytes);
 
-    auto inline align(std::size_t size, std::size_t alignment) -> std::size_t {
+    auto inline align(std::size_t size, std::size_t alignment) noexcept -> std::size_t {
         return (size + (alignment - 1)) & ~(alignment - 1);
     }
 }
@@ -60,13 +61,6 @@ namespace chad::detail {
             return _virtual_p[_size++];
         }
 
-        template<class InputIt>
-        void inline insert_back(InputIt first, InputIt last) {
-            for (InputIt cur = first; cur != last; std::next(cur)) {
-                _virtual_p = *cur;
-            }
-            _size += std::distance(first, last);
-        }
         void inline insert_back(std::initializer_list<T> ilist) {
             std::memcpy(_virtual_p + _size, ilist.data(), ilist.size() * sizeof(T));
             _size += ilist.size();
@@ -104,44 +98,57 @@ namespace chad::detail {
             return _virtual_p + _size;
         }
 
+        // returns the number of stored elements
         auto inline size() const -> std::size_t {
             return _size;
         }
+        // returns the element capacity (based on populated memory pages)
         auto inline capacity() const -> std::size_t {
             // since _capacity does not get updated on every push/insert,
             // we may need to use _size instead to know how much physical memory is currently populated
             if (_capacity > _size) return _capacity;
             else return align(_size * sizeof(T), _virtual_page_size) / sizeof(T);
         }
+        // returns the maximum element capacity that cannot grow
         auto inline capacity_virtual() const -> std::size_t {
             return _virtual_capacity;
         }
-        void inline resize(std::size_t new_size) {
-            // if (_capacity < new_size) reserve(new_size);
+
+        // resize to given element count and optionally prefault memory pages
+        void inline resize(std::size_t new_size, bool prefault_pages = false) {
+            if (prefault_pages && new_size > _capacity) {
+                reserve(new_size);
+            }
             _size = new_size;
         }
-        // TODO: actually free the pages if smaller than before? (shrink_to_fit)
-        // TODO: and also needs a virtual reserve variant
-        // prefault memory pages for later use
+        // reserve space for a number of elements, prefaulting pages if necessary
         void inline reserve(std::size_t new_capacity) {
-            // calc start and end of last populated memory page
-            std::size_t page_end = capacity() * sizeof(T);
-            std::size_t page_beg = (page_end > 0) ? (page_end - _virtual_page_size) : 0;
+            // calc start and end of last populated memory page in bytes
+            std::size_t last_page_end = capacity() * sizeof(T);
+            std::size_t last_page_beg = (last_page_end > 0) ? (last_page_end - _virtual_page_size) : (0);
 
-            // check if new_capacity will actually require more pages to be populated
-            std::size_t page_end_new = align(new_capacity * sizeof(T), _virtual_page_size);
-            if (page_end_new > page_end) {
-                prefault_virtual(_virtual_p + page_beg, page_end_new - page_beg);
-                _capacity = page_end_new / sizeof(T);
+            // check whether we need to prefault or free pages
+            std::size_t new_page_end = align(new_capacity * sizeof(T), _virtual_page_size);
+            if (new_page_end >= last_page_end) {
+                prefault_virtual(_virtual_p + last_page_beg, new_page_end - last_page_beg);
             }
-            else {
-                // effectively just update _capacity to what the current last populated page is
-                // _capacity = page_end / sizeof(T);
-            }
+            _capacity = new_page_end / sizeof(T);
         }
-        // TODO: actually free the pages?
-        void inline clear() {
-            // MADV_FREE stuff
+        // free memory pages to fit current size
+        void inline shrink_to_fit() {
+            // calc end of last populated memory page in bytes
+            std::size_t last_page_end = capacity() * sizeof(T);
+            std::size_t new_page_end = align(_size * sizeof(T), _virtual_page_size);
+            // free the leftover pages
+            free_virtual(_virtual_p + new_page_end, last_page_end - new_page_end);
+            _capacity = new_page_end;
+        }
+        // reset the array without and optionally free allocated pages
+        void inline clear(bool free_pages = false) {
+            if (free_pages) {
+                free_virtual(_virtual_p, capacity());
+                _capacity = 0;
+            }
             _size = 0;
         }
 
