@@ -22,9 +22,8 @@ if (NOT gtsam_FOUND)
     set(GTSAM_ALLOW_DEPRECATED_SINCE_V43 OFF)
 
     FetchContent_Declare(gtsam
-        GIT_REPOSITORY "https://github.com/borglab/gtsam.git"
-        GIT_TAG "4.3a1"
-        GIT_SHALLOW ON
+        URL "https://github.com/borglab/gtsam/archive/refs/tags/4.3a1.tar.gz"
+        URL_HASH SHA256=4233192fd9154aa2c0ccd05aebd833d8bf67307888774895e7b3b3d98b31607a
         OVERRIDE_FIND_PACKAGE
         EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(gtsam)
