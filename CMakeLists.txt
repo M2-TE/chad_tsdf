@@ -46,7 +46,6 @@ target_link_options(${PROJECT_NAME} PRIVATE
 include("cmake/fmt.cmake")
 include("cmake/gtl.cmake")
 include("cmake/glm.cmake")
-include("cmake/morton.cmake")
 include("cmake/gtsam.cmake")
 
 # compile executable if top level project

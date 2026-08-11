@@ -1,46 +1,51 @@
 #pragma once
-#if !defined(__BMI2__)
+#if defined(__BMI2__)
+#   include <immintrin.h>
+#else
 #   error "Requires BMI2 instruction set"
 #endif
+
+namespace {
+    auto inline pdep(std::uint64_t src, std::uint64_t mask) noexcept -> std::uint64_t {
+        return _pdep_u64(src, mask);
+    }
+    auto inline pext(std::uint64_t src, std::uint64_t mask) noexcept -> std::uint64_t {
+        return _pext_u64(src, mask);
+    }
+}
 
 namespace chad::detail {
     struct MortonCode {
         constexpr MortonCode(std::uint64_t value): _value(value) {}
         MortonCode(const glm::aligned_ivec3& vox_pos) {
-            encode(vox_pos);
+            _value = encode(vox_pos);
         }
         MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) {
             // convert to voxel coordinate and discretize with floor()
             glm::aligned_vec3 point_discretized = glm::floor(point * sdf_res_reciprocal);
-            encode(glm::aligned_ivec3{ point_discretized });
-        }
-        // TODO: remove this once revamp is done
-        [[deprecated]]
-        MortonCode(const glm::ivec3& vox_pos) {
-            encode(vox_pos);
+            _value = encode(glm::aligned_ivec3{ point_discretized });
         }
 
-        void inline encode(const glm::aligned_ivec3& vox_pos) {
+        auto inline static encode(const glm::aligned_ivec3& vox_pos) -> std::uint64_t {
             // truncate from 32-bit int to 21-bit int
             std::uint32_t x = (1 << 20) + static_cast<std::uint32_t>(vox_pos.x);
             std::uint32_t y = (1 << 20) + static_cast<std::uint32_t>(vox_pos.y);
             std::uint32_t z = (1 << 20) + static_cast<std::uint32_t>(vox_pos.z);
-            _value = static_cast<std::uint64_t>(libmorton::morton3D_64_encode(x, y, z));
+            // parallel bit deposit (pdep)
+            return pdep(x, 0x9249249249249249) | pdep(y, 0x2492492492492492) | pdep(z, 0x4924924924924924);
         }
         auto inline decode() const -> glm::aligned_ivec3 {
-            uint_fast32_t x, y, z;
-            libmorton::morton3D_64_decode(_value, x, y, z);
-            // expand from 21-bit uint back to 32-bit int
-            x -= 1 << 20;
-            y -= 1 << 20;
-            z -= 1 << 20;
-            return { static_cast<std::int32_t>(x), static_cast<std::int32_t>(y), static_cast<std::int32_t>(z) };
+            // parallel bit extract (pext), followed by expanding 21-bit back to 32-bit int
+            std::int32_t x = pext(_value, 0x9249249249249249) - static_cast<std::uint64_t>(1 << 20);
+            std::int32_t y = pext(_value, 0x2492492492492492) - static_cast<std::uint64_t>(1 << 20);
+            std::int32_t z = pext(_value, 0x4924924924924924) - static_cast<std::uint64_t>(1 << 20);
+            return { x, y, z };
         }
 
         // mask out lower bits of the morton code, as per depth (basically higher discretization)
-        template<std::uint64_t depth>
+        template<std::uint64_t DEPTH>
         auto constexpr inline mask() const noexcept -> MortonCode {
-            constexpr std::uint64_t shift_distance = 63 - depth * 3;
+            constexpr std::uint64_t shift_distance = 63 - DEPTH * 3;
             constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> shift_distance << shift_distance;
             return _value & mask;
         }

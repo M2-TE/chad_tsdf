@@ -29,8 +29,6 @@
 #include <glm/gtc/type_aligned.hpp>
 // better hashmap implementation
 #include <gtl/phmap.hpp>
-// morton code encoding/decoding
-#include <libmorton/morton.h>
 // std::print wannabe
 #include <fmt/base.h>
 #include <fmt/format.h>
