@@ -25,7 +25,6 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     # warnings
     $<$<CXX_COMPILER_ID:MSVC>: "/W4">
     $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wall" "-Wextra" "-Wpedantic" "-Wno-deprecated-declarations" "-Wno-unused-parameter">
-    # $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wno-deprecated-declarations"> # disabled deprecated warnings during revamp (TODO: remove this later)
     # warning errors
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "/WX">
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "-Werror">

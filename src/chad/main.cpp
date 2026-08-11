@@ -56,12 +56,12 @@ void inline do_thingy() {
         // { 7.0, 0, 0 },
         // { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
-    for (int a = 0; a < 10; a++) {
-        glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
-        for (int b = 0; b < 10; b++) {
-            positions.push_back(position);
-        }
-    }
+    // for (int a = 0; a < 10; a++) {
+    //     glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
+    //     for (int b = 0; b < 10; b++) {
+    //         positions.push_back(position);
+    //     }
+    // }
     for (size_t i = 0; i < positions.size(); i++) {
         sample_sphere(points, positions[i], 20.0);
         // sample_cube(points, positions[i]);
@@ -84,8 +84,8 @@ void inline do_thingy() {
     // }
     // map.dothingy(points, offset);
 
-    // map.print_memory_usage();
-    // map.reconstruct("mesh", true);
+    map.print_memory_usage();
+    map.reconstruct("mesh", true);
 }
 int main() {
     do_thingy();

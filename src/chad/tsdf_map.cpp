@@ -1,8 +1,9 @@
 #include "chad/tsdf_map.hpp"
+#include "chad/detail/misc/pose.hpp"
 #include "chad/detail/funcs/timing.hpp"
 #include "chad/detail/funcs/extract.hpp"
 #include "chad/detail/map/optimizer.hpp"
-#include "chad/detail/misc/pose.hpp"
+#include "chad/detail/reconstruction/ply.hpp"
 
 // TODO: use estimated normals as NDD input?
 
@@ -58,44 +59,28 @@ namespace chad {
         // CHAD_MESSAGE(fmt::format("Memory footprint in MiB. Nodes: {:.4f} Hashes: {:.4f} NDDs: {:.4f}", mem_dag_nodes / 1024 / 1024, mem_dag_hashes / 1024 / 1024, mem_ndd / 1024 / 1024));
     }
     void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
-        // using namespace chad::detail;
-        // // need at least one inserted scan for reconstruction
-        // if (_map_optimizer_p->_scan_poses.empty()) {
-        //     CHAD_MESSAGE("There are no submaps to reconstruct yet");
-        //     return;
-        // }
-        // // finalize current active submap if needed
-        // if (is_submap_active()) {
-        //     CHAD_MESSAGE(">> Forcefully finalizing submap for reconstruction");
-        //     finalize_active_submap();
-        // }
+        using namespace chad::detail;
+        // finalize current active submap if needed
+        _map_optimizer_p->finalize();
 
-        // // make sure the folder is clean
-        // if (clean_first) std::filesystem::remove_all(foldername);
-        // std::filesystem::create_directory(foldername);
+        // make sure the folder is clean
+        if (clean_first) std::filesystem::remove_all(foldername);
+        std::filesystem::create_directory(foldername);
 
-        // // recontruct multiple submaps as single mesh chunks
-        // Octree octree_base, octree;
-        // const std::vector<map::Submap>& submaps = _map_optimizer_p->_submaps;
-        // for (map::SubmapIndex chunk_i = 0; chunk_i < submaps.size(); chunk_i += submaps_per_chunk) {
-        //     auto beg = std::chrono::steady_clock::now();
-        //     // go over all submaps within this chunk
-        //     for (map::SubmapIndex submap_offset = 0; submap_offset < submaps_per_chunk && submap_offset < submaps.size(); submap_offset++) {
-        //         const map::Submap& submap = submaps[chunk_i + submap_offset];
-        //         octree.insert(*_dag_storage_p, submap._roots, _sdf_trunc);
+        // reconstruct every submap
+        for (std::uint32_t i = 0; i < _map_optimizer_p->_submaps.size(); i++) {
+            auto beg = std::chrono::steady_clock::now();
 
-        //         // invert error to get delta from octree to global coordinate frame (octree_base)
-        //         glm::vec3 octree_error = -submap._pose_err._position;
-        //         octree_base.merge(octree, octree_error, _sdf_res);
-        //         octree.clear();
-        //     }
+            // simply append index to the filename
+            const map::Submap& submap = _map_optimizer_p->_submaps[i];
+            std::string filename = fmt::format("{}/submap_{}.ply", foldername, i);
 
-        //     // reconstruct 3D mesh from the merged octree
-        //     std::string full_file = fmt::format("{}/chunk_{}.ply", foldername, chunk_i / submaps_per_chunk);
-        //     reconstruction::reconstruct(full_file, octree_base, _sdf_res);
-        //     octree_base.clear();
-        //     MEASURE_TIME(beg, fmt::format(">> Reconstructing submap at \"{}\"", full_file));
-        // }
+            // reconstruct 3D mesh from the merged octree
+            CHAD_MESSAGE(fmt::format("reconstructing submap {}", filename));
+            reconstruction::reconstruct(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
+
+            MEASURE_TIME(beg, fmt::format(">> Reconstructing submap \"{}\"", filename));
+        }
     }
     void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
         auto beg = std::chrono::steady_clock::now();

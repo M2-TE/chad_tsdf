@@ -3,3 +3,6 @@ build/
 datasets/
 .vscode/
 .cache/
+
+mesh/
+*.ply

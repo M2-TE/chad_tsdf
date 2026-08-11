@@ -102,8 +102,18 @@ namespace chad::detail::map {
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
         }
 
-    private:
+        // finalize active submap if it contains any data
+        void finalize() {
+            map::ActiveSubmap& active_submap = _active_submaps[_active_i];
+            std::unique_lock lock{ active_submap._mutex };
+            if (!active_submap._all_poses.empty()) {
+                CHAD_MESSAGE(">> Forcefully finalizing last submap in preparation for reconstruction");
+                lock.unlock();
+                on_submap_completion(active_submap);
+            }
+        }
 
+    private:
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
             // lock DAG (writing)
@@ -294,10 +304,5 @@ namespace chad::detail::map {
         std::vector<ndd::Descriptor::LookupKey> _lookup_keys;
         // persistent data for pose graph
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
-
-        // OLD
-        [[deprecated]] std::vector<SubmapIndex> _merged_submaps;
-        [[deprecated]] std::vector<Pose>        _scan_poses;
-        [[deprecated]] std::vector<SubmapIndex> _scan_submap; // for easier association
     };
 }

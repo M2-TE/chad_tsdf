@@ -16,26 +16,26 @@ namespace {
 
 namespace chad::detail {
     struct MortonCode {
-        constexpr MortonCode(std::uint64_t value): _value(value) {}
-        MortonCode(const glm::aligned_ivec3& vox_pos) {
+        constexpr MortonCode(std::uint64_t value) noexcept: _value(value) {}
+        MortonCode(const glm::aligned_ivec3& vox_pos) noexcept {
             _value = encode(vox_pos);
         }
-        MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) {
+        MortonCode(const glm::aligned_vec3& point, float sdf_res_reciprocal) noexcept {
             // convert to voxel coordinate and discretize with floor()
             glm::aligned_vec3 point_discretized = glm::floor(point * sdf_res_reciprocal);
             _value = encode(glm::aligned_ivec3{ point_discretized });
         }
 
-        auto inline static encode(const glm::aligned_ivec3& vox_pos) -> std::uint64_t {
-            // truncate from 32-bit int to 21-bit int
+        auto inline static encode(const glm::aligned_ivec3& vox_pos) noexcept-> std::uint64_t {
+            // truncate from 32-bit int to 21-bit uint
             std::uint32_t x = (1 << 20) + static_cast<std::uint32_t>(vox_pos.x);
             std::uint32_t y = (1 << 20) + static_cast<std::uint32_t>(vox_pos.y);
             std::uint32_t z = (1 << 20) + static_cast<std::uint32_t>(vox_pos.z);
             // parallel bit deposit (pdep)
             return pdep(x, 0x9249249249249249) | pdep(y, 0x2492492492492492) | pdep(z, 0x4924924924924924);
         }
-        auto inline decode() const -> glm::aligned_ivec3 {
-            // parallel bit extract (pext), followed by expanding 21-bit back to 32-bit int
+        auto inline decode() const noexcept -> glm::aligned_ivec3 {
+            // parallel bit extract (pext), followed by expanding 21-bit uint back to 32-bit int
             std::int32_t x = pext(_value, 0x9249249249249249) - static_cast<std::uint64_t>(1 << 20);
             std::int32_t y = pext(_value, 0x2492492492492492) - static_cast<std::uint64_t>(1 << 20);
             std::int32_t z = pext(_value, 0x4924924924924924) - static_cast<std::uint64_t>(1 << 20);

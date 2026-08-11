@@ -1,7 +1,6 @@
 #pragma once
 #include "chad/detail/dag/node.hpp"
 #include "chad/detail/dag/storage.hpp"
-#include "chad/detail/map/octree2.hpp"
 #include "chad/detail/misc/morton_code.hpp"
 #include "chad/detail/reconstruction/marching_cubes.hpp"
 
@@ -64,6 +63,7 @@ property uint8 blue\n";
 
 // ply implementation
 namespace chad::detail::reconstruction {
+    using LeafHashmap = gtl::parallel_flat_hash_map<MortonCode, LeafCopy>;
     // Step 0: write ply header without vertex/face counts
     void inline write_header(std::ofstream& ofs) {
         ofs << std::string("ply\n");
@@ -77,7 +77,7 @@ namespace chad::detail::reconstruction {
     }
 
     // Step 1 (DAG tree): create a hashmap that is used to perform more efficient neighbour lookups later
-    auto inline create_hashmap(const dag::Storage& dag, dag::Addresses roots, float sdf_trunc) -> gtl::parallel_flat_hash_map<MortonCode, LeafCopy> {
+    auto inline create_hashmap(const dag::Storage& dag, dag::Addresses roots, float sdf_trunc) -> LeafHashmap {
         // read-only trackers for submap
         gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
         std::array<std::uint8_t, dag::Storage::MAX_DEPTH> path_child; // child indices along path
@@ -90,9 +90,10 @@ namespace chad::detail::reconstruction {
         addr_wght[0] = roots._weigh;
 
         // iterate both trees to build separate octrees
-        uint32_t depth = 0;
+        std::uint32_t depth = 0;
         while (true) {
-            uint8_t child_i = path_child[depth]++;
+            fmt::println("depth {}", depth);
+            std::uint8_t child_i = path_child[depth]++;
 
             // when all children at this depth were iterated
             if (child_i >= 8) {
@@ -102,12 +103,12 @@ namespace chad::detail::reconstruction {
             // node contains node children
             else if (depth < dag::Storage::MAX_DEPTH - 1) {
                 // try to find the child in current node
-                uint32_t child_addr_tsdf = dag.get_node(depth, addr_tsdf[depth], child_i);
+                std::uint32_t child_addr_tsdf = dag.get_node(depth, addr_tsdf[depth], child_i);
 
                 // check if child address is valid (only need to check one)
                 if (child_addr_tsdf > 0) {
                     // no need to verify
-                    uint32_t child_addr_wght = dag.get_node(depth, addr_wght[depth], child_i);
+                    std::uint32_t child_addr_wght = dag.get_node(depth, addr_wght[depth], child_i);
 
                     depth++;
                     path_child[depth] = 0; // reset child index for new depth
@@ -118,34 +119,34 @@ namespace chad::detail::reconstruction {
             // node contains leaf children
             else {
                 // try to get the leaf cluster, skip if it doesn't exist
-                uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                std::uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
                 if (child_addr_tsdf == 0) continue; // only need to check one
-                uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                std::uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_wght[depth], child_i);
 
                 // fetch actual leaf cluster
                 const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
                 const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
 
                 // reconstruct morton code from path
-                uint64_t code = 0;
-                for (uint64_t k = 0; k < 63/3 - 1; k++) {
-                    uint64_t part = path_child[k] - 1;
-                    code |= part << uint64_t(60 - k*3);
+                std::uint64_t code = 0;
+                for (std::uint64_t k = 0; k < 63/3 - 1; k++) {
+                    std::uint64_t part = path_child[k] - 1;
+                    code |= part << static_cast<std::uint64_t>(60 - k*3);
                 }
                 MortonCode mc{ code };
 
                 // get the actual leaves
-                uint32_t leaf_i = 0;
-                for (int32_t z = 0; z <= 1; z++) {
-                for (int32_t y = 0; y <= 1; y++) {
-                for (int32_t x = 0; x <= 1; x++, leaf_i++) {
+                std::uint32_t leaf_i = 0;
+                for (std::int32_t z = 0; z <= 1; z++) {
+                for (std::int32_t y = 0; y <= 1; y++) {
+                for (std::int32_t x = 0; x <= 1; x++, leaf_i++) {
                     // signed distance and weight within leaf
                     auto [signed_distance, leaf_exists] = cluster_tsdf._tsdfs.try_get(leaf_i, sdf_trunc);
                     if (!leaf_exists) continue;
-                    uint8_t weight = cluster_wght._weigh.get(leaf_i);
+                    std::uint8_t weight = cluster_wght._weigh.get(leaf_i);
 
                     // leaf index will set the 3 LSB
-                    uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
+                    std::uint64_t mc_leaf = mc._value | uint64_t(leaf_i);
 
                     // add it to the hash map with no vertices yet
                     leaves.emplace(mc_leaf, LeafCopy{ signed_distance, uint32_t(weight) });
@@ -157,7 +158,7 @@ namespace chad::detail::reconstruction {
     }
 
     // Step 2: create vertices at flipping signs
-    auto inline create_vertices(std::ofstream& ofs, gtl::parallel_flat_hash_map<MortonCode, LeafCopy>& leaves, float sdf_res) -> uint32_t {
+    auto inline create_vertices(std::ofstream& ofs, LeafHashmap& leaves, float sdf_res) -> uint32_t {
         uint32_t vertex_count = 0;
         for (auto& [mc, leaf]: leaves) {
             const glm::ivec3 leaf_voxel = mc.decode();
@@ -183,7 +184,7 @@ namespace chad::detail::reconstruction {
                 offset[dimension_i] = 1;
 
                 // check if that leaf exists
-                const auto other_it = leaves.find(leaf_voxel + offset);
+                const auto other_it = leaves.find(MortonCode{ leaf_voxel + offset });
                 if (other_it == leaves.cend()) continue;
                 // check for flipping sign
                 const float leaf_sd = leaf._signed_distance;
@@ -216,7 +217,7 @@ namespace chad::detail::reconstruction {
 
     // Step 3: create faces with marching cubes lookup table
     // TODO: handle SD of 0.0f properly
-    auto inline create_faces(std::ofstream& ofs, gtl::parallel_flat_hash_map<MortonCode, LeafCopy>& leaves) -> uint32_t {
+    auto inline create_faces(std::ofstream& ofs, LeafHashmap& leaves) -> uint32_t {
         uint32_t face_count = 0;
         for (const auto& [mc000, leaf000]: leaves) {
             const glm::ivec3 pos000 = mc000.decode();
@@ -237,19 +238,19 @@ namespace chad::detail::reconstruction {
             // the current leaf will be the [0, 0, 0] of this voxel
             // fetch the other 6 leaves to get information on all 12 voxel edges
             // for now just ignore cubes with missing corners
-            const auto it001 = leaves.find(pos000 + glm::ivec3(0, 0, 1));
+            const auto it001 = leaves.find(MortonCode{ pos000 + glm::ivec3(0, 0, 1) });
             if (it001 == leaves.cend()) continue;
-            const auto it100 = leaves.find(pos000 + glm::ivec3(1, 0, 0));
+            const auto it100 = leaves.find(MortonCode{ pos000 + glm::ivec3(1, 0, 0) });
             if (it100 == leaves.cend()) continue;
-            const auto it101 = leaves.find(pos000 + glm::ivec3(1, 0, 1));
+            const auto it101 = leaves.find(MortonCode{ pos000 + glm::ivec3(1, 0, 1) });
             if (it101 == leaves.cend()) continue;
-            const auto it010 = leaves.find(pos000 + glm::ivec3(0, 1, 0));
+            const auto it010 = leaves.find(MortonCode{ pos000 + glm::ivec3(0, 1, 0) });
             if (it010 == leaves.cend()) continue;
-            const auto it011 = leaves.find(pos000 + glm::ivec3(0, 1, 1));
+            const auto it011 = leaves.find(MortonCode{ pos000 + glm::ivec3(0, 1, 1) });
             if (it011 == leaves.cend()) continue;
-            const auto it110 = leaves.find(pos000 + glm::ivec3(1, 1, 0));
+            const auto it110 = leaves.find(MortonCode{ pos000 + glm::ivec3(1, 1, 0) });
             if (it110 == leaves.cend()) continue;
-            const auto it111 = leaves.find(pos000 + glm::ivec3(1, 1, 1));
+            const auto it111 = leaves.find(MortonCode{ pos000 + glm::ivec3(1, 1, 1) });
             if (it111 == leaves.cend()) continue;
 
             // calling it corners to not confuse it with the actual mesh vertices
@@ -362,8 +363,8 @@ namespace chad::detail::reconstruction {
 
         write_header(ofs);
         auto leaves = create_hashmap(dag, roots, sdf_trunc);
-        uint32_t vertex_count = create_vertices(ofs, leaves, sdf_res);
-        uint32_t face_count = create_faces(ofs, leaves);
+        std::uint32_t vertex_count = create_vertices(ofs, leaves, sdf_res);
+        std::uint32_t face_count = create_faces(ofs, leaves);
         update_header(ofs, vertex_count, face_count);
         ofs.close();
     }
