@@ -24,7 +24,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/i
 target_compile_options(${PROJECT_NAME} PRIVATE
     # warnings
     $<$<CXX_COMPILER_ID:MSVC>: "/W4">
-    $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wall" "-Wextra" "-Wpedantic" "-Wno-deprecated-declarations" "-Wno-unused-parameter">
+    $<$<CXX_COMPILER_ID:GNU,Clang>: "-Wall" "-Wextra" "-Wpedantic" "-Wno-unused-parameter">
     # warning errors
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "/WX">
     $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<BOOL:${CHAD_USE_STRICT_COMPILATION}>>: "-Werror">

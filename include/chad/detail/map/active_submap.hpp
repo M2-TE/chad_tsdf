@@ -270,8 +270,8 @@ namespace chad::detail::map {
         // accumulated poses for current submap
         std::vector<Pose> _all_poses;
         // accumulated data for current sub-submap (used for point-to-tsdf loop closure)
-        [[deprecated]] std::vector<Pose> _sub_poses; // TODO: these poses might be unnecessary
-        [[deprecated]] std::vector<glm::aligned_vec3> _sub_points;
+        std::vector<Pose> _sub_poses; // TODO: these poses might be unnecessary
+        std::vector<glm::aligned_vec3> _sub_points;
         // ndd descriptor indices for each sub-submap
         std::vector<DescriptorIndex> _descriptor_indices;
         // accumulated TSDF data for current submap
