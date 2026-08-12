@@ -129,7 +129,7 @@ namespace chad::detail::map {
             using glm_vec3f_t = glm::vec<3, glm_float_t, glm::aligned_highp>;
             const glm_vec3f_t position = pose._position;
             constexpr std::size_t swapchain_slice_count = 3; // triple buffering usually works best
-            constexpr std::size_t swapchain_slice_size = 4096; // minimum size for each slice
+            constexpr std::size_t swapchain_slice_size = 4096*2; // minimum size for each slice
             // swapchain of vectors containing traversed voxels
             struct SliceEntry {
                 MortonCode _morton_code;
@@ -137,12 +137,14 @@ namespace chad::detail::map {
             };
             // one atomic for each slice to signify whether it is valid
             std::array<std::vector<SliceEntry>, swapchain_slice_count> swapchain_slices;
-            std::array<std::atomic<bool>, 3> swapchain_slice_valid{ false, false, false };
+            std::array<std::atomic<bool>, swapchain_slice_count> swapchain_slice_valid;
+            for (auto& slice: swapchain_slice_valid) slice.store(false);
 
             // thread work: insert traversed voxels into octree
-            std::jthread thread_oct{ [&]() {
+            std::jthread thread_oct{ [this, &swapchain_slice_valid, &swapchain_slices]() {
                 std::size_t swapchain_slice_i = 0;
 
+                // a bit of a whacky loop condition, but this was the easiest
                 bool done = false;
                 while (!done) {
                     // wait until the current slice becomes valid
@@ -169,9 +171,7 @@ namespace chad::detail::map {
             // main thread work: get traversed voxels via DDA
             const T sdf_res_reciprocal = 1.0 / double(sdf_res);
             std::size_t swapchain_slice_i = 0;
-            auto points_it = std::cbegin(points);
-            auto normals_it = std::cbegin(normals);
-            for (; points_it < std::cend(points); points_it++, normals_it++) {
+            for (auto points_it = std::cbegin(points), normals_it = std::cbegin(normals); points_it < std::cend(points); points_it++, normals_it++) {
                 glm_vec3f_t point = *points_it;
                 glm_vec3f_t normal = *normals_it;
 
@@ -262,11 +262,6 @@ namespace chad::detail::map {
                         swapchain_slice_valid[swapchain_slice_i].store(true, std::memory_order_release);
                     }
                 }
-            }
-
-            // as a signal that the DDA work is done, set all slices to valid, but with a vector size of 0
-            for (std::uint32_t slice_i = 0; slice_i < swapchain_slice_count; slice_i++) {
-
             }
             thread_oct.join();
         }
