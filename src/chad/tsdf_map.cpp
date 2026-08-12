@@ -76,17 +76,16 @@ namespace chad {
             std::string filename = fmt::format("{}/submap_{}.ply", foldername, i);
 
             // reconstruct 3D mesh from the merged octree
-            CHAD_MESSAGE(fmt::format("reconstructing submap {}", filename));
             reconstruction::reconstruct(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
 
             MEASURE_TIME(beg, fmt::format(">> Reconstructing submap \"{}\"", filename));
         }
     }
-    void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation) {
+    void TSDFMap::insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, std::array<double, 3> position, std::array<double, 3> rotation) {
         auto beg = std::chrono::steady_clock::now();
 
         // convert position and rotation into glm structs for convenience
-        const detail::Pose pose{ position, rotation };
+        detail::Pose pose{ position, rotation };
 
         // extract points from input -> use templating for SIMD leverage (constexpr byte width)
         std::vector<glm::aligned_vec3> points_xyz = detail::funcs::extract_xyz(data_p, data_bytes, data_flags);

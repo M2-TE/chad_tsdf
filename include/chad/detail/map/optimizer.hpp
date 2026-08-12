@@ -1,13 +1,13 @@
 #pragma once
 #include "chad/detail/ndd/ndd.hpp"
-#include "chad/detail/dag/storage.hpp"
 #include "chad/detail/funcs/sort.hpp"
 #include "chad/detail/funcs/timing.hpp"
 #include "chad/detail/funcs/normals.hpp"
+#include "chad/detail/dag/storage.hpp"
 #include "chad/detail/map/submap.hpp"
-#include "chad/detail/map/indices.hpp"
 #include "chad/detail/map/active_submap.hpp"
 
+// debug flag for some extra measurements
 #if false
 #define MEASURE_DEBUG(a) a
 #else
@@ -18,6 +18,8 @@ namespace chad::detail::map {
     struct Optimizer {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
+
+        // adds a single scan to the map, alongside a pose (should not be multiple accumulated scans, need to raycast from pose)
         void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
             // async: create a scan context descriptor from the pointcloud (copy points to avoid data race)
             detail::ndd::Descriptor descriptor;
@@ -101,13 +103,11 @@ namespace chad::detail::map {
             active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
         }
-
         // finalize active submap if it contains any data
         void finalize() {
             map::ActiveSubmap& active_submap = _active_submaps[_active_i];
             std::unique_lock lock{ active_submap._mutex };
             if (!active_submap._all_poses.empty()) {
-                CHAD_MESSAGE(">> Forcefully finalizing last submap in preparation for reconstruction");
                 lock.unlock();
                 on_submap_completion(active_submap);
             }
@@ -264,7 +264,6 @@ namespace chad::detail::map {
             _submaps.push_back(submap);
             MEASURE_TIME(timestamp, ">> async: Submap completed");
         }
-
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, ndd::Descriptor&& descriptor) {
             // TODO: LOOP CLOSURE HERE! -> only need to update the lookup_key kd tree after every ~5 (or all above threshhold) descriptor insertions (based on how many prev ones to skip)
@@ -292,16 +291,20 @@ namespace chad::detail::map {
         const float _sdf_trunc_reciprocal;
         const float _submap_xyz_threshhold;
         const float _submap_cor_threshhold;
+
         // transient data during submapping
         constexpr static std::size_t ACTIVE_SUBMAP_COUNT = 2; // multiple frames-in-flight for smoother parallelization
         std::array<ActiveSubmap, ACTIVE_SUBMAP_COUNT> _active_submaps;
         std::array<std::jthread, ACTIVE_SUBMAP_COUNT> _active_threads;
         std::size_t                                   _active_i = 0; // index for currently active submap
+
         // persistent data for submaps
         std::vector<Submap> _submaps;
+
         // persistent data for sub-submaps
         std::vector<ndd::Descriptor>            _descriptors;
         std::vector<ndd::Descriptor::LookupKey> _lookup_keys;
+
         // persistent data for pose graph
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
     };

@@ -108,7 +108,7 @@ namespace chad {
 
     private:
         // insert pointcloud (internal function used by all insert(...) calls)
-        void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, const std::array<double, 3>& position, const std::array<double, 3>& rotation);
+        void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, std::array<double, 3> position, std::array<double, 3> rotation);
 
     public:
         const float _sdf_res;

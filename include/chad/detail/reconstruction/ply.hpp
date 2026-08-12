@@ -79,6 +79,7 @@ namespace chad::detail::reconstruction {
     // Step 1 (DAG tree): create a hashmap that is used to perform more efficient neighbour lookups later
     auto inline create_hashmap(const dag::Storage& dag, dag::Addresses roots, float sdf_trunc) -> LeafHashmap {
         // read-only trackers for submap
+        constexpr std::uint64_t depth_final = dag::Storage::MAX_DEPTH - 2;
         gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
         std::array<std::uint8_t, dag::Storage::MAX_DEPTH> path_child; // child indices along path
         std::array<std::uint32_t, dag::Storage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
@@ -100,7 +101,7 @@ namespace chad::detail::reconstruction {
                 else break; // exit main loop
             }
             // node contains node children
-            else if (depth < dag::Storage::MAX_DEPTH - 2) {
+            else if (depth < depth_final) {
                 // try to find the child in current node
                 std::uint32_t child_addr_tsdf = dag.get_node(depth, addr_tsdf[depth], child_i);
 
@@ -118,9 +119,9 @@ namespace chad::detail::reconstruction {
             // node contains leaf children
             else {
                 // try to get the leaf cluster, skip if it doesn't exist
-                std::uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 2, addr_tsdf[depth], child_i);
+                std::uint32_t child_addr_tsdf = dag.get_node(depth_final, addr_tsdf[depth_final], child_i);
                 if (child_addr_tsdf == 0) continue; // only need to check one
-                std::uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 2, addr_wght[depth], child_i);
+                std::uint32_t child_addr_wght = dag.get_node(depth_final, addr_wght[depth_final], child_i);
 
                 // fetch actual leaf cluster
                 const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
