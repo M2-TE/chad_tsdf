@@ -63,7 +63,7 @@ void inline do_thingy() {
     //     }
     // }
     for (size_t i = 0; i < positions.size(); i++) {
-        sample_sphere(points, positions[i], 20.0);
+        sample_sphere(points, positions[i], 5.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
         // std::cout << i << std::endl;

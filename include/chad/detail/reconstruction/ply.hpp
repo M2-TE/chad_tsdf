@@ -92,7 +92,6 @@ namespace chad::detail::reconstruction {
         // iterate both trees to build separate octrees
         std::uint32_t depth = 0;
         while (true) {
-            fmt::println("depth {}", depth);
             std::uint8_t child_i = path_child[depth]++;
 
             // when all children at this depth were iterated
@@ -101,7 +100,7 @@ namespace chad::detail::reconstruction {
                 else break; // exit main loop
             }
             // node contains node children
-            else if (depth < dag::Storage::MAX_DEPTH - 1) {
+            else if (depth < dag::Storage::MAX_DEPTH - 2) {
                 // try to find the child in current node
                 std::uint32_t child_addr_tsdf = dag.get_node(depth, addr_tsdf[depth], child_i);
 
@@ -119,9 +118,9 @@ namespace chad::detail::reconstruction {
             // node contains leaf children
             else {
                 // try to get the leaf cluster, skip if it doesn't exist
-                std::uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_tsdf[depth], child_i);
+                std::uint32_t child_addr_tsdf = dag.get_node(dag::Storage::MAX_DEPTH - 2, addr_tsdf[depth], child_i);
                 if (child_addr_tsdf == 0) continue; // only need to check one
-                std::uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 1, addr_wght[depth], child_i);
+                std::uint32_t child_addr_wght = dag.get_node(dag::Storage::MAX_DEPTH - 2, addr_wght[depth], child_i);
 
                 // fetch actual leaf cluster
                 const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
