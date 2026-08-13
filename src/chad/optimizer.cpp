@@ -1,4 +1,5 @@
 #include "chad/detail/map/optimizer.hpp"
+#include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
 // all the gtsam headers, mostly taken from their example
 #include <gtsam/geometry/Rot3.h>
@@ -9,9 +10,6 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
-
-// KD-Tree for finding NDD matches
-#include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
 namespace chad::detail::map {
     struct GTSAMData {
@@ -38,12 +36,129 @@ namespace chad::detail::map {
         }
     }
 
-    // void Optimizer::add_scan_descriptor(const std::vector<glm::aligned_vec3>& points, const Pose& pose) {
-    //     _scan_poses.push_back(pose);
-    //     _scan_submap.push_back(_submaps.size());
-    //     _scan_descriptors.emplace_back(points, pose._position);
-    //     _scan_lookup_keys.push_back(_scan_descriptors.back().get_lookup_key());
-    // }
+    // pilfered from HATSDF
+    void lu_decomposition(std::array<std::array<double, 6>, 6>& H) {
+        for (int i = 0; i < 6 - 1; i++) {
+            for (int k = i + 1; k < 6; k++) {
+                H[k][i] /= H[i][i];
+                for (int j = i + 1; j < 6; j++) {
+                    H[k][j] -= H[k][i] * H[i][j];
+                }
+            }
+        }
+    }
+    // pilfered from HATSDF
+    auto lu_solve(const std::array<std::array<double, 6>, 6>& H, const std::array<double, 6>& g) -> std::array<double,6> {
+        std::array<double, 6> x;
+        for (int i = 0; i < 6; i++) {
+            x[i] = g[i];
+            for (int k = 0; k < i; k++) {
+                x[i] -= H[i][k] * x[k];
+            }
+        }
+        for (int i = 6 - 1; i >= 0; i--) {
+            for (int k = i + 1; k < 6; k++) {
+                x[i] -= H[i][k] * x[k];
+            }
+            x[i] /= H[i][i];
+        }
+        return x;
+    }
+    // TODO: prototype for point-to-tsdf
+    void dothingy(std::vector<glm::vec3>& points, glm::vec3& position) {
+        // using namespace chad::detail;
+
+        // // TEMPORARY
+        // dag::ADDR_T tsdf_root = _map_optimizer_p->_submaps.back()._roots._tsdfs;
+
+        // // accumulate count of valid comparisons and total error estimate
+        // float error = 0.0f;
+        // std::size_t count = 0;
+
+        // std::array<std::array<double, 6>, 6> H;
+        // for (auto& h: H) h.fill(0);
+        // std::array<double, 6> g;
+        // g.fill(0);
+
+        // // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
+        // const float voxel_reciprocal = float(1.0 / double(_sdf_res));
+        // for (const auto& point_raw: points) {
+
+        //     // get tsdf voxel at current point
+        //     const glm::ivec3 voxel_pos{ glm::floor(point_raw * voxel_reciprocal) };
+        //     const auto [tsdf, exists] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ voxel_pos });
+        //     if (!exists) continue;
+        //     // fmt::println("cur {}", tsdf);
+
+
+        //     // build gradients along each axis
+        //     glm::vec3 gradient{ 0, 0, 0 };
+        //     for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+        //         glm::ivec3 neigh_pos = voxel_pos;
+
+        //         // get first neighbour
+        //         neigh_pos[axis_i] -= 1;
+        //         const auto [tsdf_a, exists_a] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
+        //         if (!exists_a) continue;
+
+        //         // get second neighbour
+        //         neigh_pos[axis_i] += 2;
+        //         const auto [tsdf_b, exists_b] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
+        //         if (!exists_b) continue;
+
+
+        //         if ((tsdf_a > 0) == (tsdf_b > 0)) {
+        //             gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
+        //         }
+        //         // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+        //     }
+        //     // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
+
+        //     // TODO: ignoring all previous gradient calcs
+        //     // should just calc gradient from current point to TSDF surface estimation
+
+
+        //     // make sure points are centered around (0, 0, 0)
+        //     const glm::vec3 point = point_raw - position;
+        //     // fmt::println("{} {} {}", point.x, point.y, point.z);
+
+        //     // cross product point x gradient
+        //     std::array<double, 6> jacobian;
+        //     jacobian[0] = point[1] * gradient[2] - point[2] * gradient[1];
+        //     jacobian[1] = point[2] * gradient[0] - point[0] * gradient[2];
+        //     jacobian[2] = point[0] * gradient[1] - point[1] * gradient[0];
+        //     jacobian[3] = gradient[0];
+        //     jacobian[4] = gradient[1];
+        //     jacobian[5] = gradient[2];
+
+        //     // add multiplication result to h
+        //     for (uint8_t row = 0; row < 6; row++) {
+        //         for (uint8_t col = 0; col < 6; col++) {
+        //             // H += jacobian * jacobian.transpose()
+        //             H[row][col] += jacobian[row] * jacobian[col];
+        //         }
+        //         g[row] += jacobian[row] * tsdf;
+        //     }
+
+        //     // TODO: check if using floats with more prec dist is better?
+        //     error += std::abs(tsdf);
+        //     count++;
+        // }
+
+        // fmt::println("count: {} error: {}", count, error);
+
+        // funcs::lu_decomposition(H);
+        // auto xi = funcs::lu_solve(H, g);
+        // fmt::println("rot_x {:.4f}", xi[0]);
+        // fmt::println("rot_y {:.4f}", xi[1]);
+        // fmt::println("rot_z {:.4f}", xi[2]);
+        // fmt::println("lin_x {:.4f}", xi[3]);
+        // fmt::println("lin_y {:.4f}", xi[4]);
+        // fmt::println("lin_z {:.4f}", xi[5]);
+        // // xi_to_transform(xi, next_transform, center);
+        // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
+    }
+
     // void Optimizer::detect_loop_closure(SubmapIndex submap_i) {
     //     using namespace ndd;
 

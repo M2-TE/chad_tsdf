@@ -279,7 +279,6 @@ namespace chad::detail::map {
             active_submap._descriptor_indices.push_back(_descriptors.size());
             _lookup_keys.push_back(descriptor.get_lookup_key());
             _descriptors.push_back(std::move(descriptor));
-
         }
 
     public:

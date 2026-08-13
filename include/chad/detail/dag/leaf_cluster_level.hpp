@@ -23,6 +23,13 @@ namespace chad::detail::dag {
         };
 
         LeafClusterLevel(): _addr_set(0, FncHash(_leaf_clusters), FncEq(_leaf_clusters)) {
+            clear();
+        }
+        void clear() {
+            _dupes_n = 0;
+            _uniques_n = 0;
+            _addr_set.clear();
+            _leaf_clusters.clear();
             // reserve first index
             _leaf_clusters.push_back(LeafCluster{});
         }

@@ -4,6 +4,11 @@
 
 namespace chad::detail::dag {
     struct Storage {
+        void clear() {
+            for (auto& level: _node_levels) level.clear();
+            _leaf_cluster_level.clear();
+        }
+
         // add a DAG node and return address of new or existing one
         auto inline add_node(const std::array<ADDR_T, 8>& children, std::uint32_t depth) -> ADDR_T {
             auto& level = _node_levels[depth];
@@ -43,7 +48,6 @@ namespace chad::detail::dag {
                 return old_addr;
             }
         }
-
         // add a DAG leaf cluster and return address of new or existing one
         auto inline add_lc(LeafCluster lc) -> ADDR_T {
             // append a placeholder node (will only ever be 1 placeholder in this vector, hence push_back() and back())
@@ -82,7 +86,6 @@ namespace chad::detail::dag {
             }
             else return 0;
         }
-
         // get leaf cluster via its address
         auto inline get_lc(ADDR_T lc_addr) const -> LeafCluster {
             return _leaf_cluster_level._leaf_clusters[lc_addr];

@@ -149,9 +149,7 @@ namespace chad::detail::map {
                 while (!done) {
                     // wait until the current slice becomes valid
                     auto& flag = swapchain_slice_valid[swapchain_slice_i];
-                    while (!flag.load(std::memory_order_acquire)) {
-                        flag.wait(false, std::memory_order_relaxed);
-                    }
+                    flag.wait(false, std::memory_order_relaxed);
 
                     // the signal for being done is a valid slice being empty
                     if (swapchain_slices[swapchain_slice_i].size() == 0) done = true;
@@ -252,9 +250,7 @@ namespace chad::detail::map {
                     swapchain_slice_i = (swapchain_slice_i + 1) % swapchain_slice_count;
 
                     // wait for next slice to become invalidated
-                    while (swapchain_slice_valid[swapchain_slice_i].load(std::memory_order_acquire)) {
-                        swapchain_slice_valid[swapchain_slice_i].wait(true, std::memory_order_relaxed);
-                    }
+                    swapchain_slice_valid[swapchain_slice_i].wait(true, std::memory_order_relaxed);
                     // clear the upcoming slice
                     swapchain_slices[swapchain_slice_i].clear();
                     if (all_done) {

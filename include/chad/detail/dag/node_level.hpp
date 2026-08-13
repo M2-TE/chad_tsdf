@@ -44,9 +44,16 @@ namespace chad::detail::dag {
         };
 
         NodeLevel(): _addr_set(0, FncHash(_segments), FncEq(_segments)) {
+            clear();
+        }
+        void clear() {
+            _dupes_n = 0;
+            _uniques_n = 0;
+            _addr_set.clear();
+            _segments.clear();
             // reserve first index
+            _occupied_segments_n = 1;
             _segments.push_back(NodeSegment{});
-            _occupied_segments_n = _segments.size();
         }
 
         std::uint32_t _uniques_n, _dupes_n; // for statistics
