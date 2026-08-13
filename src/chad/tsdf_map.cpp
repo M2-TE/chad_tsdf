@@ -5,6 +5,7 @@
 #include "chad/detail/map/optimizer.hpp"
 #include "chad/detail/reconstruction/ply.hpp"
 
+// TODO: prefault memory pages
 // TODO: use estimated normals as NDD input?
 // TODO: another tree (addition to tsdf and weights) for ESDF with low res
 

@@ -81,12 +81,9 @@ namespace chad::detail::reconstruction {
         // read-only trackers for submap
         constexpr std::uint64_t depth_final = dag::Storage::MAX_DEPTH - 2;
         gtl::parallel_flat_hash_map<MortonCode, LeafCopy> leaves;
-        std::array<std::uint8_t, dag::Storage::MAX_DEPTH> path_child; // child indices along path
-        std::array<std::uint32_t, dag::Storage::MAX_DEPTH> addr_tsdf; // TSDF addresses along path
-        std::array<std::uint32_t, dag::Storage::MAX_DEPTH> addr_wght; // weight addresses along path
-        path_child.fill(0);
-        addr_tsdf.fill(0);
-        addr_wght.fill(0);
+        std::array<std::uint8_t,  dag::Storage::MAX_DEPTH - 1> path_child{}; // child indices along path
+        std::array<std::uint32_t, dag::Storage::MAX_DEPTH - 1> addr_tsdf{}; // TSDF addresses along path
+        std::array<std::uint32_t, dag::Storage::MAX_DEPTH - 1> addr_wght{}; // weight addresses along path
         addr_tsdf[0] = roots._tsdfs;
         addr_wght[0] = roots._weigh;
 

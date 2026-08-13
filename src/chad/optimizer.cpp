@@ -15,10 +15,10 @@ namespace chad::detail::map {
     struct GTSAMData {
         static constexpr int _relinearize_skip = 1;
         static constexpr float _relinearize_threshold = 0.01;
-        gtsam::SharedDiagonal _prior_noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.1, 0.1, 0.1).finished());
-        gtsam::SharedDiagonal _odom_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.05, 0.05, 0.05, 0.2, 0.2, 0.2).finished());
-        gtsam::SharedDiagonal _loop_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.02, 0.02, 0.02, 0.1, 0.1, 0.1).finished());
         gtsam::ISAM2 _isam{ gtsam::ISAM2Params{ gtsam::ISAM2GaussNewtonParams(), _relinearize_threshold, _relinearize_skip }};
+        const gtsam::SharedDiagonal _prior_noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.1, 0.1, 0.1).finished());
+        const gtsam::SharedDiagonal _odom_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.05, 0.05, 0.05, 0.2, 0.2, 0.2).finished());
+        const gtsam::SharedDiagonal _loop_noise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.02, 0.02, 0.02, 0.1, 0.1, 0.1).finished());
     };
     Optimizer::Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold):
         _dag(dag),
@@ -157,6 +157,15 @@ namespace chad::detail::map {
         // fmt::println("lin_z {:.4f}", xi[5]);
         // // xi_to_transform(xi, next_transform, center);
         // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
+    }
+
+    auto Optimizer::get_loop_closure_candidates() const -> std::vector<DescriptorIndex> {
+        // indices for descriptors are within submap
+        Submap& submap = _submaps[submap_i];
+        const uint32_t descriptor_beg = submap._scan_beg;
+        const uint32_t descriptor_end = submap._scan_end;
+
+        return {}; // TODO
     }
 
     // void Optimizer::detect_loop_closure(SubmapIndex submap_i) {

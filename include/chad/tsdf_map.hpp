@@ -103,9 +103,6 @@ namespace chad {
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
         void reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first = false);
 
-        // DEBUG
-        void dothingy(std::vector<glm::vec3>& points, glm::vec3& position);
-
     private:
         // insert pointcloud (internal function used by all insert(...) calls)
         void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, std::array<double, 3> position, std::array<double, 3> rotation);

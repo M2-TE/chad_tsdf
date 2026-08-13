@@ -114,6 +114,7 @@ namespace chad::detail::map {
         }
 
     private:
+        auto get_loop_closure_candidates() const -> std::vector<DescriptorIndex>;
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
             // lock DAG (writing)

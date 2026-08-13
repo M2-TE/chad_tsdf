@@ -6,10 +6,6 @@ namespace chad::detail {
     void deallocate_virtual(void* virtual_p, size_t bytes);
     void prefault_virtual(void* virtual_p, size_t bytes);
     void free_virtual(void* virtual_p, size_t bytes);
-
-    auto inline align(std::size_t size, std::size_t alignment) noexcept -> std::size_t {
-        return (size + (alignment - 1)) & ~(alignment - 1);
-    }
 }
 
 namespace chad::detail {
@@ -150,6 +146,11 @@ namespace chad::detail {
                 _capacity = 0;
             }
             _size = 0;
+        }
+
+    private:
+        auto inline static align(std::size_t size, std::size_t alignment) noexcept -> std::size_t {
+            return (size + (alignment - 1)) & ~(alignment - 1);
         }
 
     private:
