@@ -285,17 +285,18 @@ namespace chad::detail::map {
             _lookup_keys.push_back(descriptor.get_lookup_key());
             _descriptors.push_back(std::move(descriptor));
 
-            // TODO
+            // find all the potential correlations
             std::vector<Correlation> candidates = get_loop_closure_candidates();
+            // sort by distance to current submap
+            // TODO
+            // point-to-tsdf registration (TODO: would be best to do this on submap finish instead...)
+            // TODO
+
             fmt::println("{}", candidates.size());
-            // TODO: LOOP CLOSURE HERE! -> only need to update the lookup_key kd tree after a submap is finished!
-            // TODO: use point-to-tsdf for more accurate err estimation after loop closure
             // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished
             // -> relying on single sub-submap to sub-submap matches would be too unreliable
 
-            // TODO: store current position alongside descriptor index in active submap. this is important information for later!
-
-            // clear out all sub-submap data
+            // clear out all sub-submap data (currently just poses and points, used for registration)
             active_submap.clear_sub();
         }
 
