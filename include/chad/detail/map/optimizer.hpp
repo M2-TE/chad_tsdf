@@ -18,7 +18,6 @@ namespace chad::detail::map {
     struct Optimizer {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
-
         // adds a single scan to the map, alongside a pose (should not be multiple accumulated scans, need to raycast from pose)
         void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
             // async: create a scan context descriptor from the pointcloud (copy points to avoid data race)
@@ -75,7 +74,7 @@ namespace chad::detail::map {
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Waited for descriptor"));
 
             // Sub-Submap: check whether NDD correlation threshhold was crossed
-            if (!active_submap_p->_sub_poses.empty()) {
+            if (!active_submap_p->_descriptor_indices.empty()) {
                 auto timestamp = std::chrono::steady_clock::now();
                 const auto& descriptor_latest = _descriptors[active_submap_p->_descriptor_indices.back()];
                 const auto [correlation, rotation] = descriptor_latest.estimate_correlation(descriptor);
@@ -87,10 +86,7 @@ namespace chad::detail::map {
             }
             // Sub-Submap: when empty, initialize it
             else {
-                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
-                // let main thread handle sub-submap completion (including loop closure)
                 on_sub_submap_completion(*active_submap_p, std::move(descriptor));
-                MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap initialization"));
             }
 
             // wait for the point sort and normal estimation to finish
@@ -114,9 +110,23 @@ namespace chad::detail::map {
         }
 
     private:
-        auto get_loop_closure_candidates() const -> std::vector<DescriptorIndex>;
+        struct Correlation {
+            float confidence = 0.0f; // from 0 to 1
+            DescriptorIndex original_descriptor_i = 0;
+            DescriptorIndex matching_descriptor_i = 0;
+            std::uint32_t sector_shift = 0; // single-axis rotation estimation
+        };
+        auto get_loop_closure_candidates() -> std::vector<Correlation>;
+        void update_kdtree();
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
+            // update the kdtree on another thread (internally synchronized)
+            std::jthread kdtree_thread{ [this]() {
+                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
+                update_kdtree();
+                MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
+            }};
+
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
             if (!lock_dag.try_lock()) {
@@ -251,7 +261,7 @@ namespace chad::detail::map {
                 depth--;
             }
 
-            // create final root node. should only be one!
+            // create final root node; should only be one!
             auto& blueprint_map = blueprint_maps[blueprint_map_i];
             if (blueprint_map.size() != 1) {
                 throw std::logic_error("More than one DAG root for a single submap. Did not happen during my testing yet; either your map is too wide or some inserted points have corrupted positions.");
@@ -263,11 +273,22 @@ namespace chad::detail::map {
                 };
             }
             _submaps.push_back(submap);
+
+            // finally, ensure kdd tree is fully built and ready
+            kdtree_thread.join();
             MEASURE_TIME(timestamp, ">> async: Submap completed");
         }
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, ndd::Descriptor&& descriptor) {
-            // TODO: LOOP CLOSURE HERE! -> only need to update the lookup_key kd tree after every ~5 (or all above threshhold) descriptor insertions (based on how many prev ones to skip)
+            // add index to the descriptor referring to this new sub-submap
+            active_submap._descriptor_indices.push_back(_descriptors.size());
+            _lookup_keys.push_back(descriptor.get_lookup_key());
+            _descriptors.push_back(std::move(descriptor));
+
+            // TODO
+            std::vector<Correlation> candidates = get_loop_closure_candidates();
+            fmt::println("{}", candidates.size());
+            // TODO: LOOP CLOSURE HERE! -> only need to update the lookup_key kd tree after a submap is finished!
             // TODO: use point-to-tsdf for more accurate err estimation after loop closure
             // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished
             // -> relying on single sub-submap to sub-submap matches would be too unreliable
@@ -276,10 +297,6 @@ namespace chad::detail::map {
 
             // clear out all sub-submap data
             active_submap.clear_sub();
-            // add index to the descriptor referring to this new sub-submap
-            active_submap._descriptor_indices.push_back(_descriptors.size());
-            _lookup_keys.push_back(descriptor.get_lookup_key());
-            _descriptors.push_back(std::move(descriptor));
         }
 
     public:
@@ -305,7 +322,9 @@ namespace chad::detail::map {
         std::vector<ndd::Descriptor>            _descriptors;
         std::vector<ndd::Descriptor::LookupKey> _lookup_keys;
 
-        // persistent data for pose graph
+        // persistent data for loop closure things
+        void*      _ndd_kdtree_p; // forward declaring the nanoflann kdtree would be a pain otherwise
+        std::mutex _ndd_kdtree_mutex;
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
     };
 }

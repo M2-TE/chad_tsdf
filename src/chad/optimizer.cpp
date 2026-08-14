@@ -1,5 +1,4 @@
 #include "chad/detail/map/optimizer.hpp"
-#include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
 // all the gtsam headers, mostly taken from their example
 #include <gtsam/geometry/Rot3.h>
@@ -10,8 +9,10 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
+#include "chad/detail/ndd/nanoflann/KDTreeVectorOfVectorsAdaptor.hpp"
 
 namespace chad::detail::map {
+    using KDTree = KDTreeVectorOfVectorsAdaptor<decltype(Optimizer::_lookup_keys), float>;
     struct GTSAMData {
         static constexpr int _relinearize_skip = 1;
         static constexpr float _relinearize_threshold = 0.01;
@@ -24,16 +25,23 @@ namespace chad::detail::map {
         _dag(dag),
         _sdf_res(sdf_res),
         _sdf_trunc(sdf_trunc),
-        _sdf_res_reciprocal(1.0f / sdf_res),
-        _sdf_trunc_reciprocal(1.0f / sdf_trunc),
+        _sdf_res_reciprocal(static_cast<float>(1.0 / static_cast<double>(sdf_res))),
+        _sdf_trunc_reciprocal(static_cast<float>(1.0 / static_cast<double>(sdf_trunc))),
         _submap_xyz_threshhold(submap_xyz_threshhold),
-        _submap_cor_threshhold(submap_cor_threshhold) {
+        _submap_cor_threshhold(submap_cor_threshhold),
+        _submaps(),
+        _descriptors(),
+        _lookup_keys(),
+        _ndd_kdtree_p(new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 }),
+        _gtsam(std::make_unique<GTSAMData>()) {
     }
     Optimizer::~Optimizer() {
         // wait for all threads to finish their work before exiting
         for (auto& thread: _active_threads) {
             if (thread.joinable()) thread.join();
         }
+        // couldnt make it a unique pointer since it is void*
+        if (_ndd_kdtree_p != nullptr) delete static_cast<KDTree*>(_ndd_kdtree_p);
     }
 
     // pilfered from HATSDF
@@ -159,13 +167,62 @@ namespace chad::detail::map {
         // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
     }
 
-    auto Optimizer::get_loop_closure_candidates() const -> std::vector<DescriptorIndex> {
-        // indices for descriptors are within submap
-        Submap& submap = _submaps[submap_i];
-        const uint32_t descriptor_beg = submap._scan_beg;
-        const uint32_t descriptor_end = submap._scan_end;
+    auto Optimizer::get_loop_closure_candidates() -> std::vector<Correlation> {
+        std::lock_guard lock{ _ndd_kdtree_mutex };
+        const KDTree& kdtree = *static_cast<const KDTree*>(_ndd_kdtree_p);
+        // set up knn search within tree
+        constexpr std::uint32_t max_matches_limit = 10;
+        std::uint32_t max_matches = std::min<std::uint32_t>(max_matches_limit, _lookup_keys.size());
+        auto out_dists_sqr = std::vector<float>(max_matches);
+        auto candidate_indices = std::vector<DescriptorIndex>(max_matches);
+        auto knnsearch_result = nanoflann::KNNResultSet<float, DescriptorIndex>{ max_matches };
+        knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
 
-        return {}; // TODO
+        // store each match above correlation threshhold
+        std::vector<Correlation> correlations;
+
+        // indices for descriptors are within submap
+        const std::vector<DescriptorIndex>& active_descriptors = _active_submaps[_active_i]._descriptor_indices;
+        DescriptorIndex active_descriptor_beg = active_descriptors.front();
+        DescriptorIndex active_descriptor_end = active_descriptors.back() + 1;
+
+        // for every descriptor within submap, try to find correlations with other submaps
+        for (DescriptorIndex descriptor_i = active_descriptor_beg; descriptor_i < active_descriptor_end; descriptor_i++) {
+            // find neighbours for the current descriptor key
+            kdtree.index->findNeighbors(knnsearch_result, _lookup_keys[descriptor_i].data(), nanoflann::SearchParameters(10));
+
+            // go over all candidates to find potential correlations
+            for (const auto& candidate_i: candidate_indices) {
+                // ignore matches with own submap descriptors
+                if (candidate_i >= active_descriptor_beg && candidate_i < active_descriptor_end) {
+                    continue;
+                }
+
+                // with sufficient correlation confidence, add the correlation as a match
+                const ndd::Descriptor& candidate = _descriptors[candidate_i];
+                auto [correlation, shift] = _descriptors[descriptor_i].estimate_correlation(candidate);
+                if (correlation > _submap_cor_threshhold) {
+                    correlations.push_back(Correlation{
+                        .confidence = static_cast<float>(correlation),
+                        .original_descriptor_i = descriptor_i,
+                        .matching_descriptor_i = candidate_i,
+                        .sector_shift = shift,
+                    });
+                }
+            }
+        }
+        return correlations;
+    }
+    void Optimizer::update_kdtree() {
+        // create a new kdtree, which needs no synchronization
+        KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
+        // TODO: check out the effect of final param "n_thread_build" when building this thing takes too long
+
+        // delete old kdtree
+        std::lock_guard lock{ _ndd_kdtree_mutex };
+        delete static_cast<KDTree*>(_ndd_kdtree_p);
+        // set new one
+        _ndd_kdtree_p = ndd_kdtree_new_p;
     }
 
     // void Optimizer::detect_loop_closure(SubmapIndex submap_i) {
