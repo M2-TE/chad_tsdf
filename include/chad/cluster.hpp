@@ -31,7 +31,7 @@ namespace chad {
                 _value |= std::uint64_t(0xff) << std::uint64_t(leaf_i * 8);
             }
             // check if all leaves are empty
-            bool inline is_empty() {
+            bool inline empty() {
                 return _value == std::numeric_limits<std::uint64_t>::max();
             }
             // retrieve signed distance from single leaf if it is not empty
@@ -66,7 +66,7 @@ namespace chad {
             // set 8 bits to represent an empty leaf (does nothing, empty bits are 0x0)
             void inline set_empty(uint8_t) {
             }
-            bool inline is_empty() {
+            bool inline empty() {
                 return _value == 0;
             }
             // retrieve signed distance from single leaf if it is not empty

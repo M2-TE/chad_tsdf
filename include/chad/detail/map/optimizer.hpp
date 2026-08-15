@@ -116,7 +116,10 @@ namespace chad::detail::map {
             DescriptorIndex matching_descriptor_i = 0;
             std::uint32_t sector_shift = 0; // single-axis rotation estimation
         };
+
         auto get_loop_closure_candidates() -> std::vector<Correlation>;
+        void point_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
+
         void update_kdtree();
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
@@ -206,7 +209,7 @@ namespace chad::detail::map {
                                     lc_weigh._weigh.set(leaf_i, weight);
                                 }
                             }
-                            if (lc_weigh._weigh.is_empty()) continue;
+                            if (lc_weigh._weigh.empty()) continue;
                             // create DAG node and store its address for later
                             new_nodes_tsdfs[2][lc_i / 8] = _dag.add_lc(lc_tsdfs);
                             new_nodes_weigh[2][lc_i / 8] = _dag.add_lc(lc_weigh);
@@ -292,7 +295,6 @@ namespace chad::detail::map {
             // point-to-tsdf registration (TODO: would be best to do this on submap finish instead...)
             // TODO
 
-            fmt::println("{}", candidates.size());
             // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished
             // -> relying on single sub-submap to sub-submap matches would be too unreliable
 

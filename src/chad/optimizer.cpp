@@ -72,86 +72,87 @@ namespace chad::detail::map {
         }
         return x;
     }
-    // TODO: prototype for point-to-tsdf
-    void dothingy(std::vector<glm::vec3>& points, glm::vec3& position) {
-        // using namespace chad::detail;
+    // point-to-tsdf registration; tsdf nodes are in DAG tree and points are passed as-is
+    void Optimizer::point_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose) {
+        // accumulate count of valid comparisons and total error estimate
+        float error = 0.0f;
+        std::size_t count = 0;
 
-        // // TEMPORARY
-        // dag::ADDR_T tsdf_root = _map_optimizer_p->_submaps.back()._roots._tsdfs;
+        // set up matrix for point transform, taking into account roots_err
+        glm::aligned_mat4x4 mat_point_transform = glm::identity<glm::aligned_mat4x4>();
+        // TODO: add err into these and validate output!
+        mat_point_transform = glm::translate(mat_point_transform, -glm::aligned_vec3{ points_pose._position });
+        mat_point_transform = glm::mat4_cast(points_pose._rotation);
+        mat_point_transform = glm::translate(mat_point_transform, +glm::aligned_vec3{ points_pose._position });
 
-        // // accumulate count of valid comparisons and total error estimate
-        // float error = 0.0f;
-        // std::size_t count = 0;
+        // set up H and g for jacobian later
+        std::array<std::array<double, 6>, 6> H;
+        for (auto& h: H) h.fill(0.0);
+        std::array<double, 6> g;
+        g.fill(0.0);
 
-        // std::array<std::array<double, 6>, 6> H;
-        // for (auto& h: H) h.fill(0);
-        // std::array<double, 6> g;
-        // g.fill(0);
+        // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
+        for (const auto& point_raw: points) {
+            // properly transform point, taking into account points_error
+            glm::aligned_vec3 point = point_raw ; // TODO: use the mat_point_transform!
 
-        // // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
-        // const float voxel_reciprocal = float(1.0 / double(_sdf_res));
-        // for (const auto& point_raw: points) {
+            // get tsdf voxel at current point
+            const glm::ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
+            const auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
+            if (!exists) continue;
 
-        //     // get tsdf voxel at current point
-        //     const glm::ivec3 voxel_pos{ glm::floor(point_raw * voxel_reciprocal) };
-        //     const auto [tsdf, exists] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ voxel_pos });
-        //     if (!exists) continue;
-        //     // fmt::println("cur {}", tsdf);
+            // build gradients along each axis
+            glm::vec3 gradient{ 0, 0, 0 };
+            for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+                glm::ivec3 neigh_pos = voxel_pos;
 
+                // get first neighbour
+                neigh_pos[axis_i] -= 1;
+                const auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+                if (!exists_a) continue;
 
-        //     // build gradients along each axis
-        //     glm::vec3 gradient{ 0, 0, 0 };
-        //     for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
-        //         glm::ivec3 neigh_pos = voxel_pos;
+                // get second neighbour
+                neigh_pos[axis_i] += 2;
+                const auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+                if (!exists_b) continue;
 
-        //         // get first neighbour
-        //         neigh_pos[axis_i] -= 1;
-        //         const auto [tsdf_a, exists_a] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
-        //         if (!exists_a) continue;
+                if ((tsdf_a > 0) == (tsdf_b > 0)) {
+                    gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
+                }
+                // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+            }
+            // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
 
-        //         // get second neighbour
-        //         neigh_pos[axis_i] += 2;
-        //         const auto [tsdf_b, exists_b] = _dag_storage_p->get_tsdf(tsdf_root, _sdf_trunc, MortonCode{ neigh_pos });
-        //         if (!exists_b) continue;
-
-
-        //         if ((tsdf_a > 0) == (tsdf_b > 0)) {
-        //             gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
-        //         }
-        //         // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
-        //     }
-        //     // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
-
-        //     // TODO: ignoring all previous gradient calcs
-        //     // should just calc gradient from current point to TSDF surface estimation
+            // TODO: ignoring all previous gradient calcs
+            // should just calc gradient from current point to TSDF surface estimation
 
 
-        //     // make sure points are centered around (0, 0, 0)
-        //     const glm::vec3 point = point_raw - position;
-        //     // fmt::println("{} {} {}", point.x, point.y, point.z);
+            // make sure points are centered around (0, 0, 0)
+            const glm::vec3 point_centered = point_raw - position;
+            // fmt::println("{} {} {}", point.x, point.y, point.z);
 
-        //     // cross product point x gradient
-        //     std::array<double, 6> jacobian;
-        //     jacobian[0] = point[1] * gradient[2] - point[2] * gradient[1];
-        //     jacobian[1] = point[2] * gradient[0] - point[0] * gradient[2];
-        //     jacobian[2] = point[0] * gradient[1] - point[1] * gradient[0];
-        //     jacobian[3] = gradient[0];
-        //     jacobian[4] = gradient[1];
-        //     jacobian[5] = gradient[2];
+            // cross product point x gradient
+            std::array<double, 6> jacobian;
+            jacobian[0] = point_centered[1] * gradient[2] - point_centered[2] * gradient[1];
+            jacobian[1] = point_centered[2] * gradient[0] - point_centered[0] * gradient[2];
+            jacobian[2] = point_centered[0] * gradient[1] - point_centered[1] * gradient[0];
+            jacobian[3] = gradient[0];
+            jacobian[4] = gradient[1];
+            jacobian[5] = gradient[2];
 
-        //     // add multiplication result to h
-        //     for (uint8_t row = 0; row < 6; row++) {
-        //         for (uint8_t col = 0; col < 6; col++) {
-        //             // H += jacobian * jacobian.transpose()
-        //             H[row][col] += jacobian[row] * jacobian[col];
-        //         }
-        //         g[row] += jacobian[row] * tsdf;
-        //     }
+            // add multiplication result to h
+            for (uint8_t row = 0; row < 6; row++) {
+                for (uint8_t col = 0; col < 6; col++) {
+                    // H += jacobian * jacobian.transpose()
+                    H[row][col] += jacobian[row] * jacobian[col];
+                }
+                g[row] += jacobian[row] * tsdf;
+            }
 
-        //     // TODO: check if using floats with more prec dist is better?
-        //     error += std::abs(tsdf);
-        //     count++;
-        // }
+            // TODO: check if using floats with more prec dist is better?
+            error += std::abs(tsdf);
+            count++;
+        }
 
         // fmt::println("count: {} error: {}", count, error);
 
@@ -202,6 +203,7 @@ namespace chad::detail::map {
                 const ndd::Descriptor& candidate = _descriptors[candidate_i];
                 auto [correlation, shift] = _descriptors[descriptor_i].estimate_correlation(candidate);
                 if (correlation > _submap_cor_threshhold) {
+                    fmt::println("descriptor_i: {} -> correlation of {} with {}", descriptor_i, static_cast<float>(correlation), candidate_i);
                     correlations.push_back(Correlation{
                         .confidence = static_cast<float>(correlation),
                         .original_descriptor_i = descriptor_i,
@@ -388,13 +390,6 @@ namespace chad::detail::map {
 
     //     _submaps.push_back(submap);
     //     return _submaps.back();
-    // }
-    // bool Optimizer::is_active_submap_done(const Pose& pose_new, ScanIndex submap_beg, float threshhold) {
-    //     const Pose& pose_prev = _scan_poses[submap_beg];
-    //     float distance = glm::distance(pose_prev._position, pose_new._position);
-    //     // if our submap threshhold is crossed, finalize the active submap before inserting new points
-    //     if (distance > threshhold) return true;
-    //     else return false;
     // }
     // void Optimizer::debug_thingy() {
     //     gtsam::Values result = _gtsam->_isam.calculateEstimate();

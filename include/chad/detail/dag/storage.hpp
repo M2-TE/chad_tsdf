@@ -1,5 +1,6 @@
 #pragma once
 #include "chad/detail/dag/node_level.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 #include "chad/detail/dag/leaf_cluster_level.hpp"
 
 namespace chad::detail::dag {
@@ -89,6 +90,30 @@ namespace chad::detail::dag {
         // get leaf cluster via its address
         auto inline get_lc(ADDR_T lc_addr) const -> LeafCluster {
             return _leaf_cluster_level._leaf_clusters[lc_addr];
+        }
+        // get leaf cluster via MortonCode index
+        auto inline get_lc(ADDR_T root_addr, MortonCode mc) const -> LeafCluster {
+            ADDR_T node_addr = root_addr;
+            for (std::uint32_t depth = 0; depth < MAX_DEPTH; depth++) {
+                std::uint8_t child_i = (mc._value >> (20 - depth) * 3) & 0b111;
+
+                if (depth < MAX_DEPTH - 1) {
+                    node_addr = get_node(depth, node_addr, child_i);
+                    if (node_addr == 0) return {};
+                    continue;
+                }
+                else {
+                    return get_lc(node_addr);
+                }
+            }
+            // std::unreachable();
+            return {};
+        }
+
+        // return single tsdf leaf from morton code index
+        auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
+            LeafCluster lc = get_lc(root_addr, mc);
+            return lc._tsdfs.try_get(child_i, sdf_trunc);
         }
 
         static constexpr std::uint64_t MAX_DEPTH = 21;
