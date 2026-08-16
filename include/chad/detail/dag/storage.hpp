@@ -110,11 +110,11 @@ namespace chad::detail::dag {
             return {};
         }
 
-        // return single tsdf leaf from morton code index
-        auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
-            LeafCluster lc = get_lc(root_addr, mc);
-            return lc._tsdfs.try_get(child_i, sdf_trunc);
-        }
+        // // return single tsdf leaf from morton code index
+        // auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
+        //     LeafCluster lc = get_lc(root_addr, mc);
+        //     return lc._tsdfs.try_get(child_i, sdf_trunc);
+        // }
 
         static constexpr std::uint64_t MAX_DEPTH = 21;
         // 20 levels of standard nodes

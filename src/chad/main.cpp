@@ -1,7 +1,30 @@
 #include <random>
-#include <iostream>
+#include <fmt/base.h>
+#include <fmt/format.h>
 #include <glm/glm.hpp>
 #include "chad/tsdf_map.hpp"
+
+namespace fmt {
+    template<>
+    struct formatter<glm::vec3>: formatter<std::string> {
+        auto format(const glm::vec3& vec, format_context& ctx) const -> format_context::iterator {
+            std::string str = fmt::format("{:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z);
+            return formatter<std::string>::format(str, ctx);
+        }
+    };
+    template<>
+    struct formatter<glm::vec4>: formatter<std::string> {
+        auto format(const glm::vec4& vec, format_context& ctx) const -> format_context::iterator {
+            std::string str = fmt::format("{:.2f} {:.2f} {:.2f} {:.2f}", vec.x, vec.y, vec.z, vec.w);
+            return formatter<std::string>::format(str, ctx);
+        }
+    };
+}
+
+// DEBUG
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 
 [[maybe_unused]]
 void inline sample_sphere(std::vector<glm::vec3>& points, glm::vec3 offset, double radius) {

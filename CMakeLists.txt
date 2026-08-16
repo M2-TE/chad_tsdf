@@ -35,8 +35,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: "/arch:AVX2">
     $<$<CXX_COMPILER_ID:GNU,Clang>:$<IF:$<BOOL:${CHAD_USE_ARCH_NATIVE}>, "-march=native", "-mbmi2" "-msse2">>
     # misc
-    # $<$<CXX_COMPILER_ID:GNU,Clang>: "-mfpmath=sse">
-    # $<$<CXX_COMPILER_ID:Clang>: "-fexperimental-library"> # to access parallel algorithms in <execution> (disabled due to perf regression)
+    $<$<CXX_COMPILER_ID:GNU,Clang>: "-mfpmath=sse">
     $<$<CXX_COMPILER_ID:MSVC>: "/diagnostics:classic" "/Zc:__cplusplus" "/Zc:inline" "/fp:except-" "/FC" "/Gm-" "/MP" "/nologo">)
 target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: "/SUBSYSTEM:CONSOLE">

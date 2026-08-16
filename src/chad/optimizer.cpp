@@ -78,12 +78,10 @@ namespace chad::detail::map {
         float error = 0.0f;
         std::size_t count = 0;
 
-        // set up matrix for point transform, taking into account roots_err
-        glm::aligned_mat4x4 mat_point_transform = glm::identity<glm::aligned_mat4x4>();
-        // TODO: add err into these and validate output!
-        mat_point_transform = glm::translate(mat_point_transform, -glm::aligned_vec3{ points_pose._position });
-        mat_point_transform = glm::mat4_cast(points_pose._rotation);
-        mat_point_transform = glm::translate(mat_point_transform, +glm::aligned_vec3{ points_pose._position });
+        // centering matrix for each point, taking into account (rotational) error of DAG submap
+        glm::aligned_dmat4x4 point_centering = glm::identity<glm::dmat4x4>();
+        point_centering = point_centering * glm::mat4_cast(points_pose._rotation * roots_err._rotation);
+        point_centering = glm::translate(point_centering, -points_pose._position);
 
         // set up H and g for jacobian later
         std::array<std::array<double, 6>, 6> H;
@@ -93,67 +91,66 @@ namespace chad::detail::map {
 
         // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
         for (const auto& point_raw: points) {
-            // properly transform point, taking into account points_error
-            glm::aligned_vec3 point = point_raw ; // TODO: use the mat_point_transform!
-
-            // get tsdf voxel at current point
-            const glm::ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
-            const auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
-            if (!exists) continue;
-
-            // build gradients along each axis
-            glm::vec3 gradient{ 0, 0, 0 };
-            for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
-                glm::ivec3 neigh_pos = voxel_pos;
-
-                // get first neighbour
-                neigh_pos[axis_i] -= 1;
-                const auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-                if (!exists_a) continue;
-
-                // get second neighbour
-                neigh_pos[axis_i] += 2;
-                const auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-                if (!exists_b) continue;
-
-                if ((tsdf_a > 0) == (tsdf_b > 0)) {
-                    gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
-                }
-                // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
-            }
-            // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
-
-            // TODO: ignoring all previous gradient calcs
-            // should just calc gradient from current point to TSDF surface estimation
-
-
             // make sure points are centered around (0, 0, 0)
-            const glm::vec3 point_centered = point_raw - position;
+            glm::aligned_vec3 point_centered = point_centering * glm::aligned_dvec4{ point_raw, 1.0 };
+            // move point back to original position to sample grid, taking into account translational error of dag submap as well
+            glm::aligned_vec3 point = point_centered + static_cast<glm::aligned_vec3>(points_pose._position + roots_err._position);
             // fmt::println("{} {} {}", point.x, point.y, point.z);
 
-            // cross product point x gradient
-            std::array<double, 6> jacobian;
-            jacobian[0] = point_centered[1] * gradient[2] - point_centered[2] * gradient[1];
-            jacobian[1] = point_centered[2] * gradient[0] - point_centered[0] * gradient[2];
-            jacobian[2] = point_centered[0] * gradient[1] - point_centered[1] * gradient[0];
-            jacobian[3] = gradient[0];
-            jacobian[4] = gradient[1];
-            jacobian[5] = gradient[2];
+            // // get tsdf voxel at current point
+            // glm::aligned_ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
+            // auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
+            // if (!exists) continue;
 
-            // add multiplication result to h
-            for (uint8_t row = 0; row < 6; row++) {
-                for (uint8_t col = 0; col < 6; col++) {
-                    // H += jacobian * jacobian.transpose()
-                    H[row][col] += jacobian[row] * jacobian[col];
-                }
-                g[row] += jacobian[row] * tsdf;
-            }
+            // // build gradients along each axis
+            // glm::vec3 gradient{ 0, 0, 0 };
+            // for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+            //     glm::ivec3 neigh_pos = voxel_pos;
 
-            // TODO: check if using floats with more prec dist is better?
-            error += std::abs(tsdf);
-            count++;
+            //     // get first neighbour
+            //     neigh_pos[axis_i] -= 1;
+            //     auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+            //     if (!exists_a) continue;
+
+            //     // get second neighbour
+            //     neigh_pos[axis_i] += 2;
+            //     auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+            //     if (!exists_b) continue;
+
+            //     if ((tsdf_a > 0) == (tsdf_b > 0)) {
+            //         gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
+            //     }
+            //     // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+            // }
+            // // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
+
+            // // TODO: ignoring all previous gradient calcs
+            // // should just calc gradient from current point to TSDF surface estimation
+
+
+
+            // // cross product point x gradient
+            // std::array<double, 6> jacobian;
+            // jacobian[0] = point_centered[1] * gradient[2] - point_centered[2] * gradient[1];
+            // jacobian[1] = point_centered[2] * gradient[0] - point_centered[0] * gradient[2];
+            // jacobian[2] = point_centered[0] * gradient[1] - point_centered[1] * gradient[0];
+            // jacobian[3] = gradient[0];
+            // jacobian[4] = gradient[1];
+            // jacobian[5] = gradient[2];
+
+            // // add multiplication result to h
+            // for (uint8_t row = 0; row < 6; row++) {
+            //     for (uint8_t col = 0; col < 6; col++) {
+            //         // H += jacobian * jacobian.transpose()
+            //         H[row][col] += jacobian[row] * jacobian[col];
+            //     }
+            //     g[row] += jacobian[row] * tsdf;
+            // }
+
+            // // TODO: check if using floats with more prec dist is better?
+            // error += std::abs(tsdf);
+            // count++;
         }
-
         // fmt::println("count: {} error: {}", count, error);
 
         // funcs::lu_decomposition(H);
