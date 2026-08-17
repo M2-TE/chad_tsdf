@@ -2,6 +2,7 @@
 #include "chad/detail/map/indices.hpp"
 
 namespace chad::detail::ndd {
+    // loop closure candidate
     struct Correlation {
         float confidence; // from 0 to 1
         std::uint32_t sector_shift; // single-axis rotation estimation

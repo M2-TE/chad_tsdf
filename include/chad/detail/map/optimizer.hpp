@@ -111,8 +111,9 @@ namespace chad::detail::map {
         }
 
     private:
-
+        // match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
         auto get_loop_closure_candidates(const ndd::Descriptor& descriptor, const ndd::Descriptor::LookupKey& key) -> std::vector<ndd::Correlation>;
+        // match points to the given TSDF DAG submap (TODO: return data or directly update edges?)
         void match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
         // separate function to update the kdtree for descriptor matching
         void update_kdtree();
