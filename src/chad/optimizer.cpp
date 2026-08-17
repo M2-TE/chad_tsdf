@@ -73,7 +73,7 @@ namespace chad::detail::map {
         return x;
     }
     // point-to-tsdf registration; tsdf nodes are in DAG tree and points are passed as-is
-    void Optimizer::point_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose) {
+    void Optimizer::match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose) {
         // accumulate count of valid comparisons and total error estimate
         float error = 0.0f;
         std::size_t count = 0;
@@ -97,61 +97,61 @@ namespace chad::detail::map {
             glm::aligned_vec3 point = point_centered + static_cast<glm::aligned_vec3>(points_pose._position + roots_err._position);
             // fmt::println("{} {} {}", point.x, point.y, point.z);
 
-            // // get tsdf voxel at current point
-            // glm::aligned_ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
-            // auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
-            // if (!exists) continue;
+            // get tsdf voxel at current point
+            glm::aligned_ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
+            auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
+            if (!exists) continue;
 
-            // // build gradients along each axis
-            // glm::vec3 gradient{ 0, 0, 0 };
-            // for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
-            //     glm::ivec3 neigh_pos = voxel_pos;
+            // build gradients along each axis
+            glm::vec3 gradient{ 0, 0, 0 };
+            for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+                glm::ivec3 neigh_pos = voxel_pos;
 
-            //     // get first neighbour
-            //     neigh_pos[axis_i] -= 1;
-            //     auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-            //     if (!exists_a) continue;
+                // get first neighbour
+                neigh_pos[axis_i] -= 1;
+                auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+                if (!exists_a) continue;
 
-            //     // get second neighbour
-            //     neigh_pos[axis_i] += 2;
-            //     auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-            //     if (!exists_b) continue;
+                // get second neighbour
+                neigh_pos[axis_i] += 2;
+                auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
+                if (!exists_b) continue;
 
-            //     if ((tsdf_a > 0) == (tsdf_b > 0)) {
-            //         gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
-            //     }
-            //     // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
-            // }
-            // // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
+                if ((tsdf_a > 0) == (tsdf_b > 0)) {
+                    gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
+                }
+                // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+            }
+            // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
 
-            // // TODO: ignoring all previous gradient calcs
-            // // should just calc gradient from current point to TSDF surface estimation
+            // TODO: ignoring all previous gradient calcs
+            // should just calc gradient from current point to TSDF surface estimation
 
 
 
-            // // cross product point x gradient
-            // std::array<double, 6> jacobian;
-            // jacobian[0] = point_centered[1] * gradient[2] - point_centered[2] * gradient[1];
-            // jacobian[1] = point_centered[2] * gradient[0] - point_centered[0] * gradient[2];
-            // jacobian[2] = point_centered[0] * gradient[1] - point_centered[1] * gradient[0];
-            // jacobian[3] = gradient[0];
-            // jacobian[4] = gradient[1];
-            // jacobian[5] = gradient[2];
+            // cross product point x gradient
+            std::array<double, 6> jacobian;
+            jacobian[0] = point_centered[1] * gradient[2] - point_centered[2] * gradient[1];
+            jacobian[1] = point_centered[2] * gradient[0] - point_centered[0] * gradient[2];
+            jacobian[2] = point_centered[0] * gradient[1] - point_centered[1] * gradient[0];
+            jacobian[3] = gradient[0];
+            jacobian[4] = gradient[1];
+            jacobian[5] = gradient[2];
 
-            // // add multiplication result to h
-            // for (uint8_t row = 0; row < 6; row++) {
-            //     for (uint8_t col = 0; col < 6; col++) {
-            //         // H += jacobian * jacobian.transpose()
-            //         H[row][col] += jacobian[row] * jacobian[col];
-            //     }
-            //     g[row] += jacobian[row] * tsdf;
-            // }
+            // add multiplication result to h
+            for (uint8_t row = 0; row < 6; row++) {
+                for (uint8_t col = 0; col < 6; col++) {
+                    // H += jacobian * jacobian.transpose()
+                    H[row][col] += jacobian[row] * jacobian[col];
+                }
+                g[row] += jacobian[row] * tsdf;
+            }
 
-            // // TODO: check if using floats with more prec dist is better?
-            // error += std::abs(tsdf);
-            // count++;
+            // TODO: check if using floats with more prec dist is better?
+            error += std::abs(tsdf);
+            count++;
         }
-        // fmt::println("count: {} error: {}", count, error);
+        fmt::println("count: {} error: {}", count, error);
 
         // funcs::lu_decomposition(H);
         // auto xi = funcs::lu_solve(H, g);
@@ -165,7 +165,7 @@ namespace chad::detail::map {
         // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
     }
 
-    auto Optimizer::get_loop_closure_candidates() -> std::vector<Correlation> {
+    auto Optimizer::get_loop_closure_candidates(const ndd::Descriptor& descriptor, const ndd::Descriptor::LookupKey& key) -> std::vector<ndd::Correlation> {
         std::lock_guard lock{ _ndd_kdtree_mutex };
         const KDTree& kdtree = *static_cast<const KDTree*>(_ndd_kdtree_p);
         // set up knn search within tree
@@ -177,37 +177,22 @@ namespace chad::detail::map {
         knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
 
         // store each match above correlation threshhold
-        std::vector<Correlation> correlations;
+        std::vector<ndd::Correlation> correlations;
+        // find neighbours for the current descriptor key
+        kdtree.index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10));
 
-        // indices for descriptors are within submap
-        const std::vector<DescriptorIndex>& active_descriptors = _active_submaps[_active_i]._descriptor_indices;
-        DescriptorIndex active_descriptor_beg = active_descriptors.front();
-        DescriptorIndex active_descriptor_end = active_descriptors.back() + 1;
-
-        // for every descriptor within submap, try to find correlations with other submaps
-        for (DescriptorIndex descriptor_i = active_descriptor_beg; descriptor_i < active_descriptor_end; descriptor_i++) {
-            // find neighbours for the current descriptor key
-            kdtree.index->findNeighbors(knnsearch_result, _lookup_keys[descriptor_i].data(), nanoflann::SearchParameters(10));
-
-            // go over all candidates to find potential correlations
-            for (const auto& candidate_i: candidate_indices) {
-                // ignore matches with own submap descriptors
-                if (candidate_i >= active_descriptor_beg && candidate_i < active_descriptor_end) {
-                    continue;
-                }
-
-                // with sufficient correlation confidence, add the correlation as a match
-                const ndd::Descriptor& candidate = _descriptors[candidate_i];
-                auto [correlation, shift] = _descriptors[descriptor_i].estimate_correlation(candidate);
-                if (correlation > _submap_cor_threshhold) {
-                    fmt::println("descriptor_i: {} -> correlation of {} with {}", descriptor_i, static_cast<float>(correlation), candidate_i);
-                    correlations.push_back(Correlation{
-                        .confidence = static_cast<float>(correlation),
-                        .original_descriptor_i = descriptor_i,
-                        .matching_descriptor_i = candidate_i,
-                        .sector_shift = shift,
-                    });
-                }
+        // go over all candidates to find potential correlations
+        for (const auto& candidate_i: candidate_indices) {
+            // with sufficient correlation confidence, add the correlation as a match
+            const ndd::Descriptor& candidate = _descriptors[candidate_i];
+            auto [correlation, shift] = descriptor.estimate_correlation(candidate);
+            if (correlation > _submap_cor_threshhold) {
+                fmt::println("correlation of {:.2f} with descriptor {}", static_cast<float>(correlation), candidate_i);
+                correlations.push_back(ndd::Correlation{
+                    .confidence = static_cast<float>(correlation),
+                    .sector_shift = shift,
+                    .matching_descriptor_i = candidate_i,
+                });
             }
         }
         return correlations;
@@ -215,7 +200,7 @@ namespace chad::detail::map {
     void Optimizer::update_kdtree() {
         // create a new kdtree, which needs no synchronization
         KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
-        // TODO: check out the effect of final param "n_thread_build" when building this thing takes too long
+        // TODO: check out the effectiveness of final param "n_thread_build" when building this thing takes too long
 
         // delete old kdtree
         std::lock_guard lock{ _ndd_kdtree_mutex };

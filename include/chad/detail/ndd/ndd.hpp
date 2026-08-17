@@ -1,6 +1,12 @@
 #pragma once
+#include "chad/detail/map/indices.hpp"
 
 namespace chad::detail::ndd {
+    struct Correlation {
+        float confidence; // from 0 to 1
+        std::uint32_t sector_shift; // single-axis rotation estimation
+        map::DescriptorIndex matching_descriptor_i;
+    };
     struct Descriptor {
         static constexpr std::uint32_t N_RINGS = 20;
         static constexpr std::uint32_t N_SECTORS = 60;

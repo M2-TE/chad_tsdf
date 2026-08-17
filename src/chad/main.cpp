@@ -75,20 +75,20 @@ void inline do_thingy() {
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
         { 0.0, 0, 0 },
-        { 3.5, 0, 0 },
-        { 7.0, 0, 0 },
+        // { 3.5, 0, 0 },
+        // { 7.0, 0, 0 },
         // { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
-    // for (int a = 0; a < 10; a++) {
-    //     glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
-    //     for (int b = 0; b < 10; b++) {
-    //         positions.push_back(position);
-    //     }
-    // }
+    for (int a = 0; a < 10; a++) {
+        glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
+        for (int b = 0; b < 10; b++) {
+            positions.push_back(position);
+        }
+    }
     for (size_t i = 0; i < positions.size(); i++) {
-        if (i % 2 == 0) sample_sphere(points, positions[i], 5.0);
-        else sample_cube(points, positions[i]);
-        // sample_sphere(points, positions[i], 5.0);
+        // if (i % 2 == 0) sample_sphere(points, positions[i], 5.0);
+        // else sample_cube(points, positions[i]);
+        sample_sphere(points, positions[i], 5.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
         // std::cout << i << std::endl;

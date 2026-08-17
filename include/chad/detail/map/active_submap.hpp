@@ -1,33 +1,22 @@
 #pragma once
 #include "chad/detail/misc/pose.hpp"
-#include "chad/detail/map/indices.hpp"
 #include "chad/detail/map/octree2.hpp"
+#include "chad/detail/map/sub_submap.hpp"
 
 namespace chad::detail::map {
     class ActiveSubmap {
     public:
-        // clear only sub-submap related data
-        void clear_sub() {
-            _sub_poses.clear();
-            _sub_points.clear();
-        }
         // clear all data
         void clear() {
-            clear_sub();
             _all_poses.clear();
-            _descriptor_indices.clear();
+            _sub_submaps.clear();
             _tsdf_octree.clear();
         }
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
             _all_poses.push_back(pose);
-            _sub_poses.push_back(pose);
-
             // immediately integrate points into the tsdf octree
             write_octree_async<double>(points, normals, pose, sdf_res, sdf_trunc);
-
-            // move data to avoid copies
-            _sub_points.insert(_sub_points.end(), std::make_move_iterator(points.begin()), std::make_move_iterator(points.end()));
         }
 
     private:
@@ -263,13 +252,10 @@ namespace chad::detail::map {
         }
 
     public:
-        // accumulated poses for current submap
+        // trajectory within submap
         std::vector<Pose> _all_poses;
-        // accumulated data for current sub-submap (used for point-to-tsdf loop closure)
-        std::vector<Pose> _sub_poses; // TODO: these poses might be unnecessary
-        std::vector<glm::aligned_vec3> _sub_points;
-        // ndd descriptor indices for each sub-submap
-        std::vector<DescriptorIndex> _descriptor_indices;
+        // data for each sub-submap
+        std::vector<SubSubmap> _sub_submaps;
         // accumulated TSDF data for current submap
         Octree2<17, 2> _tsdf_octree;
         // mutex for async safety

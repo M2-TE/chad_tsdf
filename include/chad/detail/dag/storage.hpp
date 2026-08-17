@@ -94,27 +94,18 @@ namespace chad::detail::dag {
         // get leaf cluster via MortonCode index
         auto inline get_lc(ADDR_T root_addr, MortonCode mc) const -> LeafCluster {
             ADDR_T node_addr = root_addr;
-            for (std::uint32_t depth = 0; depth < MAX_DEPTH; depth++) {
-                std::uint8_t child_i = (mc._value >> (20 - depth) * 3) & 0b111;
-
-                if (depth < MAX_DEPTH - 1) {
-                    node_addr = get_node(depth, node_addr, child_i);
-                    if (node_addr == 0) return {};
-                    continue;
-                }
-                else {
-                    return get_lc(node_addr);
-                }
+            for (std::uint32_t depth = 0; depth < MAX_DEPTH - 1; depth++) {
+                node_addr = get_node(depth, node_addr, mc.child(depth));
+                if (node_addr == 0) return {};
             }
-            // std::unreachable();
-            return {};
+            return get_lc(node_addr);
         }
 
-        // // return single tsdf leaf from morton code index
-        // auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
-        //     LeafCluster lc = get_lc(root_addr, mc);
-        //     return lc._tsdfs.try_get(child_i, sdf_trunc);
-        // }
+        // return single tsdf leaf from morton code index
+        auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
+            LeafCluster lc = get_lc(root_addr, mc);
+            return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
+        }
 
         static constexpr std::uint64_t MAX_DEPTH = 21;
         // 20 levels of standard nodes

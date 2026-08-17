@@ -74,19 +74,20 @@ namespace chad::detail::map {
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Waited for descriptor"));
 
             // Sub-Submap: check whether NDD correlation threshhold was crossed
-            if (!active_submap_p->_descriptor_indices.empty()) {
+            if (!active_submap_p->_sub_submaps.empty()) {
                 auto timestamp = std::chrono::steady_clock::now();
-                const auto& descriptor_latest = _descriptors[active_submap_p->_descriptor_indices.back()];
+                const auto& sub_submap_latest = active_submap_p->_sub_submaps.back();
+                const auto& descriptor_latest = _descriptors[sub_submap_latest._descriptor_i];
                 const auto [correlation, rotation] = descriptor_latest.estimate_correlation(descriptor);
                 if (correlation < _submap_cor_threshhold) {
                     // let main thread handle sub-submap completion (including loop closure)
-                    on_sub_submap_completion(*active_submap_p, std::move(descriptor));
+                    on_sub_submap_completion(*active_submap_p, pose, std::move(descriptor));
                     MEASURE_TIME(timestamp, "Sub-submap completion");
                 }
             }
-            // Sub-Submap: when empty, initialize it
             else {
-                on_sub_submap_completion(*active_submap_p, std::move(descriptor));
+                // when empty, initialize it (can just call the completion func here, will init)
+                on_sub_submap_completion(*active_submap_p, pose, std::move(descriptor));
             }
 
             // wait for the point sort and normal estimation to finish
@@ -110,16 +111,10 @@ namespace chad::detail::map {
         }
 
     private:
-        struct Correlation {
-            float confidence = 0.0f; // from 0 to 1
-            DescriptorIndex original_descriptor_i = 0;
-            DescriptorIndex matching_descriptor_i = 0;
-            std::uint32_t sector_shift = 0; // single-axis rotation estimation
-        };
 
-        auto get_loop_closure_candidates() -> std::vector<Correlation>;
-        void point_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
-
+        auto get_loop_closure_candidates(const ndd::Descriptor& descriptor, const ndd::Descriptor::LookupKey& key) -> std::vector<ndd::Correlation>;
+        void match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
+        // separate function to update the kdtree for descriptor matching
         void update_kdtree();
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
@@ -282,24 +277,20 @@ namespace chad::detail::map {
             MEASURE_TIME(timestamp, ">> async: Submap completed");
         }
         // finish only the sub-submap
-        void on_sub_submap_completion(ActiveSubmap& active_submap, ndd::Descriptor&& descriptor) {
-            // add index to the descriptor referring to this new sub-submap
-            active_submap._descriptor_indices.push_back(_descriptors.size());
-            _lookup_keys.push_back(descriptor.get_lookup_key());
+        void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
+            // add the finalized sub-submap
+            ndd::Descriptor::LookupKey key = descriptor.get_lookup_key();
+            active_submap._sub_submaps.push_back(SubSubmap{
+                ._pose = pose,
+                ._descriptor_i = static_cast<DescriptorIndex>(_descriptors.size()),
+                ._correlations = get_loop_closure_candidates(descriptor, key)
+            });
+
+            // store lookup key and descriptor permanently
+            _lookup_keys.push_back(std::move(key));
             _descriptors.push_back(std::move(descriptor));
-
-            // find all the potential correlations
-            std::vector<Correlation> candidates = get_loop_closure_candidates();
-            // sort by distance to current submap
-            // TODO
-            // point-to-tsdf registration (TODO: would be best to do this on submap finish instead...)
-            // TODO
-
-            // TODO: store the best few candidates for matches and find the best ones once ENTIRE SUBMAP is about to be finished
-            // -> relying on single sub-submap to sub-submap matches would be too unreliable
-
-            // clear out all sub-submap data (currently just poses and points, used for registration)
-            active_submap.clear_sub();
+            // remember the future submap index for the newly stored descriptor
+            _submap_indices.push_back(_submaps.size());
         }
 
     public:
@@ -322,6 +313,7 @@ namespace chad::detail::map {
         std::vector<Submap> _submaps;
 
         // persistent data for sub-submaps
+        std::vector<SubmapIndex>                _submap_indices; // to correlate descriptor indices to submap indices
         std::vector<ndd::Descriptor>            _descriptors;
         std::vector<ndd::Descriptor::LookupKey> _lookup_keys;
 
