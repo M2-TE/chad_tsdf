@@ -18,6 +18,7 @@ namespace chad::detail::map {
     struct Optimizer {
         Optimizer(dag::Storage& dag, float sdf_res, float sdf_trunc, float submap_xyz_threshhold, float submap_cor_threshhold);
         ~Optimizer();
+
         // adds a single scan to the map, alongside a pose (should not be multiple accumulated scans, need to raycast from pose)
         void add_scan(std::vector<glm::aligned_vec3>&& points, Pose pose) {
             // async: create a scan context descriptor from the pointcloud (copy points to avoid data race)
@@ -112,11 +113,50 @@ namespace chad::detail::map {
 
     private:
         // match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
-        auto get_loop_closure_candidates(const ndd::Descriptor& descriptor, const ndd::Descriptor::LookupKey& key) -> std::vector<ndd::Correlation>;
+        auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
         // match points to the given TSDF DAG submap (TODO: return data or directly update edges?)
         void match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
         // separate function to update the kdtree for descriptor matching
         void update_kdtree();
+        // TODO
+        void tempthingy(ActiveSubmap& active_submap) {
+            // DEBUG NOTE: active submap already locked here
+
+            // group correlations by submap they belong to
+            gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
+            for (const auto& sub_submap: active_submap._sub_submaps) {
+                for (const auto& correlation: sub_submap._correlations) {
+                    auto [submap_i, subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
+                    correlation_groups[submap_i].push_back(correlation);
+                }
+            }
+
+            // find the group with the most correlations
+            SubmapIndex max_submap_i = 0;
+            std::uint32_t max_corr_count = 0;
+            fmt::println("potential correlations for submap {}", _submaps.size());
+            for (const auto& [submap_i, correlations]: correlation_groups) {
+                if (max_corr_count == 0 || correlations.size() > correlation_groups[max_submap_i].size()) {
+                    max_submap_i = submap_i;
+                    max_corr_count = correlations.size();
+                }
+                // DEBUG: printing out all the correlations
+                fmt::println("group submap {}", submap_i);
+                for (const auto& correlation: correlations) {
+                    fmt::println("\t desc {} corr to desc {} with confidence of {:.2f}", correlation.original_descriptor_i, correlation.matching_descriptor_i, correlation.confidence);
+                }
+            }
+            // TODO: parameterize!
+            if (max_corr_count >= 3) {
+                fmt::println("submap {} has the most correlations ({}) with it", max_submap_i, max_corr_count);
+            }
+            else fmt::println("insufficient correlations");
+
+            if (correlation_groups.size() > 2) {
+                fmt::println("reached with size {}", correlation_groups.size());
+                std::exit(0);
+            }
+        }
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
             // update the kdtree on another thread (internally synchronized)
@@ -126,13 +166,6 @@ namespace chad::detail::map {
                 MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
             }};
 
-            // lock DAG (writing)
-            std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
-            if (!lock_dag.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_dag.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
-            }
             // lock submap (reading)
             std::unique_lock lock_sub{ active_submap._mutex, std::defer_lock };
             if (!lock_sub.try_lock()) {
@@ -140,6 +173,18 @@ namespace chad::detail::map {
                 lock_sub.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
+            // lock DAG (writing)
+            std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
+            if (!lock_dag.try_lock()) {
+                auto timestamp = std::chrono::steady_clock::now();
+                lock_dag.lock();
+                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
+            }
+
+            // DEBUG
+            tempthingy(active_submap);
+            // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
+
             auto timestamp = std::chrono::steady_clock::now();
 
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
@@ -279,19 +324,20 @@ namespace chad::detail::map {
         }
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
+            // store lookup key and descriptor permanently
+            DescriptorIndex descriptor_i = static_cast<DescriptorIndex>(_descriptors.size());
+            _lookup_keys.push_back(descriptor.get_lookup_key());
+            _descriptors.push_back(std::move(descriptor));
+
+            // remember the future submap index for the newly stored descriptor
+            _submap_indices.push_back({ _submaps.size(), active_submap._sub_submaps.size() });
+
             // add the finalized sub-submap
-            ndd::Descriptor::LookupKey key = descriptor.get_lookup_key();
             active_submap._sub_submaps.push_back(SubSubmap{
                 ._pose = pose,
-                ._descriptor_i = static_cast<DescriptorIndex>(_descriptors.size()),
-                ._correlations = get_loop_closure_candidates(descriptor, key)
+                ._descriptor_i = descriptor_i,
+                ._correlations = get_loop_closure_candidates(descriptor_i),
             });
-
-            // store lookup key and descriptor permanently
-            _lookup_keys.push_back(std::move(key));
-            _descriptors.push_back(std::move(descriptor));
-            // remember the future submap index for the newly stored descriptor
-            _submap_indices.push_back(_submaps.size());
         }
 
     public:
@@ -308,19 +354,20 @@ namespace chad::detail::map {
         constexpr static std::size_t ACTIVE_SUBMAP_COUNT = 2; // multiple frames-in-flight for smoother parallelization
         std::array<ActiveSubmap, ACTIVE_SUBMAP_COUNT> _active_submaps;
         std::array<std::jthread, ACTIVE_SUBMAP_COUNT> _active_threads;
-        std::size_t                                   _active_i = 0; // index for currently active submap
+        std::size_t                                   _active_i; // index for currently active submap
 
         // persistent data for submaps
         std::vector<Submap> _submaps;
 
         // persistent data for sub-submaps
-        std::vector<SubmapIndex>                _submap_indices; // to correlate descriptor indices to submap indices
-        std::vector<ndd::Descriptor>            _descriptors;
-        std::vector<ndd::Descriptor::LookupKey> _lookup_keys;
+        std::vector<std::pair<SubmapIndex, SubSubmapIndex>> _submap_indices; // to correlate descriptor indices to submap indices
+        std::vector<ndd::Descriptor>                        _descriptors;
+        std::vector<ndd::Descriptor::LookupKey>             _lookup_keys;
 
         // persistent data for loop closure things
-        void*      _ndd_kdtree_p; // forward declaring the nanoflann kdtree would be a pain otherwise
-        std::mutex _ndd_kdtree_mutex;
+        void*         _ndd_kdtree_p; // forward declaring the nanoflann kdtree as void*, since it would be a pain otherwise
+        std::uint32_t _ndd_kdtree_size; // only updated after kdtree rebuilds
+        std::mutex    _ndd_kdtree_mutex;
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
     };
 }

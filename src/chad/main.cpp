@@ -85,13 +85,12 @@ void inline do_thingy() {
             positions.push_back(position);
         }
     }
-    for (size_t i = 0; i < positions.size(); i++) {
-        // if (i % 2 == 0) sample_sphere(points, positions[i], 5.0);
-        // else sample_cube(points, positions[i]);
-        sample_sphere(points, positions[i], 5.0);
+    for (size_t i = 1; i < positions.size(); i++) {
+        if (i % 5 == 0) sample_sphere(points, positions[i], 10.0);
+        else sample_sphere(points, positions[i], 5.0);
+        // sample_sphere(points, positions[i], 5.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
-        // std::cout << i << std::endl;
     }
 
 

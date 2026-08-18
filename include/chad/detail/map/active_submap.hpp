@@ -138,7 +138,7 @@ namespace chad::detail::map {
                 while (!done) {
                     // wait until the current slice becomes valid
                     auto& flag = swapchain_slice_valid[swapchain_slice_i];
-                    flag.wait(false, std::memory_order_relaxed);
+                    flag.wait(false, std::memory_order_acquire);
 
                     // the signal for being done is a valid slice being empty
                     if (swapchain_slices[swapchain_slice_i].size() == 0) done = true;
@@ -239,12 +239,12 @@ namespace chad::detail::map {
                     swapchain_slice_i = (swapchain_slice_i + 1) % swapchain_slice_count;
 
                     // wait for next slice to become invalidated
-                    swapchain_slice_valid[swapchain_slice_i].wait(true, std::memory_order_relaxed);
+                    swapchain_slice_valid[swapchain_slice_i].wait(true, std::memory_order_acquire);
                     // clear the upcoming slice
                     swapchain_slices[swapchain_slice_i].clear();
                     if (all_done) {
-                        // an empty but valid slice is the signal for the octree inserter thread to stop
                         swapchain_slice_valid[swapchain_slice_i].store(true, std::memory_order_release);
+                        swapchain_slice_valid[swapchain_slice_i].notify_one();
                     }
                 }
             }

@@ -29,10 +29,12 @@ namespace chad::detail::map {
         _sdf_trunc_reciprocal(static_cast<float>(1.0 / static_cast<double>(sdf_trunc))),
         _submap_xyz_threshhold(submap_xyz_threshhold),
         _submap_cor_threshhold(submap_cor_threshhold),
+        _active_i(0),
         _submaps(),
         _descriptors(),
         _lookup_keys(),
         _ndd_kdtree_p(new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 }),
+        _ndd_kdtree_size(0),
         _gtsam(std::make_unique<GTSAMData>()) {
     }
     Optimizer::~Optimizer() {
@@ -72,7 +74,6 @@ namespace chad::detail::map {
         }
         return x;
     }
-    // point-to-tsdf registration; tsdf nodes are in DAG tree and points are passed as-is
     void Optimizer::match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose) {
         // accumulate count of valid comparisons and total error estimate
         float error = 0.0f;
@@ -165,32 +166,31 @@ namespace chad::detail::map {
         // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
     }
 
-    auto Optimizer::get_loop_closure_candidates(const ndd::Descriptor& descriptor, const ndd::Descriptor::LookupKey& key) -> std::vector<ndd::Correlation> {
+    auto Optimizer::get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation> {
         std::lock_guard lock{ _ndd_kdtree_mutex };
-        const KDTree& kdtree = *static_cast<const KDTree*>(_ndd_kdtree_p);
-        // set up knn search within tree
+        const auto& key = _lookup_keys[descriptor_i];
+        const auto& descriptor = _descriptors[descriptor_i];
+
+        // set up knn search within tree and find neighbours for the current descriptor key
         constexpr std::uint32_t max_matches_limit = 10;
-        std::uint32_t max_matches = std::min<std::uint32_t>(max_matches_limit, _lookup_keys.size());
+        std::uint32_t max_matches = std::min<std::uint32_t>(max_matches_limit, _ndd_kdtree_size);
         auto out_dists_sqr = std::vector<float>(max_matches);
         auto candidate_indices = std::vector<DescriptorIndex>(max_matches);
         auto knnsearch_result = nanoflann::KNNResultSet<float, DescriptorIndex>{ max_matches };
         knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
-
-        // store each match above correlation threshhold
-        std::vector<ndd::Correlation> correlations;
-        // find neighbours for the current descriptor key
-        kdtree.index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10));
+        static_cast<const KDTree*>(_ndd_kdtree_p)->index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10));
 
         // go over all candidates to find potential correlations
+        std::vector<ndd::Correlation> correlations;
         for (const auto& candidate_i: candidate_indices) {
             // with sufficient correlation confidence, add the correlation as a match
             const ndd::Descriptor& candidate = _descriptors[candidate_i];
             auto [correlation, shift] = descriptor.estimate_correlation(candidate);
             if (correlation > _submap_cor_threshhold) {
-                fmt::println("correlation of {:.2f} with descriptor {}", static_cast<float>(correlation), candidate_i);
                 correlations.push_back(ndd::Correlation{
                     .confidence = static_cast<float>(correlation),
                     .sector_shift = shift,
+                    .original_descriptor_i = static_cast<DescriptorIndex>(_descriptors.size()),
                     .matching_descriptor_i = candidate_i,
                 });
             }
@@ -207,88 +207,10 @@ namespace chad::detail::map {
         delete static_cast<KDTree*>(_ndd_kdtree_p);
         // set new one
         _ndd_kdtree_p = ndd_kdtree_new_p;
+        _ndd_kdtree_size = _lookup_keys.size();
     }
 
     // void Optimizer::detect_loop_closure(SubmapIndex submap_i) {
-    //     using namespace ndd;
-
-    //     // indices for descriptors are within submap
-    //     Submap& submap = _submaps[submap_i];
-    //     const uint32_t descriptor_beg = submap._scan_beg;
-    //     const uint32_t descriptor_end = submap._scan_end;
-
-    //     // construct full KD tree with given keys
-    //     auto tree = KDTreeVectorOfVectorsAdaptor<decltype(_scan_lookup_keys), float>{ Descriptor::N_RINGS, _scan_lookup_keys, 10 };
-
-    //     // set up knn search within tree
-    //     const uint32_t max_matches = 20 + descriptor_end - descriptor_beg; // allow finding matches with descriptors of same submap (will end up ignoring them)
-    //     const uint32_t candidate_n = std::min<uint32_t>(max_matches, _scan_lookup_keys.size());
-
-    //     // store each match above correlation threshhold
-    //     struct Correlation {
-    //         float confidence = 0.0f;
-    //         uint32_t descriptor_self_i = 0;
-    //         uint32_t descriptor_other_i = 0;
-    //         uint32_t sector_shift = 0;
-    //     };
-    //     // we need to map correlations to their respective submap pairings
-    //     std::map<SubmapIndex, std::vector<Correlation>> correlations;
-    //     uint32_t correlation_count = 0;
-
-    //     // for every descriptor within submap, try to find correlations with other submaps
-    //     for (uint32_t descriptor_i = descriptor_beg; descriptor_i < descriptor_end; descriptor_i++) {
-    //         const Descriptor::LookupKey& key = _scan_lookup_keys[descriptor_i];
-    //         const Descriptor& descriptor = _scan_descriptors[descriptor_i];
-
-    //         // clean up storage for knnsearch_result
-    //         nanoflann::KNNResultSet<float> knnsearch_result(candidate_n);
-    //         std::vector<std::size_t> candidate_indices(candidate_n);
-    //         std::vector<float> out_dists_sqr(candidate_n);
-    //         knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
-
-    //         // find neighbours for the current descriptor key
-    //         tree.index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10));
-
-    //         // find descriptor with highest correlation
-    //         double max_correlation = 0.0;
-    //         uint32_t max_candidate = 0;
-    //         uint32_t max_shift = 0;
-    //         for (const auto& candidate_i: candidate_indices) {
-    //             // ignore matches with own submap descriptors
-    //             if (candidate_i >= descriptor_beg && candidate_i < descriptor_end) continue;
-
-    //             const Descriptor& candidate = _scan_descriptors[candidate_i];
-    //             const auto [correlation, shift] = descriptor.estimate_correlation(candidate);
-    //             if (correlation > max_correlation) {
-    //                 max_correlation = correlation;
-    //                 max_candidate = candidate_i;
-    //                 max_shift = shift;
-    //             }
-    //         }
-
-    //         // threshhold for correlation to even be considered as a loop closure candidate
-    //         constexpr static double CORRELATION_THRESHHOLD = 0.95; // TODO: move to TSDFMap as parameter
-    //         if (max_correlation > CORRELATION_THRESHHOLD) {
-    //             SubmapIndex index = _scan_submap[max_candidate];
-    //             Correlation correlation {
-    //                 float(max_correlation),
-    //                 descriptor_i,
-    //                 max_candidate,
-    //                 max_shift,
-    //             };
-    //             // map the correlation to the correct submap
-    //             auto [emplaced_it, emplaced_b] = correlations.try_emplace(index);
-    //             emplaced_it->second.push_back(correlation);
-    //             correlation_count++;
-    //         }
-    //     }
-
-    //     // TODO: increase to 6 or something
-    //     if (correlation_count < 6) {
-    //         fmt::println("Insufficient total NDD correlations found ({})", correlation_count);
-    //         return;
-    //     }
-
     //     // each submap has its own GTSAM node, so need to be handled separately
     //     for (const auto& [submap_other_i, correlation_vector]: correlations) {
 

@@ -6,6 +6,7 @@ namespace chad::detail::ndd {
     struct Correlation {
         float confidence; // from 0 to 1
         std::uint32_t sector_shift; // single-axis rotation estimation
+        map::DescriptorIndex original_descriptor_i;
         map::DescriptorIndex matching_descriptor_i;
     };
     struct Descriptor {
