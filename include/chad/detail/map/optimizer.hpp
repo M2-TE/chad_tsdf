@@ -120,7 +120,7 @@ namespace chad::detail::map {
         void update_kdtree();
         // TODO
         void tempthingy(ActiveSubmap& active_submap) {
-            // DEBUG NOTE: active submap already locked here
+            std::unique_lock submaps_lock{ _submap_mutex };
 
             // group correlations by submap they belong to
             gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
@@ -134,28 +134,41 @@ namespace chad::detail::map {
             // find the group with the most correlations
             SubmapIndex max_submap_i = 0;
             std::uint32_t max_corr_count = 0;
-            fmt::println("potential correlations for submap {}", _submaps.size());
             for (const auto& [submap_i, correlations]: correlation_groups) {
                 if (max_corr_count == 0 || correlations.size() > correlation_groups[max_submap_i].size()) {
                     max_submap_i = submap_i;
                     max_corr_count = correlations.size();
                 }
-                // DEBUG: printing out all the correlations
-                fmt::println("group submap {}", submap_i);
-                for (const auto& correlation: correlations) {
-                    fmt::println("\t desc {} corr to desc {} with confidence of {:.2f}", correlation.original_descriptor_i, correlation.matching_descriptor_i, correlation.confidence);
-                }
             }
-            // TODO: parameterize!
-            if (max_corr_count >= 3) {
-                fmt::println("submap {} has the most correlations ({}) with it", max_submap_i, max_corr_count);
-            }
-            else fmt::println("insufficient correlations");
+            if (max_corr_count == 0) return;
 
-            if (correlation_groups.size() > 2) {
-                fmt::println("reached with size {}", correlation_groups.size());
-                std::exit(0);
+            // TODO: how to incorporate accumulated submap error?
+            // provide initial estimate for translation difference
+            glm::aligned_dvec3 translational_delta = { 0, 0, 0 };
+            for (const auto& correlation: correlation_groups[max_submap_i]) {
+                // first, get the poses of matching subsubmaps
+                auto [original_submap_i, original_subsubmap_i] = _submap_indices[correlation.original_descriptor_i];
+                const Pose original_pose = active_submap._sub_submaps[original_subsubmap_i]._pose;
+                auto [matching_submap_i, matching_subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
+                const Pose matching_pose = _submaps[matching_submap_i]._sub_submaps[matching_subsubmap_i]._pose;
+                // then calculate the translational delta
+                translational_delta += matching_pose._position - original_pose._position;
             }
+            translational_delta /= static_cast<double>(correlation_groups[max_submap_i].size());
+
+            // // TODO: parameterize?
+            // if (max_corr_count >= 3) {
+            //     fmt::println("submap {} has the most correlations ({}) with it", max_submap_i, max_corr_count);
+            // }
+            // else fmt::println("insufficient correlations");
+
+            fmt::println("avg delta of {} {} {}", translational_delta.x, translational_delta.y, translational_delta.z);
+            dag::ADDR_T tsdf_root = _submaps[max_submap_i]._roots._tsdfs;
+            submaps_lock.unlock();
+
+            // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
+            _dag.sample_points_from_tsdf(tsdf_root, _sdf_trunc);
+            std::exit(0);
         }
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap) {
@@ -181,9 +194,9 @@ namespace chad::detail::map {
                 MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
             }
 
-            // DEBUG
+            // DEBUG ////////////////////////////////////////////////////////////////////////////////////
             tempthingy(active_submap);
-            // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
+            /////////////////////////////////////////////////////////////////////////////////////////////
 
             auto timestamp = std::chrono::steady_clock::now();
 
@@ -324,6 +337,8 @@ namespace chad::detail::map {
         }
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
+            std::lock_guard lock{ _submap_mutex };
+
             // store lookup key and descriptor permanently
             DescriptorIndex descriptor_i = static_cast<DescriptorIndex>(_descriptors.size());
             _lookup_keys.push_back(descriptor.get_lookup_key());
@@ -358,6 +373,7 @@ namespace chad::detail::map {
 
         // persistent data for submaps
         std::vector<Submap> _submaps;
+        std::mutex          _submap_mutex; // mutex for all the containers of submaps, descriptors, keys, etc
 
         // persistent data for sub-submaps
         std::vector<std::pair<SubmapIndex, SubSubmapIndex>> _submap_indices; // to correlate descriptor indices to submap indices

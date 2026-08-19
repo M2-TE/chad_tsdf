@@ -1,7 +1,7 @@
 #pragma once
 #include "chad/detail/dag/node_level.hpp"
-#include "chad/detail/misc/morton_code.hpp"
 #include "chad/detail/dag/leaf_cluster_level.hpp"
+#include "chad/detail/misc/morton_code.hpp"
 
 namespace chad::detail::dag {
     struct Storage {
@@ -101,18 +101,72 @@ namespace chad::detail::dag {
             return get_lc(node_addr);
         }
 
+        // TODO: use caching!
         // return single tsdf leaf from morton code index
-        auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
+        [[deprecated]] auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
             LeafCluster lc = get_lc(root_addr, mc);
             return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
         }
 
-        static constexpr std::uint64_t MAX_DEPTH = 21;
+        // build cache for a given tree
+        void build_cache(ADDR_T root) {
+            std::array<std::uint8_t,  _cache_depth> path{}; // child indices along path
+            std::array<ADDR_T, _cache_depth> addresses{}; // addresses along path
+            addresses[0] = root;
+            _cache.clear();
+
+            // iterate both trees to build separate octrees
+            std::uint32_t depth = 0;
+            while (path[0] != 8) {
+                std::uint8_t child_i = path[depth]++;
+
+                if (child_i == 8) {
+                    depth--;
+                }
+                else if (depth < _cache_depth - 1) {
+                    // try to find the child in current node
+                    ADDR_T child_addr = get_node(depth, addresses[depth], child_i);
+                    if (child_addr == 0) continue;
+
+                    depth++;
+                    path[depth] = 0; // reset child index for new depth
+                    addresses[depth] = child_addr;
+                }
+                else {
+                    ADDR_T child_addr = get_node(depth, addresses[depth], child_i);
+                    if (child_addr == 0) continue;
+
+                    // reconstruct morton code from path
+                    std::uint64_t code = 0;
+                    for (std::uint64_t k = 0; k < _cache_depth; k++) {
+                        std::uint64_t part = path[k] - 1;
+                        code |= part << static_cast<std::uint64_t>(60 - k*3);
+                    }
+                    MortonCode mc{ code };
+
+                    // add the node to our temporary cache
+                    _cache[mc] = child_addr;
+                }
+            }
+        }
+        auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_trunc) {
+            build_cache(tsdf_root);
+
+            //
+            for (const auto& [a, b]: _cache) {
+                // TODO
+            }
+        }
+
+        static constexpr std::uint64_t MAX_DEPTH = 21; // TODO: name should be adjusted, this is the max NUMBER of depths
         // 20 levels of standard nodes
         std::array<NodeLevel, MAX_DEPTH - 1> _node_levels;
         // 1 level of leaf clusters
         LeafClusterLevel _leaf_cluster_level;
         // for synchronization during async operations
         std::mutex _mutex;
+        // lookup map to cache nodes at a certain level
+        gtl::flat_hash_map<MortonCode, ADDR_T> _cache;
+        static constexpr std::size_t _cache_depth = 17;
     };
 };

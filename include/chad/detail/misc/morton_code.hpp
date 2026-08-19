@@ -93,7 +93,6 @@ namespace chad::detail {
         auto constexpr inline operator<<(std::uint64_t shift) const noexcept -> MortonCode {
             return _value << shift;
         }
-
         auto constexpr inline friend operator==(std::uint64_t lhs, MortonCode rhs) noexcept -> bool {
             return lhs == rhs._value;
         }

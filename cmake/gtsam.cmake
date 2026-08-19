@@ -24,6 +24,7 @@ if (NOT gtsam_FOUND)
     FetchContent_Declare(gtsam
         URL "https://github.com/borglab/gtsam/archive/refs/tags/4.3a1.tar.gz"
         URL_HASH SHA256=4233192fd9154aa2c0ccd05aebd833d8bf67307888774895e7b3b3d98b31607a
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
         OVERRIDE_FIND_PACKAGE
         EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(gtsam)

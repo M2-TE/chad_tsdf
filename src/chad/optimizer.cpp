@@ -190,7 +190,7 @@ namespace chad::detail::map {
                 correlations.push_back(ndd::Correlation{
                     .confidence = static_cast<float>(correlation),
                     .sector_shift = shift,
-                    .original_descriptor_i = static_cast<DescriptorIndex>(_descriptors.size()),
+                    .original_descriptor_i = descriptor_i,
                     .matching_descriptor_i = candidate_i,
                 });
             }
