@@ -100,11 +100,28 @@ namespace chad::detail::dag {
             }
             return get_lc(node_addr);
         }
+        // get leaf cluster via MortonCode index (cached version, build_cache() for correct root is a requirement)
+        auto inline get_lc(MortonCode mc) const -> LeafCluster {
+            auto node_addr_it = _cache.find(mc.mask<_cache_depth>());
+            if (node_addr_it == _cache.cend()) return {};
+
+            ADDR_T node_addr = node_addr_it->second;
+            for (std::uint32_t depth = _cache_depth; depth < MAX_DEPTH - 1; depth++) {
+                node_addr = get_node(depth, node_addr, mc.child(depth));
+                if (node_addr == 0) return {};
+            }
+            return get_lc(node_addr);
+        }
 
         // TODO: use caching!
         // return single tsdf leaf from morton code index
         [[deprecated]] auto inline get_tsdf_leaf(ADDR_T root_addr, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
             LeafCluster lc = get_lc(root_addr, mc);
+            return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
+        }
+        // return single tsdf leaf via morton code (important: build_cache() must already have been called before this, since we do not pass a root address)
+        auto inline get_tsdf_leaf(MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
+            LeafCluster lc = get_lc(mc);
             return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
         }
 
@@ -149,12 +166,126 @@ namespace chad::detail::dag {
                 }
             }
         }
-        auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_trunc) {
-            build_cache(tsdf_root);
+        // TODO: the idea here is to only create points in positive axis direction
+        void inline do_leaf_thingy(MortonCode mc, LeafCluster lc, float sdf_res, float sdf_trunc) {
+            // get position of the entire leaf cluster, would be inefficient to do this for every leaf individually
+            glm::aligned_ivec3 lc_pos_vox = mc.decode();
+            glm::aligned_vec3  lc_pos = static_cast<glm::aligned_vec3>(lc_pos_vox) * sdf_res;
 
-            //
-            for (const auto& [a, b]: _cache) {
-                // TODO
+            // get the actual leaves
+            std::uint64_t leaf_i = 0;
+            std::array<std::pair<float, bool>, 8> leaves;
+            for (std::uint64_t z = 0; z <= 1; z++) {
+                for (std::uint64_t y = 0; y <= 1; y++) {
+                    for (std::uint64_t x = 0; x <= 1; x++, leaf_i++) {
+                        // get existance and, if it exists, signed distance of leaf
+                        leaves[leaf_i] = lc._tsdfs.try_get(leaf_i, sdf_trunc);
+                    }
+                }
+            }
+
+            leaf_i = 0;
+            for (std::uint64_t z = 0; z <= 1; z++) {
+                for (std::uint64_t y = 0; y <= 1; y++) {
+                    for (std::uint64_t x = 0; x <= 1; x++, leaf_i++) {
+                        auto [leaf_sd, exists] = leaves[leaf_i];
+                        if (!exists) continue;
+                        // get both voxel and real positions early for convenience
+                        glm::aligned_ivec3 leaf_grid_i{ x, y, z }; // TODO: could move further back
+                        glm::aligned_vec3 leaf_pos{ lc_pos + glm::aligned_vec3{ x, y, z }};
+
+                        // special handling for sd of 0
+                        if (leaf_sd == 0.0f) {
+                            _cached_points.push_back(leaf_pos);
+                            continue;
+                        }
+                        // potentially create points in positive axis direction
+                        for (std::uint64_t axis = 0; axis < 3; axis++) {
+                            // try to get other leaf (prefer local leaves over fetching via _cache)
+                            std::pair<float, bool> leaf_other;
+                            if (leaf_grid_i[axis] + 1 < 2) {
+                                std::uint64_t leaf_other_i = x + y * 2 + z * 4;
+                                leaf_other = leaves[leaf_other_i];
+                            }
+                            else {
+                                // need to build morton code for this other leaf to fetch it
+                                glm::aligned_ivec3 leaf_other_vox = lc_pos_vox + leaf_grid_i;
+                                leaf_other_vox[axis]++;
+                                leaf_other = get_tsdf_leaf(MortonCode{ leaf_other_vox }, sdf_trunc);
+                                fmt::println("{}", leaf_other.second);
+                            }
+
+                            // check for flipping sign
+                            float other_sd = leaf_other.first;
+                            if (leaf_sd * other_sd >= 0.0f) continue;
+
+                            // position of other leaf will simply need voxel resolution added to the correct axis
+                            float leaf_pos_axis = leaf_pos[axis];
+                            float other_pos_axis = leaf_pos[axis] + sdf_res;
+
+                            // interpolate position on axis based on signed distances
+                            float pos_axis = other_pos_axis - other_sd * (leaf_pos_axis - other_pos_axis) / (leaf_sd - other_sd);
+
+                            // now just put it all together
+                            glm::aligned_vec3 point_pos = leaf_pos;
+                            point_pos[axis] = pos_axis;
+                            _cached_points.push_back(point_pos);
+                        }
+                        // 3D loop end
+                    }
+                }
+            }
+            // func end
+        }
+        // return points that lie inbetween flipping signs
+        auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_res, float sdf_trunc) {
+            build_cache(tsdf_root);
+            constexpr std::size_t FINAL_DEPTH = MAX_DEPTH - 2;
+            std::array<std::uint8_t,  MAX_DEPTH - _cache_depth> path{}; // child indices along path
+            std::array<ADDR_T,        MAX_DEPTH - _cache_depth> addresses{}; // addresses along path
+
+            // write all points into a simple vector (also cached for fewer memory reallocs)
+            _cached_points.clear();
+
+            // go over every node currently in the cache
+            for (const auto& [mc_cache, node_addr]: _cache) {
+                addresses[0] = node_addr;
+
+                // same iteration logic as with full tree iteration
+                std::uint32_t depth = _cache_depth;
+                while (depth >= _cache_depth) {
+                    std::uint8_t child_i = path[depth - _cache_depth]++;
+
+                    if (child_i == 8) {
+                        depth--;
+                    }
+                    else if (depth < FINAL_DEPTH) {
+                        // try to find the child in current node
+                        ADDR_T child_addr = get_node(depth, addresses[depth - _cache_depth], child_i);
+                        if (child_addr == 0) continue;
+
+                        depth++;
+                        path[depth - _cache_depth] = 0; // reset child index for new depth
+                        addresses[depth - _cache_depth] = child_addr;
+                    }
+                    else {
+                        ADDR_T child_addr = get_node(FINAL_DEPTH, addresses[FINAL_DEPTH - _cache_depth], child_i);
+                        if (child_addr == 0) continue;
+
+                        // fetch actual leaf cluster
+                        const LeafCluster& lc = get_lc(child_addr);
+
+                        // reconstruct morton code from path
+                        std::uint64_t code = mc_cache._value;
+                        for (std::uint64_t k = _cache_depth; k < MAX_DEPTH - 1; k++) {
+                            std::uint64_t part = path[k - _cache_depth] - 1;
+                            code |= part << static_cast<std::uint64_t>(60 - k*3);
+                        }
+                        MortonCode mc{ code };
+                        // handle the leaves in a separate function
+                        do_leaf_thingy(mc, lc, sdf_res, sdf_trunc);
+                    }
+                }
             }
         }
 
@@ -165,8 +296,9 @@ namespace chad::detail::dag {
         LeafClusterLevel _leaf_cluster_level;
         // for synchronization during async operations
         std::mutex _mutex;
-        // lookup map to cache nodes at a certain level
+        // lookup map to cache nodes at a certain level (mostly just so theres no frequent memory reallocation)
         gtl::flat_hash_map<MortonCode, ADDR_T> _cache;
+        std::vector<glm::aligned_vec3> _cached_points;
         static constexpr std::size_t _cache_depth = 17;
     };
 };

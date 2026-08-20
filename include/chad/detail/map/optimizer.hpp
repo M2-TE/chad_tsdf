@@ -167,7 +167,7 @@ namespace chad::detail::map {
             submaps_lock.unlock();
 
             // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
-            _dag.sample_points_from_tsdf(tsdf_root, _sdf_trunc);
+            _dag.sample_points_from_tsdf(tsdf_root, _sdf_res, _sdf_trunc);
             std::exit(0);
         }
         // finish entire submap and create DAG octree
