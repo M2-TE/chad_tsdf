@@ -100,6 +100,14 @@ namespace chad::detail::map {
             MEASURE_DEBUG(timestamp = std::chrono::steady_clock::now());
             active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
+
+            // update trajectory by adding new pose edge
+            std::unique_lock trajectory_lock{ _trajectory_mutex };
+            if (_descriptors.size() > 0) {
+                _trajectory_distance += glm::distance(_trajectory_last_pose, pose._position);
+            }
+            _trajectory_last_pose = pose._position;
+            trajectory_lock.unlock();
         }
         // finalize active submap if it contains any data
         void finalize() {
@@ -118,7 +126,7 @@ namespace chad::detail::map {
         void match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
         // separate function to update the kdtree for descriptor matching
         void update_kdtree();
-        // TODO
+        // TODO loopclosure rework stuff
         void tempthingy(ActiveSubmap& active_submap) {
             std::unique_lock submaps_lock{ _submap_mutex };
 
@@ -167,7 +175,9 @@ namespace chad::detail::map {
             submaps_lock.unlock();
 
             // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
+            auto timestamp = std::chrono::steady_clock::now();
             _dag.sample_points_from_tsdf(tsdf_root, _sdf_res, _sdf_trunc);
+            MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
             std::exit(0);
         }
         // finish entire submap and create DAG octree
@@ -381,9 +391,15 @@ namespace chad::detail::map {
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys;
 
         // persistent data for loop closure things
+        std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
         void*         _ndd_kdtree_p; // forward declaring the nanoflann kdtree as void*, since it would be a pain otherwise
         std::uint32_t _ndd_kdtree_size; // only updated after kdtree rebuilds
         std::mutex    _ndd_kdtree_mutex;
-        std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
+
+        // ETC (TODO: gotta decide which category these belong to)
+        double             _trajectory_distance; // sum of distance of edges between all poses
+        glm::aligned_dvec3 _trajectory_last_pose;
+        glm::aligned_dvec3 _trajectory_error;
+        std::mutex         _trajectory_mutex;
     };
 }

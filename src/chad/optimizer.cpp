@@ -33,9 +33,12 @@ namespace chad::detail::map {
         _submaps(),
         _descriptors(),
         _lookup_keys(),
+        _gtsam(std::make_unique<GTSAMData>()),
         _ndd_kdtree_p(new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 }),
         _ndd_kdtree_size(0),
-        _gtsam(std::make_unique<GTSAMData>()) {
+        _trajectory_distance(0.0),
+        _trajectory_last_pose({ 0, 0, 0 }),
+        _trajectory_error({ 0, 0, 0 }) {
     }
     Optimizer::~Optimizer() {
         // wait for all threads to finish their work before exiting
