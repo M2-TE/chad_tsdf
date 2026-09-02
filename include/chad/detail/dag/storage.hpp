@@ -122,18 +122,18 @@ namespace chad::detail::dag {
             LeafCluster lc = get_lc(root_addr, mc);
             return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
         }
-        // return single tsdf leaf via morton code (important: build_cache() must already have been called before this, since we do not pass a root address)
+        // return single tsdf leaf via morton code
         auto inline get_tsdf_leaf(const NodeCache& cache, MortonCode mc, float sdf_trunc) const -> std::pair<float, bool> {
             LeafCluster lc = get_lc(cache, mc);
             return lc._tsdfs.try_get(mc.child<MAX_DEPTH - 1>(), sdf_trunc);
         }
 
-        // build cache for a given tree
-        auto build_cache(ADDR_T root) const -> gtl::flat_hash_map<MortonCode, ADDR_T> {
+        // build cache of nodes for a given tree
+        auto build_cache(ADDR_T root) const -> NodeCache {
             std::array<std::uint8_t,  _cache_depth> path{}; // child indices along path
             std::array<ADDR_T, _cache_depth> addresses{}; // addresses along path
             addresses[0] = root;
-            gtl::flat_hash_map<MortonCode, ADDR_T> cache;
+            NodeCache cache;
 
             // iterate both trees to build separate octrees
             std::uint32_t depth = 0;
@@ -176,69 +176,81 @@ namespace chad::detail::dag {
             glm::aligned_ivec3 lc_pos_vox = mc.decode();
             glm::aligned_vec3  lc_pos = static_cast<glm::aligned_vec3>(lc_pos_vox) * sdf_res;
 
-            // get the actual leaves
-            std::uint64_t leaf_i = 0;
-            std::array<std::pair<float, bool>, 8> leaves;
-            for (std::uint64_t z = 0; z <= 1; z++) {
-                for (std::uint64_t y = 0; y <= 1; y++) {
-                    for (std::uint64_t x = 0; x <= 1; x++, leaf_i++) {
-                        // get existance and, if it exists, signed distance of leaf
-                        leaves[leaf_i] = lc._tsdfs.try_get(leaf_i, sdf_trunc);
-                    }
-                }
+            // storage for 2x2x2 main leaves and the rest for adjacent ones from other LCs
+            std::pair<float, bool> leaves[3][3][3]{};
+
+            // get the main leaves
+            std::uint8_t leaf_i = 0;
+            for (std::uint8_t z = 0; z < 2; z++) {
+            for (std::uint8_t y = 0; y < 2; y++) {
+            for (std::uint8_t x = 0; x < 2; x++, leaf_i++) {
+                // get existance and, if it exists, signed distance of leaf
+                leaves[x][y][z] = lc._tsdfs.try_get(leaf_i, sdf_trunc);
+            }}}
+
+            // get adjacent leaves
+            for (std::uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+                // get the leaf cluster in that axis direction
+                glm::aligned_ivec3 lc_pos_vox_other = lc_pos_vox;
+                lc_pos_vox_other[axis_i]++;
+                LeafCluster lc_other = get_lc(cache, MortonCode{ lc_pos_vox_other });
+                if (lc_other._tsdfs.empty()) continue;
+
+                // write the correct values to "leaves", dont need all 8
+                std::uint8_t leaf_i = 0;
+                for (std::uint8_t z = 0; z < 2; z++) {
+                for (std::uint8_t y = 0; y < 2; y++) {
+                for (std::uint8_t x = 0; x < 2; x++, leaf_i++) {
+                    std::array<uint8_t, 3> index = { x, y, z };
+                    if (index[axis_i] == 1) continue; // only need adjacent leaves
+
+                    // write the adjacent leaves for later
+                    index[axis_i] += 2;
+                    leaves[index[0]][index[1]][index[2]] = lc_other._tsdfs.try_get(leaf_i, sdf_trunc);
+                }}}
             }
 
-            leaf_i = 0;
-            for (std::uint64_t z = 0; z <= 1; z++) {
-                for (std::uint64_t y = 0; y <= 1; y++) {
-                    for (std::uint64_t x = 0; x <= 1; x++, leaf_i++) {
-                        auto [leaf_sd, exists] = leaves[leaf_i];
-                        if (!exists) continue;
-                        // get both voxel and real positions early for convenience
-                        glm::aligned_ivec3 leaf_grid_i{ x, y, z }; // TODO: could move further back
-                        glm::aligned_vec3 leaf_pos{ lc_pos + glm::aligned_vec3{ x, y, z }};
+            // place points between leaves with flipping signs
+            for (std::uint8_t z = 0; z < 2; z++) {
+            for (std::uint8_t y = 0; y < 2; y++) {
+            for (std::uint8_t x = 0; x < 2; x++) {
+                auto [leaf_sd, leaf_exists] = leaves[x][y][z];
+                if (!leaf_exists) continue;
 
-                        // special handling for sd of 0
-                        if (leaf_sd == 0.0f) {
-                            points.push_back(leaf_pos);
-                            continue;
-                        }
-                        // potentially create points in positive axis direction
-                        for (std::uint64_t axis = 0; axis < 3; axis++) {
-                            // try to get other leaf (prefer local leaves over fetching via _cache)
-                            std::pair<float, bool> leaf_other;
-                            if (leaf_grid_i[axis] + 1 < 2) {
-                                std::uint64_t leaf_other_i = x + y * 2 + z * 4;
-                                leaf_other = leaves[leaf_other_i];
-                            }
-                            else {
-                                // need to build morton code for this other leaf to fetch it
-                                glm::aligned_ivec3 leaf_other_vox = lc_pos_vox + leaf_grid_i;
-                                leaf_other_vox[axis]++;
-                                leaf_other = get_tsdf_leaf(cache, MortonCode{ leaf_other_vox }, sdf_trunc);
-                            }
+                // get real position of current leaf
+                glm::aligned_vec3 leaf_pos{ lc_pos + glm::aligned_vec3{ x, y, z }};
 
-                            // check for flipping sign
-                            float other_sd = leaf_other.first;
-                            if (leaf_sd * other_sd >= 0.0f) continue;
-
-                            // position of other leaf will simply need voxel resolution added to the correct axis
-                            float leaf_pos_axis = leaf_pos[axis];
-                            float other_pos_axis = leaf_pos[axis] + sdf_res;
-
-                            // interpolate position on axis based on signed distances
-                            float pos_axis = other_pos_axis - other_sd * (leaf_pos_axis - other_pos_axis) / (leaf_sd - other_sd);
-
-                            // now just put it all together
-                            glm::aligned_vec3 point_pos = leaf_pos;
-                            point_pos[axis] = pos_axis;
-                            points.push_back(point_pos);
-                        }
-                        // 3D loop end
-                    }
+                // special handling for sd of 0
+                if (leaf_sd == 0.0f) {
+                    points.push_back(leaf_pos);
+                    continue;
                 }
-            }
-            // func end
+
+                // potentially create points in positive axis directions
+                for (std::uint8_t axis = 0; axis < 3; axis++) {
+                    std::array<uint8_t, 3> index = { x, y, z };
+                    index[axis] += 1;
+
+                    // grab the leaf thats in this axis direction
+                    auto [other_sd, other_exists] = leaves[index[0]][index[1]][index[2]];
+                    if (!other_exists) continue;
+
+                    // check for flipping sign
+                    if (leaf_sd * other_sd >= 0.0f) continue;
+
+                    // position of other leaf will simply need voxel resolution added to the correct axis
+                    float leaf_pos_axis = leaf_pos[axis];
+                    float other_pos_axis = leaf_pos[axis] + sdf_res;
+
+                    // interpolate position on axis based on signed distances
+                    float pos_axis = other_pos_axis - other_sd * (leaf_pos_axis - other_pos_axis) / (leaf_sd - other_sd);
+
+                    // now just put it all together
+                    glm::aligned_vec3 point_pos = leaf_pos;
+                    point_pos[axis] = pos_axis;
+                    points.push_back(point_pos);
+                }
+            }}}
         }
         // return points that lie inbetween flipping signs
         auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_res, float sdf_trunc) const {
@@ -247,7 +259,7 @@ namespace chad::detail::dag {
             std::array<ADDR_T,        MAX_DEPTH - _cache_depth> addresses{}; // addresses along path
 
             // writes nodes at a certain depth to cache for faster access
-            auto cache = build_cache(tsdf_root);
+            NodeCache cache = build_cache(tsdf_root);
 
             // write all points into a simple vector
             std::vector<glm::aligned_vec3> points;
