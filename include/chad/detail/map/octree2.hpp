@@ -61,6 +61,32 @@ namespace chad::detail::map {
             leaf._weight++;
             leaf._signed_distance = leaf._signed_distance / static_cast<float>(leaf._weight);
         }
+        auto inline find(MortonCode morton_code) const -> std::optional<Leaf> {
+            // mask out the bits relevant for hashmap lookup
+            constexpr std::uint64_t shift_distance = 63 - DEPTH_START * 3;
+            constexpr std::uint64_t mask = static_cast<std::uint64_t>(-1) >> shift_distance << shift_distance;
+
+            // obtain node using masked morton code as the key
+            auto node_it = _roots.find(morton_code & mask);
+            if (node_it == _roots.cend()) return std::nullopt;
+            NodeAddr node_addr = node_it->second;
+
+            // walk through each node to reach leaves
+            for (std::uint64_t depth = DEPTH_START; depth < 21 - DEPTH_SPAN; depth += DEPTH_SPAN) {
+                // walk to next child node
+                std::uint64_t child_index = morton_code.child<DEPTH_SPAN>(depth);
+                NodeAddr child_addr = _nodes[node_addr]._children[child_index];
+                // if one didn't exist yet, return emptyhanded
+                if (child_addr == 0) {
+                    return std::nullopt;
+                }
+                node_addr = child_addr;
+            }
+
+            // walk to the leaf node
+            std::uint64_t leaf_index = morton_code.child<21 - DEPTH_SPAN, DEPTH_SPAN>();
+            return _nodes[node_addr]._leaves[leaf_index];
+        }
 
         std::vector<Node> _nodes;
         gtl::parallel_flat_hash_map<MortonCode, NodeAddr> _roots; // tree begins at DEPTH_START

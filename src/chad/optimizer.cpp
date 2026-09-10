@@ -50,7 +50,7 @@ namespace chad::detail::map {
     }
 
     // pilfered from HATSDF
-    void lu_decomposition(std::array<std::array<double, 6>, 6>& H) {
+    void inline lu_decomposition(std::array<std::array<double, 6>, 6>& H) {
         for (int i = 0; i < 6 - 1; i++) {
             for (int k = i + 1; k < 6; k++) {
                 H[k][i] /= H[i][i];
@@ -61,7 +61,7 @@ namespace chad::detail::map {
         }
     }
     // pilfered from HATSDF
-    auto lu_solve(const std::array<std::array<double, 6>, 6>& H, const std::array<double, 6>& g) -> std::array<double,6> {
+    auto inline lu_solve(const std::array<std::array<double, 6>, 6>& H, const std::array<double, 6>& g) -> std::array<double,6> {
         std::array<double, 6> x;
         for (int i = 0; i < 6; i++) {
             x[i] = g[i];
@@ -77,61 +77,67 @@ namespace chad::detail::map {
         }
         return x;
     }
-    void Optimizer::match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose) {
-        // accumulate count of valid comparisons and total error estimate
-        float error = 0.0f;
-        std::size_t count = 0;
-
-        // centering matrix for each point, taking into account (rotational) error of DAG submap
-        glm::aligned_dmat4x4 point_centering = glm::identity<glm::dmat4x4>();
-        point_centering = point_centering * glm::mat4_cast(points_pose._rotation * roots_err._rotation);
-        point_centering = glm::translate(point_centering, -points_pose._position);
+    // match points to tsdf data. tsdf_data is the new submap stuff with an error that needs to be approximated. sampled points are merely existing DAG nodes
+    auto Optimizer::match_points_to_tsdf(
+            const Octree2<17, 2>& tsdf_data, Pose tsdf_err_guess,
+            const std::vector<glm::aligned_vec3>& points_data, Pose points_pose, Pose points_err) const -> Pose{
+        // prepare matrix for error transform (taking into account both points_data AND tsdf_data error)
+        glm::aligned_dmat4x4 point_err_transform = glm::mat4_cast(points_err._rotation * tsdf_err_guess._rotation);
+        point_err_transform = glm::translate(point_err_transform, - points_err._position);
 
         // set up H and g for jacobian later
-        std::array<std::array<double, 6>, 6> H;
-        for (auto& h: H) h.fill(0.0);
-        std::array<double, 6> g;
-        g.fill(0.0);
+        std::array<double, 6> g{};
+        std::array<std::array<double, 6>, 6> H{};
 
-        // TODO: this will fetch lots of duplicate TSDF voxels, should be batched instead (std::set or something)
-        for (const auto& point_raw: points) {
-            // make sure points are centered around (0, 0, 0)
-            glm::aligned_vec3 point_centered = point_centering * glm::aligned_dvec4{ point_raw, 1.0 };
-            // move point back to original position to sample grid, taking into account translational error of dag submap as well
-            glm::aligned_vec3 point = point_centered + static_cast<glm::aligned_vec3>(points_pose._position + roots_err._position);
-            // fmt::println("{} {} {}", point.x, point.y, point.z);
+        // get gradients around every sampled point
+        float error = 0.0f;
+        std::size_t count = 0;
+        for (const auto& point_raw: points_data) {
+            // make sure points are centered around [0|0|0]
+            glm::aligned_dvec3 point_centered = static_cast<glm::aligned_dvec3>(point_raw) - points_pose._position;
+            // apply error transform
+            glm::aligned_dvec3 point = static_cast<glm::aligned_dvec3>(point_err_transform * glm::aligned_dvec4{ point_centered, 1.0 });
+            // translate back
+            point += points_pose._position;
+            // consider initial guess for translation error
+            point -= tsdf_err_guess._position;
 
             // get tsdf voxel at current point
-            glm::aligned_ivec3 voxel_pos{ glm::floor(point * _sdf_res_reciprocal) };
-            auto [tsdf, exists] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ voxel_pos }, _sdf_trunc);
-            if (!exists) continue;
+            glm::aligned_ivec3 point_voxel{ glm::floor(point * static_cast<double>(_sdf_res_reciprocal)) };
+            auto tsdf_opt = tsdf_data.find(MortonCode{ point_voxel });
+            if (!tsdf_opt.has_value()) continue;
+            float tsdf = tsdf_opt->_signed_distance * _sdf_res_reciprocal;
 
             // build gradients along each axis
-            glm::vec3 gradient{ 0, 0, 0 };
-            for (uint8_t axis_i = 0; axis_i < 3; axis_i++) {
-                glm::ivec3 neigh_pos = voxel_pos;
+            bool gradient_valid = true;
+            glm::aligned_dvec3 gradient{ 0, 0, 0 };
+            for (std::uint8_t axis_i = 0; axis_i < 3; axis_i++) {
+                glm::aligned_ivec3 neigh_pos_a = point_voxel;
+                glm::aligned_ivec3 neigh_pos_b = point_voxel;
+                neigh_pos_a[axis_i]--;
+                neigh_pos_b[axis_i]++;
 
-                // get first neighbour
-                neigh_pos[axis_i] -= 1;
-                auto [tsdf_a, exists_a] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-                if (!exists_a) continue;
+                // get gradient neighbours
+                auto tsdf_opt_a = tsdf_data.find(MortonCode{ neigh_pos_a });
+                auto tsdf_opt_b = tsdf_data.find(MortonCode{ neigh_pos_b });
 
-                // get second neighbour
-                neigh_pos[axis_i] += 2;
-                auto [tsdf_b, exists_b] = _dag.get_tsdf_leaf(roots._tsdfs, MortonCode{ neigh_pos }, _sdf_trunc);
-                if (!exists_b) continue;
+                // reject when one of the tsdf voxels is missing
+                if (!tsdf_opt_a.has_value() || !tsdf_opt_b.has_value()) {
+                    gradient_valid = false;
+                    break;
+                } // TODO: dont break, instead just skip this axis?
 
-                if ((tsdf_a > 0) == (tsdf_b > 0)) {
-                    gradient[axis_i] = (tsdf_b - tsdf_a) / 2;
-                }
-                // fmt::println("\t [{}]: a {:.4f} b {:.4f} gradient {:.4f}", axis_i, tsdf_a, tsdf_b, gradient[axis_i]);
+                // grab the actual tsdf values
+                double tsdf_a = static_cast<double>(tsdf_opt_a->_signed_distance * _sdf_res_reciprocal);
+                double tsdf_b = static_cast<double>(tsdf_opt_b->_signed_distance * _sdf_res_reciprocal);
+
+                // if (tsdf_a != 0.0 && tsdf_b != 0.0 && (tsdf_a > 0.0f) == (tsdf_b > 0.0f)) {
+                //     // gradient[axis_i] = (tsdf_b - tsdf_a) / (2.0 * _sdf_res);
+                //     gradient[axis_i] = (tsdf_b - tsdf_a) / 2.0;
+                // }
+                gradient[axis_i] = (tsdf_b - tsdf_a) / (2.0);
             }
-            // fmt::println("{} {} {}", gradient.x, gradient.y, gradient.z);
-
-            // TODO: ignoring all previous gradient calcs
-            // should just calc gradient from current point to TSDF surface estimation
-
-
+            if (!gradient_valid) continue;
 
             // cross product point x gradient
             std::array<double, 6> jacobian;
@@ -142,9 +148,9 @@ namespace chad::detail::map {
             jacobian[4] = gradient[1];
             jacobian[5] = gradient[2];
 
-            // add multiplication result to h
-            for (uint8_t row = 0; row < 6; row++) {
-                for (uint8_t col = 0; col < 6; col++) {
+            // add multiplication result to H
+            for (std::uint8_t row = 0; row < 6; row++) {
+                for (std::uint8_t col = 0; col < 6; col++) {
                     // H += jacobian * jacobian.transpose()
                     H[row][col] += jacobian[row] * jacobian[col];
                 }
@@ -157,16 +163,11 @@ namespace chad::detail::map {
         }
         fmt::println("count: {} error: {}", count, error);
 
-        // funcs::lu_decomposition(H);
-        // auto xi = funcs::lu_solve(H, g);
-        // fmt::println("rot_x {:.4f}", xi[0]);
-        // fmt::println("rot_y {:.4f}", xi[1]);
-        // fmt::println("rot_z {:.4f}", xi[2]);
-        // fmt::println("lin_x {:.4f}", xi[3]);
-        // fmt::println("lin_y {:.4f}", xi[4]);
-        // fmt::println("lin_z {:.4f}", xi[5]);
-        // // xi_to_transform(xi, next_transform, center);
-        // // MatrixMul<float, 4, 4, 4>(next_transform, total_transform, temp_transform);
+        lu_decomposition(H);
+        auto xi = lu_solve(H, g);
+        glm::aligned_dvec3 rot{ xi[0], xi[1], xi[2] };
+        glm::aligned_dvec3 pos{ xi[3], xi[4], xi[5] };
+        return Pose{ pos * static_cast<double>(_sdf_res), glm::aligned_dvec3{ xi[0], xi[1], xi[2] } };
     }
 
     auto Optimizer::get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation> {

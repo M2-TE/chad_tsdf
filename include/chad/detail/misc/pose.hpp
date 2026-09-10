@@ -43,6 +43,13 @@ namespace chad::detail {
             };
         }
 
+        auto operator+(const Pose& other) const -> Pose {
+            return Pose {
+                _position + other._position,
+                _rotation * other._rotation
+            };
+        }
+
         glm::aligned_dvec3 _position;
         glm::aligned_dquat _rotation;
     };

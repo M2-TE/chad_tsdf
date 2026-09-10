@@ -15,7 +15,6 @@ namespace chad::detail::map {
         // add a single scan frame
         void add_frame(std::vector<glm::aligned_vec3>&& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
             _all_poses.push_back(pose);
-            // immediately integrate points into the tsdf octree
             write_octree_async<double>(points, normals, pose, sdf_res, sdf_trunc);
         }
 
@@ -61,7 +60,7 @@ namespace chad::detail::map {
                 traversed_voxels.push_back(ray_pos_vox);
 
                 // 1 bit for each completed dimension
-                uint32_t completion_mask = 0b000;
+                std::uint32_t completion_mask = 0b000;
                 if (ray_pos_vox.x == ray_end_vox.x) completion_mask |= 0b001;
                 if (ray_pos_vox.y == ray_end_vox.y) completion_mask |= 0b010;
                 if (ray_pos_vox.z == ray_end_vox.z) completion_mask |= 0b100;
@@ -100,6 +99,7 @@ namespace chad::detail::map {
                     // compute signed distance
                     glm_vec3f_t voxel_pos = glm_vec3f_t{ morton_code.decode() } + glm_vec3f_t{ 0.5, 0.5, 0.5 };
                     glm_vec3f_t point_to_voxel = voxel_pos * sdf_res - point;
+
                     float signed_distance = static_cast<float>(glm::dot(normal, point_to_voxel));
                     signed_distance = std::clamp<float>(signed_distance, -sdf_trunc, +sdf_trunc);
                     // integrate truncated sd measurement into octree

@@ -25,7 +25,6 @@ namespace fmt {
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-
 [[maybe_unused]]
 void inline sample_sphere(std::vector<glm::vec3>& points, glm::vec3 offset, double radius) {
     std::random_device rd;
@@ -70,7 +69,7 @@ void inline do_thingy() {
     std::vector<glm::vec3> points { 1'000'000 }; // goal should be 10'000'000 points per second
 
     // create map with enabled debug outputs
-    chad::TSDFMap map{ 0.05f, 0.1f, 3.0f };
+    chad::TSDFMap map{ 0.05f, 0.1f, 2.0f };
 
     // insert into CHAD TSDF
     std::vector<glm::vec3> positions {
@@ -86,9 +85,9 @@ void inline do_thingy() {
         }
     }
     for (size_t i = 1; i < positions.size(); i++) {
-        if (i % 5 == 0) sample_sphere(points, positions[i], 10.0);
-        else sample_sphere(points, positions[i], 5.0);
-        // sample_sphere(points, positions[i], 5.0);
+        // if (i % 5 == 0) sample_sphere(points, positions[i], 10.0);
+        // else sample_sphere(points, positions[i], 5.0);
+        sample_sphere(points, positions[i], 5.0);
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
     }

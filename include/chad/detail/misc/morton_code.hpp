@@ -57,7 +57,7 @@ namespace chad::detail {
         }
 
         // get child index at given depth
-        template<std::uint64_t DEPTH, std::uint64_t DEPTH_SPAN = 1>
+        template<std::uint64_t DEPTH, std::uint64_t DEPTH_SPAN>
         auto constexpr inline child() const noexcept -> std::uint64_t {
             // shift relevant bits for current depth to LSB
             constexpr std::uint64_t shift = (21 - DEPTH - DEPTH_SPAN) * 3;
@@ -66,7 +66,7 @@ namespace chad::detail {
             return _value >> shift & ~mask;
         }
         // get child index at given depth
-        template<std::uint64_t DEPTH_SPAN = 1>
+        template<std::uint64_t DEPTH_SPAN>
         auto constexpr inline child(std::uint64_t depth) const noexcept -> std::uint64_t {
             // shift relevant bits for current depth to LSB
             std::uint64_t shift = (21 - depth - DEPTH_SPAN) * 3;
@@ -125,8 +125,17 @@ namespace fmt {
     template<>
     struct formatter<chad::detail::MortonCode>: formatter<std::string> {
         auto format(const chad::detail::MortonCode& mc, format_context& ctx) const -> format_context::iterator {
-            std::string str = std::bitset<63>(mc._value).to_string();
-            return formatter<std::string>::format(str, ctx);
+            std::string str_raw = std::bitset<63>(mc._value).to_string();
+            std::string str_fin;
+            str_fin.reserve(63 + 63/3);
+            for (auto it = str_raw.cbegin(); it < str_raw.cend(); it += 3) {
+                for (std::uint8_t i = 0; i < 3; i++) {
+                    str_fin.push_back(*(it + i));
+                }
+                str_fin.push_back('\'');
+            }
+            str_fin.back() = ' ';
+            return formatter<std::string>::format(str_fin, ctx);
         }
     };
 }

@@ -38,10 +38,10 @@ namespace chad::detail::map {
             ActiveSubmap* active_submap_p = &_active_submaps[_active_i];
 
             // make sure submap is not busy (should normally never wait, hence the try_lock)
-            std::unique_lock lock{ active_submap_p->_mutex, std::defer_lock };
-            if (!lock.try_lock()) {
+            std::unique_lock lock_active_submap{ active_submap_p->_mutex, std::defer_lock };
+            if (!lock_active_submap.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
-                lock.lock();
+                lock_active_submap.lock();
                 MEASURE_TIME(timestamp, "\t-> WARNING: Optimizer waited for submap lock release");
             }
 
@@ -50,24 +50,40 @@ namespace chad::detail::map {
                 Pose pose_first = active_submap_p->_all_poses.front();
                 float distance = glm::distance(pose_first._position, pose._position);
                 if (distance > _submap_xyz_threshhold) {
+                    // create new submap (still empty)
+                    std::unique_lock lock_sub{ _submap_mutex };
+                    std::size_t submap_i = _submaps.size();
+                    _submaps.emplace_back(active_submap_p->_all_poses, active_submap_p->_sub_submaps);
+                    lock_sub.unlock();
+
                     // let another thread handle dag writes
-                    lock.unlock();
-                    _active_threads[_active_i] = std::jthread{ [this, active_submap_p]() {
-                        on_submap_completion(*active_submap_p);
+                    lock_active_submap.unlock();
+                    _active_threads[_active_i] = std::jthread{ [this, active_submap_p, submap_i]() {
+                        on_submap_completion(*active_submap_p, submap_i);
                     }};
 
                     // swap submap chain to continue work
                     _active_i = (_active_i + 1) % ACTIVE_SUBMAP_COUNT;
                     active_submap_p = &_active_submaps[_active_i];
 
-                    lock = std::unique_lock{ active_submap_p->_mutex, std::defer_lock };
-                    if (!lock.try_lock()) {
+                    lock_active_submap = std::unique_lock{ active_submap_p->_mutex, std::defer_lock };
+                    if (!lock_active_submap.try_lock()) {
                         auto timestamp = std::chrono::steady_clock::now();
-                        lock.lock();
+                        lock_active_submap.lock();
                         MEASURE_TIME(timestamp, "\t-> WARNING: optimizer::add_scan() waited for active_submap lock release");
                     }
                 }
             }
+
+
+            // DEBUG //
+            if (_submaps.size() < 1) {
+                for (auto& point: points) {
+                    DEBUG_POINTS.push_back(point);
+                }
+            }
+
+
 
             // wait for the descriptor construction to finish
             MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
@@ -112,23 +128,37 @@ namespace chad::detail::map {
         // finalize active submap if it contains any data
         void finalize() {
             map::ActiveSubmap& active_submap = _active_submaps[_active_i];
-            std::unique_lock lock{ active_submap._mutex };
-            if (!active_submap._all_poses.empty()) {
-                lock.unlock();
-                on_submap_completion(active_submap);
-            }
+            std::unique_lock lock_active_submap{ active_submap._mutex };
+            if (active_submap._all_poses.empty()) return;
+
+            // create new submap (still empty)
+            std::unique_lock lock_sub{ _submap_mutex };
+            std::size_t submap_i = _submaps.size();
+            _submaps.emplace_back(active_submap._all_poses, active_submap._sub_submaps);
+            lock_sub.unlock();
+
+            // let another thread handle dag writes
+            lock_active_submap.unlock();
+            map::ActiveSubmap* active_submap_p = &active_submap;
+            _active_threads[_active_i] = std::jthread{ [this, active_submap_p, submap_i]() {
+                on_submap_completion(*active_submap_p, submap_i);
+            }};
         }
 
     private:
         // match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
         auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
         // match points to the given TSDF DAG submap (TODO: return data or directly update edges?)
-        void match_points_to_tsdf(dag::Addresses roots, Pose roots_err, const std::vector<glm::aligned_vec3>& points, Pose points_pose);
+        auto match_points_to_tsdf(
+            const Octree2<17, 2>& tsdf_data, Pose tsdf_err_guess,
+            const std::vector<glm::aligned_vec3>& points_data, Pose points_pose, Pose points_err) const -> Pose;
         // separate function to update the kdtree for descriptor matching
         void update_kdtree();
         // TODO loopclosure rework stuff
-        void tempthingy(ActiveSubmap& active_submap) {
+        void tempthingy(const ActiveSubmap& active_submap) {
             std::unique_lock submaps_lock{ _submap_mutex };
+
+            // TODO: filter out correlations that are too far away (use trajectory distance since last loop closure)
 
             // group correlations by submap they belong to
             gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
@@ -163,6 +193,7 @@ namespace chad::detail::map {
                 translational_delta += matching_pose._position - original_pose._position;
             }
             translational_delta /= static_cast<double>(correlation_groups[max_submap_i].size());
+            // fmt::println("avg delta of {}", translational_delta);
 
             // // TODO: parameterize?
             // if (max_corr_count >= 3) {
@@ -170,46 +201,48 @@ namespace chad::detail::map {
             // }
             // else fmt::println("insufficient correlations");
 
-            fmt::println("avg delta of {} {} {}", translational_delta.x, translational_delta.y, translational_delta.z);
-            dag::ADDR_T tsdf_root = _submaps[max_submap_i]._roots._tsdfs;
+            Submap matched_submap = _submaps[max_submap_i];
+            dag::ADDR_T root_addr = matched_submap._roots._tsdfs;
+            Pose matched_pose = matched_submap._pose_avg;
+            Pose matched_err = matched_submap._pose_err;
             submaps_lock.unlock();
 
-            // TODO: loop closure by subsampling points from incoming TSDF, then doing point-to-tsdf matching
             auto timestamp = std::chrono::steady_clock::now();
-            _dag.sample_points_from_tsdf(tsdf_root, _sdf_res, _sdf_trunc);
+            // sample points from the DAG (more efficient this way)
+            auto sampled_points = _dag.sample_points_from_tsdf(root_addr, _sdf_res, _sdf_trunc);
             MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
+
+            // for (auto& point: sampled_points) {
+            //     auto point_cp = point - glm::aligned_vec3{ 3.5, 3.5, 3.5 };
+            //     fmt::println("{} len {}", point_cp, glm::length(point_cp));
+            // }
+            fmt::println("sampled points count: {}", sampled_points.size());
+
+            timestamp = std::chrono::steady_clock::now();
+            /* TODO: NDD rotation instead of identity dquat */
+            auto estimated_error_pose = Pose{ translational_delta + glm::aligned_dvec3{ .015, -.034, .07 }, glm::identity<glm::dquat>() };
+            fmt::println("{}", estimated_error_pose._position);
+            for (int i = 0; i < 5; i++) { // TODO: loop cond
+                Pose err = match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, sampled_points, matched_pose, matched_err);
+                estimated_error_pose = estimated_error_pose + err;
+                fmt::println("{}", estimated_error_pose._position);
+            }
+            MEASURE_TIME(timestamp, "POINTS-TO-TSDF");
+
+
+            // DEBUG
+            // for (const auto& point: DEBUG_POINTS) {
+            //     auto point_cp = point - glm::aligned_vec3{ 3.5, 3.5, 3.5 };
+            //     fmt::println("{} len {}", point_cp, glm::length(point_cp));
+            // }
+
             std::exit(0);
+
+            // TODO: return _pose_err for new submap! (REMOVE PARAM)
+
         }
-        // finish entire submap and create DAG octree
-        void on_submap_completion(ActiveSubmap& active_submap) {
-            // update the kdtree on another thread (internally synchronized)
-            std::jthread kdtree_thread{ [this]() {
-                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
-                update_kdtree();
-                MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
-            }};
-
-            // lock submap (reading)
-            std::unique_lock lock_sub{ active_submap._mutex, std::defer_lock };
-            if (!lock_sub.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_sub.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
-            }
-            // lock DAG (writing)
-            std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
-            if (!lock_dag.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_dag.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
-            }
-
-            // DEBUG ////////////////////////////////////////////////////////////////////////////////////
-            tempthingy(active_submap);
-            /////////////////////////////////////////////////////////////////////////////////////////////
-
-            auto timestamp = std::chrono::steady_clock::now();
-
+        // builds the dag tree for a single submap
+        void build_dag_tree(ActiveSubmap& active_submap, SubmapIndex submap_i, std::unique_lock<std::mutex>& lock_active_sub) {
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
 
             // since input octree does not store lower levels, we keep track of new nodes via hashmap (2 for swapping)
@@ -228,8 +261,8 @@ namespace chad::detail::map {
             static_assert(octree_t::_DEPTH_START == 17);
 
             // keep track of newly created dag nodes (to create their parents nodes after)
-            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_tsdfs;
-            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_weigh;
+            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_tsdfs{};
+            std::array<std::array<dag::ADDR_T, 8>, 3> new_nodes_weigh{};
 
             // first off, convert nodes from input octree into dag nodes (up to the level where it starts)
             // this is a bit messy since octree levels span multiple depths, whereas DAG levels are 1 depth each
@@ -246,7 +279,7 @@ namespace chad::detail::map {
                     new_nodes_weigh[1].fill(0); // reset
                     // go over 8 of the children
                     bool empty = true;
-                    for (std::uint8_t child_i = 0; child_i < 8; child_i++) {
+                    for (std::uint32_t child_i = 0; child_i < 8; child_i++) {
                         new_nodes_tsdfs[2].fill(0); // reset
                         new_nodes_weigh[2].fill(0); // reset
                         // retrieve child address
@@ -291,17 +324,14 @@ namespace chad::detail::map {
                 // write to address cache using higher discretization (to build parent node)
                 auto [it, _] = blueprint_maps[blueprint_map_i].try_emplace(morton_code.mask<depth - 1>());
                 // write address to correct child index within (still nonexistant) parent node
-                std::uint64_t child_index = morton_code.child<depth - 1>();
-                it->second._tsdfs[child_index] = _dag.add_node(new_nodes_tsdfs[0], depth);
-                it->second._weigh[child_index] = _dag.add_node(new_nodes_weigh[0], depth);
+                std::uint64_t child_index = morton_code.child<depth - 1, 1>();
+                it->second._tsdfs[child_index] = _dag.add_node(new_nodes_tsdfs[0], depth + 0);
+                it->second._weigh[child_index] = _dag.add_node(new_nodes_weigh[0], depth + 0);
             }
-
-            // construct final submap (DAG root indices will come later)
-            Submap submap{ active_submap };
 
             // clean up active submap to be able to continue writing to it in main thread
             active_submap.clear();
-            lock_sub.unlock();
+            lock_active_sub.unlock();
 
             // build the rest of the DAG levels
             std::uint64_t depth = octree_t::_DEPTH_START - 1;
@@ -318,7 +348,7 @@ namespace chad::detail::map {
                     // discretize morton code further
                     auto [it, _] = blueprint_map_write.try_emplace(morton_code.mask(depth - 1));
                     // write address to correct child index within (still nonexistant) parent node
-                    std::uint64_t child_index = morton_code.child(depth - 1);
+                    std::uint64_t child_index = morton_code.child<1>(depth - 1);
                     it->second._tsdfs[child_index] = _dag.add_node(blueprint._tsdfs, depth);
                     it->second._weigh[child_index] = _dag.add_node(blueprint._weigh, depth);
                 }
@@ -333,13 +363,43 @@ namespace chad::detail::map {
             if (blueprint_map.size() != 1) {
                 throw std::logic_error("More than one DAG root for a single submap. Did not happen during my testing yet; either your map is too wide or some inserted points have corrupted positions.");
             }
-            for (const auto& [morton_code, blueprint]: blueprint_map) {
-                submap._roots = dag::Addresses{
-                    ._tsdfs = _dag.add_node(blueprint._tsdfs, depth),
-                    ._weigh = _dag.add_node(blueprint._weigh, depth),
-                };
+            const auto& [morton_code, blueprint] = *blueprint_map.cbegin();
+            std::lock_guard lock{ _submap_mutex };
+            _submaps[submap_i]._roots = dag::Addresses{
+                ._tsdfs = _dag.add_node(blueprint._tsdfs, depth),
+                ._weigh = _dag.add_node(blueprint._weigh, depth),
+            };
+        }
+        // finish entire submap and create DAG octree
+        void on_submap_completion(ActiveSubmap& active_submap, SubmapIndex submap_i) {
+            // update the kdtree on another thread (internally synchronized)
+            std::jthread kdtree_thread{ [this]() {
+                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
+                update_kdtree();
+                MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
+            }};
+
+            // lock submap (reading)
+            std::unique_lock lock_active_sub{ active_submap._mutex, std::defer_lock };
+            if (!lock_active_sub.try_lock()) {
+                auto timestamp = std::chrono::steady_clock::now();
+                lock_active_sub.lock();
+                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
             }
-            _submaps.push_back(submap);
+            // lock DAG (writing)
+            std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
+            if (!lock_dag.try_lock()) {
+                auto timestamp = std::chrono::steady_clock::now();
+                lock_dag.lock();
+                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
+            }
+
+            // DEBUG ////////////////////////////////////////////////////////////////////////////////////
+            tempthingy(active_submap);
+            /////////////////////////////////////////////////////////////////////////////////////////////
+
+            auto timestamp = std::chrono::steady_clock::now();
+            build_dag_tree(active_submap, submap_i, lock_active_sub);
 
             // finally, ensure kdd tree is fully built and ready
             kdtree_thread.join();
@@ -401,5 +461,8 @@ namespace chad::detail::map {
         glm::aligned_dvec3 _trajectory_last_pose;
         glm::aligned_dvec3 _trajectory_error;
         std::mutex         _trajectory_mutex;
+
+        // DEBUG
+        std::vector<glm::aligned_vec3> DEBUG_POINTS;
     };
 }
