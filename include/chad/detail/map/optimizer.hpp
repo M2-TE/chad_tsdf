@@ -212,16 +212,26 @@ namespace chad::detail::map {
 
             auto timestamp = std::chrono::steady_clock::now();
             // sample points from the DAG
-            auto sampled_points = _dag.sample_points_from_tsdf(root_addr, _sdf_res, _sdf_trunc);
+            const std::vector<glm::aligned_vec3> sampled_points = _dag.sample_points_from_tsdf(root_addr, _sdf_res, _sdf_trunc);
             MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
 
             timestamp = std::chrono::steady_clock::now();
-            fmt::println("{}", estimated_error_pose._position);
-            for (int i = 0; i < 5; i++) { // TODO: loop cond
+            // fmt::println("{}", estimated_error_pose._position);
+            std::uint8_t i = 0;
+            constexpr std::uint8_t iteration_limit = 10;
+            for (; i < iteration_limit; i++) { // TODO: parameterize max iterations
                 Pose err = funcs::match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, _sdf_res, sampled_points, matched_pose, matched_err);
                 estimated_error_pose = estimated_error_pose + err;
-                fmt::println("{}", estimated_error_pose._position);
+                // fmt::println("{}", estimated_error_pose._position);
+                double pos_delta_sqr = glm::length2(err._position);
+                double rot_delta_sqr = glm::length2(glm::eulerAngles(err._rotation));
+                 // TODO: parameterize these threshholds
+                if (pos_delta_sqr < _sdf_res * _sdf_res * 0.2f && rot_delta_sqr < 0.1) break;
             }
+
+            // in case the point-to-tsdf could not settle before hitting the iteration limit, we assume the loop closure was a dud
+            if (i == iteration_limit - 1) return;
+            fmt::println("{}", estimated_error_pose._position);
             MEASURE_TIME(timestamp, "POINTS-TO-TSDF");
 
             std::exit(0);
