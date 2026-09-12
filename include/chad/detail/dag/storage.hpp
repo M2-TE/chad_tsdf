@@ -5,11 +5,10 @@
 
 namespace chad::detail::dag {
     struct Storage {
-    private:
         using NodeCache = gtl::flat_hash_map<MortonCode, ADDR_T>;
-    public:
 
-        void clear() {
+        // clear data without deallocating anything
+        void inline clear() {
             for (auto& level: _node_levels) level.clear();
             _leaf_cluster_level.clear();
         }

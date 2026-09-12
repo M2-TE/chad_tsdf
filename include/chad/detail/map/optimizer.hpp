@@ -3,6 +3,7 @@
 #include "chad/detail/funcs/sort.hpp"
 #include "chad/detail/funcs/timing.hpp"
 #include "chad/detail/funcs/normals.hpp"
+#include "chad/detail/funcs/point_to_tsdf.hpp"
 #include "chad/detail/dag/storage.hpp"
 #include "chad/detail/map/submap.hpp"
 #include "chad/detail/map/active_submap.hpp"
@@ -34,10 +35,16 @@ namespace chad::detail::map {
                 normals = detail::funcs::estimate_normals(points, pose._position, _sdf_res);
             }};
 
-            // get the active submap that is currently in use (basically a swap chain)
-            ActiveSubmap* active_submap_p = &_active_submaps[_active_i];
+            // update trajectory by adding new pose edge
+            std::unique_lock trajectory_lock{ _trajectory_mutex };
+            if (_descriptors.size() > 0) {
+                _trajectory_distance += glm::distance(_trajectory_last_pose, pose._position);
+            }
+            _trajectory_last_pose = pose._position;
+            trajectory_lock.unlock();
 
             // make sure submap is not busy (should normally never wait, hence the try_lock)
+            ActiveSubmap* active_submap_p = &_active_submaps[_active_i];
             std::unique_lock lock_active_submap{ active_submap_p->_mutex, std::defer_lock };
             if (!lock_active_submap.try_lock()) {
                 auto timestamp = std::chrono::steady_clock::now();
@@ -62,7 +69,7 @@ namespace chad::detail::map {
                         on_submap_completion(*active_submap_p, submap_i);
                     }};
 
-                    // swap submap chain to continue work
+                    // swap to other submap from chain to continue work
                     _active_i = (_active_i + 1) % ACTIVE_SUBMAP_COUNT;
                     active_submap_p = &_active_submaps[_active_i];
 
@@ -74,16 +81,6 @@ namespace chad::detail::map {
                     }
                 }
             }
-
-
-            // DEBUG //
-            if (_submaps.size() < 1) {
-                for (auto& point: points) {
-                    DEBUG_POINTS.push_back(point);
-                }
-            }
-
-
 
             // wait for the descriptor construction to finish
             MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
@@ -103,7 +100,7 @@ namespace chad::detail::map {
                 }
             }
             else {
-                // when empty, initialize it (can just call the completion func here, will init)
+                // with no sub-submaps present yet, initialize it
                 on_sub_submap_completion(*active_submap_p, pose, std::move(descriptor));
             }
 
@@ -116,14 +113,6 @@ namespace chad::detail::map {
             MEASURE_DEBUG(timestamp = std::chrono::steady_clock::now());
             active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
-
-            // update trajectory by adding new pose edge
-            std::unique_lock trajectory_lock{ _trajectory_mutex };
-            if (_descriptors.size() > 0) {
-                _trajectory_distance += glm::distance(_trajectory_last_pose, pose._position);
-            }
-            _trajectory_last_pose = pose._position;
-            trajectory_lock.unlock();
         }
         // finalize active submap if it contains any data
         void finalize() {
@@ -146,19 +135,14 @@ namespace chad::detail::map {
         }
 
     private:
-        // match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
-        auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
-        // match points to the given TSDF DAG submap (TODO: return data or directly update edges?)
-        auto match_points_to_tsdf(
-            const Octree2<17, 2>& tsdf_data, Pose tsdf_err_guess,
-            const std::vector<glm::aligned_vec3>& points_data, Pose points_pose, Pose points_err) const -> Pose;
-        // separate function to update the kdtree for descriptor matching
+        // [on_submap_completion]: separate function to update the kdtree for descriptor matching
         void update_kdtree();
-        // TODO loopclosure rework stuff
-        void tempthingy(const ActiveSubmap& active_submap) {
+        // [on_submap_completion]: when requirements for loop closure are met, perform point-to-tsdf matching to obtain error estimate
+        void perform_loop_closure(const ActiveSubmap& active_submap) {
             std::unique_lock submaps_lock{ _submap_mutex };
 
-            // TODO: filter out correlations that are too far away (use trajectory distance since last loop closure)
+            // TODO: instead of filtering by max distance here, build KDTree such that only nearby NDDs are considered
+            // TODO: for above, could make a widening angle in forward direction so that loop closures behind are not considered?
 
             // group correlations by submap they belong to
             gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
@@ -169,10 +153,29 @@ namespace chad::detail::map {
                 }
             }
 
+            // max distance to filter out correlations that are too far away
+            double max_distance = _trajectory_distance * 0.9f; // TODO: parameterize the 10%
+            double max_distance_sqr = max_distance * max_distance;
+
             // find the group with the most correlations
             SubmapIndex max_submap_i = 0;
             std::uint32_t max_corr_count = 0;
             for (const auto& [submap_i, correlations]: correlation_groups) {
+                // check if submap is too far away to be considered
+                bool valid = true;
+                for (const auto& correlation: correlation_groups[max_submap_i]) {
+                    // active_submap
+                    auto [original_submap_i, original_subsubmap_i] = _submap_indices[correlation.original_descriptor_i];
+                    const Pose original_pose = active_submap._sub_submaps[original_subsubmap_i]._pose;
+                    // matching submap
+                    auto [matching_submap_i, matching_subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
+                    const Pose matching_pose = _submaps[matching_submap_i]._sub_submaps[matching_subsubmap_i]._pose;
+
+                    double distance_sqr = glm::distance2(matching_pose._position, original_pose._position);
+                    if (distance_sqr > max_distance_sqr) valid = false;
+                }
+                if (!valid) continue;
+
                 if (max_corr_count == 0 || correlations.size() > correlation_groups[max_submap_i].size()) {
                     max_submap_i = submap_i;
                     max_corr_count = correlations.size();
@@ -181,25 +184,25 @@ namespace chad::detail::map {
             if (max_corr_count == 0) return;
 
             // TODO: how to incorporate accumulated submap error?
-            // provide initial estimate for translation difference
-            glm::aligned_dvec3 translational_delta = { 0, 0, 0 };
+            // create rough initial estimate by averaging edges between corresponding nodes
+            std::uint32_t mean_shift = 0;
+            glm::aligned_dvec3 mean_translation = { 0, 0, 0 };
             for (const auto& correlation: correlation_groups[max_submap_i]) {
-                // first, get the poses of matching subsubmaps
+                // active_submap
                 auto [original_submap_i, original_subsubmap_i] = _submap_indices[correlation.original_descriptor_i];
                 const Pose original_pose = active_submap._sub_submaps[original_subsubmap_i]._pose;
+                // matching submap
                 auto [matching_submap_i, matching_subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
                 const Pose matching_pose = _submaps[matching_submap_i]._sub_submaps[matching_subsubmap_i]._pose;
-                // then calculate the translational delta
-                translational_delta += matching_pose._position - original_pose._position;
+                // accumulate the translational delta
+                mean_translation += matching_pose._position - original_pose._position;
+                mean_shift += correlation.sector_shift;
             }
-            translational_delta /= static_cast<double>(correlation_groups[max_submap_i].size());
-            // fmt::println("avg delta of {}", translational_delta);
-
-            // // TODO: parameterize?
-            // if (max_corr_count >= 3) {
-            //     fmt::println("submap {} has the most correlations ({}) with it", max_submap_i, max_corr_count);
-            // }
-            // else fmt::println("insufficient correlations");
+            mean_shift /= static_cast<double>(correlation_groups[max_submap_i].size());
+            mean_translation /= static_cast<double>(correlation_groups[max_submap_i].size());
+            float angle_degr = static_cast<double>(mean_shift) * (360.0 / static_cast<double>(ndd::Descriptor::N_SECTORS));
+            fmt::println("using simulated error of {}", glm::aligned_dvec3{ .015, -.034, .07 });
+            auto estimated_error_pose = Pose{ mean_translation + glm::aligned_dvec3{ .015, -.034, .07 }, glm::aligned_dvec3{ 0, angle_degr, 0 } };
 
             Submap matched_submap = _submaps[max_submap_i];
             dag::ADDR_T root_addr = matched_submap._roots._tsdfs;
@@ -208,40 +211,33 @@ namespace chad::detail::map {
             submaps_lock.unlock();
 
             auto timestamp = std::chrono::steady_clock::now();
-            // sample points from the DAG (more efficient this way)
+            // sample points from the DAG
             auto sampled_points = _dag.sample_points_from_tsdf(root_addr, _sdf_res, _sdf_trunc);
             MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
 
-            // for (auto& point: sampled_points) {
-            //     auto point_cp = point - glm::aligned_vec3{ 3.5, 3.5, 3.5 };
-            //     fmt::println("{} len {}", point_cp, glm::length(point_cp));
-            // }
-            fmt::println("sampled points count: {}", sampled_points.size());
-
             timestamp = std::chrono::steady_clock::now();
-            /* TODO: NDD rotation instead of identity dquat */
-            auto estimated_error_pose = Pose{ translational_delta + glm::aligned_dvec3{ .015, -.034, .07 }, glm::identity<glm::dquat>() };
             fmt::println("{}", estimated_error_pose._position);
             for (int i = 0; i < 5; i++) { // TODO: loop cond
-                Pose err = match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, sampled_points, matched_pose, matched_err);
+                Pose err = funcs::match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, _sdf_res, sampled_points, matched_pose, matched_err);
                 estimated_error_pose = estimated_error_pose + err;
                 fmt::println("{}", estimated_error_pose._position);
             }
             MEASURE_TIME(timestamp, "POINTS-TO-TSDF");
 
-
-            // DEBUG
-            // for (const auto& point: DEBUG_POINTS) {
-            //     auto point_cp = point - glm::aligned_vec3{ 3.5, 3.5, 3.5 };
-            //     fmt::println("{} len {}", point_cp, glm::length(point_cp));
-            // }
-
             std::exit(0);
 
-            // TODO: return _pose_err for new submap! (REMOVE PARAM)
 
+
+            // // add new constraint to gtsam as per loop closure (TODO: needs more accurate matching between the two submaps)
+            // gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
+            // gtsam::NonlinearFactorGraph factors;
+            // using gtsam::symbol_shorthand::X;
+            // factors.add(gtsam::BetweenFactor<gtsam::Pose3>(X(submap_i), X(submap_other_i), loop_measurement, _gtsam->_loop_noise));
+            // _gtsam->_isam.update(factors);
+
+            // TODO: return _pose_err for new submap! (REMOVE PARAM)
         }
-        // builds the dag tree for a single submap
+        // [on_submap_completion]: builds the dag tree for a single submap
         void build_dag_tree(ActiveSubmap& active_submap, SubmapIndex submap_i, std::unique_lock<std::mutex>& lock_active_sub) {
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
 
@@ -395,7 +391,7 @@ namespace chad::detail::map {
             }
 
             // DEBUG ////////////////////////////////////////////////////////////////////////////////////
-            tempthingy(active_submap);
+            perform_loop_closure(active_submap);
             /////////////////////////////////////////////////////////////////////////////////////////////
 
             auto timestamp = std::chrono::steady_clock::now();
@@ -405,6 +401,9 @@ namespace chad::detail::map {
             kdtree_thread.join();
             MEASURE_TIME(timestamp, ">> async: Submap completed");
         }
+
+        // [on_sub_submap_completion]: match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
+        auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
             std::lock_guard lock{ _submap_mutex };
@@ -458,11 +457,9 @@ namespace chad::detail::map {
 
         // ETC (TODO: gotta decide which category these belong to)
         double             _trajectory_distance; // sum of distance of edges between all poses
+        // double             _trajectory_distance_lc; // _trajectory_distance since last loop closure
         glm::aligned_dvec3 _trajectory_last_pose;
         glm::aligned_dvec3 _trajectory_error;
         std::mutex         _trajectory_mutex;
-
-        // DEBUG
-        std::vector<glm::aligned_vec3> DEBUG_POINTS;
     };
 }

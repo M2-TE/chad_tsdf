@@ -24,9 +24,11 @@
 #define GLM_FORCE_CXX20
 #define GLM_FORCE_INLINE
 #define GLM_FORCE_INTRINSICS
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_aligned.hpp>
+#include <glm/gtx/norm.hpp>
 // better hashmap implementation
 #include <gtl/phmap.hpp>
 // std::print wannabe
