@@ -139,115 +139,7 @@ namespace chad::detail::map {
         // [on_submap_completion]: separate function to update the kdtree, doesnt need to be immediate
         void update_kdtree();
         // [on_submap_completion]: when requirements for loop closure are met, perform point-to-tsdf matching to obtain error estimate
-        void perform_loop_closure(const ActiveSubmap& active_submap) {
-            // only need read access
-            std::unique_lock submaps_lock{ _submap_mutex };
-
-            // TODO: instead of filtering by max distance here, build KDTree such that only nearby NDDs are considered
-            // TODO: for above, could make a widening angle in forward direction so that loop closures behind are not considered?
-
-            // group correlations by submap they belong to
-            gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
-            for (const auto& sub_submap: active_submap._sub_submaps) {
-                for (const auto& correlation: sub_submap._correlations) {
-                    auto [submap_i, subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
-                    correlation_groups[submap_i].push_back(correlation);
-                }
-            }
-
-            // max distance to filter out correlations that are too far away
-            double max_distance = _trajectory_distance * _trajectory_threshhold;
-            double max_distance_sqr = max_distance * max_distance;
-
-            // find the group with the most correlations
-            SubmapIndex max_submap_i = 0;
-            std::uint32_t max_corr_count = 0;
-            for (const auto& [submap_i, correlations]: correlation_groups) {
-                // check if submap is too far away to be considered
-                bool valid = true;
-                for (const auto& correlation: correlation_groups[max_submap_i]) {
-                    // active_submap
-                    auto [original_submap_i, original_subsubmap_i] = _submap_indices[correlation.original_descriptor_i];
-                    const Pose original_pose = active_submap._sub_submaps[original_subsubmap_i]._pose;
-                    // matching submap
-                    auto [matching_submap_i, matching_subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
-                    const Pose matching_pose = _submaps[matching_submap_i]._sub_submaps[matching_subsubmap_i]._pose;
-
-                    double distance_sqr = glm::distance2(matching_pose._position, original_pose._position);
-                    if (distance_sqr > max_distance_sqr) valid = false;
-                }
-                if (!valid) continue;
-
-                if (max_corr_count == 0 || correlations.size() > correlation_groups[max_submap_i].size()) {
-                    max_submap_i = submap_i;
-                    max_corr_count = correlations.size();
-                }
-            }
-            if (max_corr_count == 0) return;
-
-            // create rough initial estimate by averaging edges between corresponding nodes
-            std::uint32_t mean_shift = 0;
-            glm::aligned_dvec3 mean_translation = { 0, 0, 0 };
-            for (const auto& correlation: correlation_groups[max_submap_i]) {
-                // active_submap
-                auto [original_submap_i, original_subsubmap_i] = _submap_indices[correlation.original_descriptor_i];
-                const Pose original_pose = active_submap._sub_submaps[original_subsubmap_i]._pose;
-                // matching submap
-                auto [matching_submap_i, matching_subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
-                const Pose matching_pose = _submaps[matching_submap_i]._sub_submaps[matching_subsubmap_i]._pose;
-                // accumulate the translational delta
-                mean_translation += matching_pose._position - original_pose._position;
-                mean_shift += correlation.sector_shift;
-            }
-            mean_shift /= static_cast<double>(correlation_groups[max_submap_i].size());
-            mean_translation /= static_cast<double>(correlation_groups[max_submap_i].size());
-            float angle_degr = static_cast<double>(mean_shift) * (360.0 / static_cast<double>(ndd::Descriptor::N_SECTORS));
-            fmt::println("using simulated error of {}", glm::aligned_dvec3{ .015, -.034, .07 });
-            auto estimated_error_pose = Pose{ mean_translation + glm::aligned_dvec3{ .015, -.034, .07 }, glm::aligned_dvec3{ 0, angle_degr, 0 } };
-
-            Submap matched_submap = _submaps[max_submap_i];
-            dag::ADDR_T root_addr = matched_submap._roots._tsdfs;
-            Pose matched_pose = matched_submap._pose_avg;
-            Pose matched_err = matched_submap._pose_err;
-            submaps_lock.unlock();
-
-            auto timestamp = std::chrono::steady_clock::now();
-            // sample points from the DAG
-            const std::vector<glm::aligned_vec3> sampled_points = _dag.sample_points_from_tsdf(root_addr, _sdf_res, _sdf_trunc);
-            MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
-
-            timestamp = std::chrono::steady_clock::now();
-            std::uint8_t i = 0;
-            for (; i < _point_to_tsdf_it_limit; i++) { // TODO: parameterize max iterations
-                Pose err = funcs::match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, _sdf_res, sampled_points, matched_pose, matched_err);
-                estimated_error_pose = estimated_error_pose + err;
-                fmt::println("{}", estimated_error_pose._position);
-                double pos_delta_sqr = glm::length2(err._position);
-                double rot_delta_sqr = glm::length2(glm::eulerAngles(err._rotation));
-                 // TODO: parameterize these threshholds
-                if (pos_delta_sqr < _sdf_res * _sdf_res * 0.2f && rot_delta_sqr < 0.1) break;
-            }
-            MEASURE_TIME(timestamp, "POINTS-TO-TSDF");
-
-            // in case the point-to-tsdf could not settle before hitting the iteration limit, we assume the loop closure was a dud
-            if (i == _point_to_tsdf_it_limit - 1) return;
-            fmt::println("{}", estimated_error_pose._position);
-
-            std::exit(0);
-
-            // TODO: gtsam update here? maybe async?
-
-
-
-            // // add new constraint to gtsam as per loop closure (TODO: needs more accurate matching between the two submaps)
-            // gtsam::Pose3 loop_measurement{ gtsam::Rot3::RzRyRx(0, 0, 0), gtsam::Point3{ 0, 0, 0 } };
-            // gtsam::NonlinearFactorGraph factors;
-            // using gtsam::symbol_shorthand::X;
-            // factors.add(gtsam::BetweenFactor<gtsam::Pose3>(X(submap_i), X(submap_other_i), loop_measurement, _gtsam->_loop_noise));
-            // _gtsam->_isam.update(factors);
-
-            // TODO: return _pose_err for new submap! (REMOVE PARAM)
-        }
+        void perform_loop_closure(const ActiveSubmap& active_submap, SubmapIndex submap_i);
         // [on_submap_completion]: builds the dag tree for a single submap
         void build_dag_tree(ActiveSubmap& active_submap, SubmapIndex submap_i, std::unique_lock<std::mutex>& lock_active_sub) {
             // TODO: prefault memory ranges (virtual array) for better write speeds into DAG (should store nodes-per-level in octree?)
@@ -394,7 +286,7 @@ namespace chad::detail::map {
             // add factor to graph (no updates just yet, those are expensive)
             gtsam_add_factor(submap_i);
             // attempt to find loop closure
-            perform_loop_closure(active_submap);
+            perform_loop_closure(active_submap, submap_i);
             // construct the full DAG tree for this submap
             build_dag_tree(active_submap, submap_i, lock_active_sub);
 
@@ -434,7 +326,9 @@ namespace chad::detail::map {
         const float _sdf_trunc_reciprocal;
         const float _submap_xyz_threshhold;
         const float _submap_cor_threshhold;
-        const float _trajectory_threshhold = 0.1f;
+        const float _trajectory_threshhold = 10.1f;
+        const float _pos_delta_min = 0.2f; // multiplied by _sdf_res, this value is considered squared
+        const float _rot_delta_min = 0.1f; // considered squared
         const std::uint32_t _point_to_tsdf_it_limit = 10;
 
         // transient data during submapping
@@ -454,15 +348,17 @@ namespace chad::detail::map {
 
         // persistent data for loop closure things
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
+        std::mutex _gtsam_mutex;
+
         void*         _ndd_kdtree_p; // forward declaring the nanoflann kdtree as void*, since it would be a pain otherwise
         std::uint32_t _ndd_kdtree_size; // only updated after kdtree rebuilds
         std::mutex    _ndd_kdtree_mutex;
 
         // ETC (TODO: gotta decide which category these belong to)
-        double             _trajectory_distance; // sum of distance of edges between all poses
-        // double             _trajectory_distance_lc; // _trajectory_distance since last loop closure
+        double             _trajectory_distance; // sum of all edge lengths
         glm::aligned_dvec3 _trajectory_last_pose;
         glm::aligned_dvec3 _trajectory_error;
         std::mutex         _trajectory_mutex;
+        // double             _trajectory_distance_lc; // _trajectory_distance since last loop closure
     };
 }

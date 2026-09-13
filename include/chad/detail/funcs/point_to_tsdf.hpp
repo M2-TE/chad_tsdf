@@ -6,10 +6,11 @@ namespace chad::detail::funcs {
     // Match points to tsdf data. "tsdf_data" is the new submap with an error that needs to be approximated. Sampled points are from older DAG trees
     auto inline match_points_to_tsdf(
             const map::Octree2<17, 2>& tsdf_data, Pose tsdf_err_guess, double sdf_res,
-            const std::vector<glm::aligned_vec3>& points_data, Pose points_pose, Pose points_err) -> Pose{
-        // prepare matrix for error transform (taking into account both points_data AND tsdf_data error)
-        glm::aligned_dmat4x4 point_err_transform = glm::mat4_cast(points_err._rotation * tsdf_err_guess._rotation);
-        point_err_transform = glm::translate(point_err_transform, - points_err._position);
+            const std::vector<glm::aligned_vec3>& points_data, Pose points_pose, Pose points_pose_real) -> Pose{
+        // prepare matrix to transform point from centered to real position (as per factor graph)
+        glm::aligned_dmat4x4 point_real_transform = glm::mat4_cast(points_pose_real._rotation);
+        point_real_transform = glm::translate(point_real_transform, points_pose_real._position); // isam2 pos guess
+        point_real_transform = glm::translate(point_real_transform, -tsdf_err_guess._position); // initial offset guess
         double sdf_res_reciprocal = 1.0 / sdf_res;
 
         // set up H and g for jacobian later
@@ -20,12 +21,8 @@ namespace chad::detail::funcs {
         for (const auto& point_raw: points_data) {
             // make sure points are centered around [0|0|0]
             glm::aligned_dvec3 point_centered = static_cast<glm::aligned_dvec3>(point_raw) - points_pose._position;
-            // apply error transform
-            glm::aligned_dvec3 point = static_cast<glm::aligned_dvec3>(point_err_transform * glm::aligned_dvec4{ point_centered, 1.0 });
-            // translate back
-            point += points_pose._position;
-            // consider initial guess for translation error
-            point -= tsdf_err_guess._position;
+            // apply real transform
+            glm::aligned_dvec3 point = static_cast<glm::aligned_dvec3>(point_real_transform * glm::aligned_dvec4{ point_centered, 1.0 });
 
             // get tsdf voxel at current point
             glm::aligned_ivec3 point_voxel{ glm::floor(point * sdf_res_reciprocal) };
