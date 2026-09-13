@@ -185,9 +185,7 @@ namespace chad::detail::map {
         mean_shift /= static_cast<double>(correlation_groups[max_submap_i].size());
         mean_translation /= static_cast<double>(correlation_groups[max_submap_i].size());
         float angle_degr = static_cast<double>(mean_shift) * (360.0 / static_cast<double>(ndd::Descriptor::N_SECTORS));
-        // auto estimated_error_pose = Pose{ mean_translation, glm::aligned_dvec3{ 0, angle_degr, 0 } };
-        fmt::println("using simulated error of {}", glm::aligned_dvec3{ .015, -.034, .07 });
-        auto estimated_error_pose = Pose{ mean_translation + glm::aligned_dvec3{ .015, -.034, .07 }, glm::aligned_dvec3{ 0, angle_degr, 0 } };
+        auto estimated_error_pose = Pose{ mean_translation, glm::aligned_dvec3{ 0, angle_degr, 0 } };
 
         // grab all the stuff we need from the matched submap before releasing the lock
         Submap matched_submap = _submaps[max_submap_i];
