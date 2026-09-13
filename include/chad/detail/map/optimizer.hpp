@@ -8,7 +8,7 @@
 #include "chad/detail/map/submap.hpp"
 #include "chad/detail/map/active_submap.hpp"
 
-// debug flag for some extra measurements
+// debug flag for some additional measurements
 #if false
 #define MEASURE_DEBUG(a) a
 #else
@@ -37,20 +37,14 @@ namespace chad::detail::map {
 
             // update trajectory by adding new pose edge
             std::unique_lock trajectory_lock{ _trajectory_mutex };
-            if (_descriptors.size() > 0) {
-                _trajectory_distance += glm::distance(_trajectory_last_pose, pose._position);
-            }
+            if (_descriptors.size() > 0) _trajectory_distance += glm::distance(_trajectory_last_pose, pose._position);
             _trajectory_last_pose = pose._position;
             trajectory_lock.unlock();
 
             // make sure submap is not busy (should normally never wait, hence the try_lock)
             ActiveSubmap* active_submap_p = &_active_submaps[_active_i];
             std::unique_lock lock_active_submap{ active_submap_p->_mutex, std::defer_lock };
-            if (!lock_active_submap.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_active_submap.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: Optimizer waited for submap lock release");
-            }
+            delayed_lock(lock_active_submap, "Optimizer waited for active_submap lock release");
 
             // Submap: check whether translational delta threshhold was crossed
             if (!active_submap_p->_all_poses.empty()) {
@@ -74,11 +68,7 @@ namespace chad::detail::map {
                     active_submap_p = &_active_submaps[_active_i];
 
                     lock_active_submap = std::unique_lock{ active_submap_p->_mutex, std::defer_lock };
-                    if (!lock_active_submap.try_lock()) {
-                        auto timestamp = std::chrono::steady_clock::now();
-                        lock_active_submap.lock();
-                        MEASURE_TIME(timestamp, "\t-> WARNING: optimizer::add_scan() waited for active_submap lock release");
-                    }
+                    delayed_lock(lock_active_submap, "optimizer::add_scan() waited for active_submap lock release");
                 }
             }
 
@@ -135,10 +125,22 @@ namespace chad::detail::map {
         }
 
     private:
-        // [on_submap_completion]: separate function to update the kdtree for descriptor matching
+        // output warning msg when locking is not immediate
+        void inline delayed_lock(std::unique_lock<std::mutex>& lock, std::string_view msg) {
+            if (!lock.try_lock()) {
+                auto timestamp = std::chrono::steady_clock::now();
+                lock.lock();
+                MEASURE_TIME(timestamp, fmt::format("\t-> WARNING: {}", msg));
+            }
+        }
+
+        // [on_submap_completion]: TESTING
+        void gtsam_add_factor(SubmapIndex submap_i);
+        // [on_submap_completion]: separate function to update the kdtree, doesnt need to be immediate
         void update_kdtree();
         // [on_submap_completion]: when requirements for loop closure are met, perform point-to-tsdf matching to obtain error estimate
         void perform_loop_closure(const ActiveSubmap& active_submap) {
+            // only need read access
             std::unique_lock submaps_lock{ _submap_mutex };
 
             // TODO: instead of filtering by max distance here, build KDTree such that only nearby NDDs are considered
@@ -154,7 +156,7 @@ namespace chad::detail::map {
             }
 
             // max distance to filter out correlations that are too far away
-            double max_distance = _trajectory_distance * 0.9f; // TODO: parameterize the 10%
+            double max_distance = _trajectory_distance * _trajectory_threshhold;
             double max_distance_sqr = max_distance * max_distance;
 
             // find the group with the most correlations
@@ -183,7 +185,6 @@ namespace chad::detail::map {
             }
             if (max_corr_count == 0) return;
 
-            // TODO: how to incorporate accumulated submap error?
             // create rough initial estimate by averaging edges between corresponding nodes
             std::uint32_t mean_shift = 0;
             glm::aligned_dvec3 mean_translation = { 0, 0, 0 };
@@ -216,25 +217,25 @@ namespace chad::detail::map {
             MEASURE_TIME(timestamp, "POINTS SAMPLING TIME");
 
             timestamp = std::chrono::steady_clock::now();
-            // fmt::println("{}", estimated_error_pose._position);
             std::uint8_t i = 0;
-            constexpr std::uint8_t iteration_limit = 10;
-            for (; i < iteration_limit; i++) { // TODO: parameterize max iterations
+            for (; i < _point_to_tsdf_it_limit; i++) { // TODO: parameterize max iterations
                 Pose err = funcs::match_points_to_tsdf(active_submap._tsdf_octree, estimated_error_pose, _sdf_res, sampled_points, matched_pose, matched_err);
                 estimated_error_pose = estimated_error_pose + err;
-                // fmt::println("{}", estimated_error_pose._position);
+                fmt::println("{}", estimated_error_pose._position);
                 double pos_delta_sqr = glm::length2(err._position);
                 double rot_delta_sqr = glm::length2(glm::eulerAngles(err._rotation));
                  // TODO: parameterize these threshholds
                 if (pos_delta_sqr < _sdf_res * _sdf_res * 0.2f && rot_delta_sqr < 0.1) break;
             }
-
-            // in case the point-to-tsdf could not settle before hitting the iteration limit, we assume the loop closure was a dud
-            if (i == iteration_limit - 1) return;
-            fmt::println("{}", estimated_error_pose._position);
             MEASURE_TIME(timestamp, "POINTS-TO-TSDF");
 
+            // in case the point-to-tsdf could not settle before hitting the iteration limit, we assume the loop closure was a dud
+            if (i == _point_to_tsdf_it_limit - 1) return;
+            fmt::println("{}", estimated_error_pose._position);
+
             std::exit(0);
+
+            // TODO: gtsam update here? maybe async?
 
 
 
@@ -379,32 +380,22 @@ namespace chad::detail::map {
         // finish entire submap and create DAG octree
         void on_submap_completion(ActiveSubmap& active_submap, SubmapIndex submap_i) {
             // update the kdtree on another thread (internally synchronized)
-            std::jthread kdtree_thread{ [this]() {
-                MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
-                update_kdtree();
-                MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
-            }};
+            std::jthread kdtree_thread{ [this]() { update_kdtree(); }};
 
             // lock submap (reading)
             std::unique_lock lock_active_sub{ active_submap._mutex, std::defer_lock };
-            if (!lock_active_sub.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_active_sub.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for submap lock release");
-            }
+            delayed_lock(lock_active_sub, "on_submap_completion() waited for submap lock release");
             // lock DAG (writing)
             std::unique_lock lock_dag{ _dag._mutex, std::defer_lock };
-            if (!lock_dag.try_lock()) {
-                auto timestamp = std::chrono::steady_clock::now();
-                lock_dag.lock();
-                MEASURE_TIME(timestamp, "\t-> WARNING: on_submap_completion() waited for DAG lock release");
-            }
-
-            // DEBUG ////////////////////////////////////////////////////////////////////////////////////
-            perform_loop_closure(active_submap);
-            /////////////////////////////////////////////////////////////////////////////////////////////
+            delayed_lock(lock_dag, "on_submap_completion() waited for DAG lock release");
 
             auto timestamp = std::chrono::steady_clock::now();
+
+            // add factor to graph (no updates just yet, those are expensive)
+            gtsam_add_factor(submap_i);
+            // attempt to find loop closure
+            perform_loop_closure(active_submap);
+            // construct the full DAG tree for this submap
             build_dag_tree(active_submap, submap_i, lock_active_sub);
 
             // finally, ensure kdd tree is fully built and ready
@@ -443,6 +434,8 @@ namespace chad::detail::map {
         const float _sdf_trunc_reciprocal;
         const float _submap_xyz_threshhold;
         const float _submap_cor_threshhold;
+        const float _trajectory_threshhold = 0.1f;
+        const std::uint32_t _point_to_tsdf_it_limit = 10;
 
         // transient data during submapping
         constexpr static std::size_t ACTIVE_SUBMAP_COUNT = 2; // multiple frames-in-flight for smoother parallelization
@@ -452,7 +445,7 @@ namespace chad::detail::map {
 
         // persistent data for submaps
         std::vector<Submap> _submaps;
-        std::mutex          _submap_mutex; // mutex for all the containers of submaps, descriptors, keys, etc
+        std::mutex          _submap_mutex; // (TODO: better naming) mutex for all the containers of submaps, descriptors, keys, etc
 
         // persistent data for sub-submaps
         std::vector<std::pair<SubmapIndex, SubSubmapIndex>> _submap_indices; // to correlate descriptor indices to submap indices
