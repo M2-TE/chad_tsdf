@@ -62,7 +62,7 @@ namespace chad {
 
         // CHAD_MESSAGE(fmt::format("Memory footprint in MiB. Nodes: {:.4f} Hashes: {:.4f} NDDs: {:.4f}", mem_dag_nodes / 1024 / 1024, mem_dag_hashes / 1024 / 1024, mem_ndd / 1024 / 1024));
     }
-    void TSDFMap::reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first) {
+    void TSDFMap::reconstruct(const std::string& foldername, bool clean_first) {
         using namespace chad::detail;
         // finalize current active submap if needed
         _map_optimizer_p->finalize();

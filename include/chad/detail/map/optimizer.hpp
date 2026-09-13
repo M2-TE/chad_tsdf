@@ -122,6 +122,11 @@ namespace chad::detail::map {
             _active_threads[_active_i] = std::jthread{ [this, active_submap_p, submap_i]() {
                 on_submap_completion(*active_submap_p, submap_i);
             }};
+
+            // wait for all threads to finish their work
+            for (auto& thread: _active_threads) {
+                if (thread.joinable()) thread.join();
+            }
         }
 
     private:
@@ -326,7 +331,7 @@ namespace chad::detail::map {
         const float _sdf_trunc_reciprocal;
         const float _submap_xyz_threshhold;
         const float _submap_cor_threshhold;
-        const float _trajectory_threshhold = 10.1f;
+        const float _trajectory_threshhold = 0.1f;
         const float _pos_delta_min = 0.2f; // multiplied by _sdf_res, this value is considered squared
         const float _rot_delta_min = 0.1f; // considered squared
         const std::uint32_t _point_to_tsdf_it_limit = 10;

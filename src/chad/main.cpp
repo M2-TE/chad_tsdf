@@ -78,7 +78,7 @@ void inline do_thingy() {
         // { 7.0, 0, 0 },
         // { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
-    for (int a = 0; a < 10; a++) {
+    for (int a = 0; a < 1; a++) {
         glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
         for (int b = 0; b < 10; b++) {
             positions.push_back(position);
@@ -91,21 +91,6 @@ void inline do_thingy() {
         // sample_cube(points, positions[i]);
         map.insert(points, positions[i], {});
     }
-
-
-    // map.finalize_active_submap();
-
-    // // glm::vec3 offset{ 0, 0, 0 };
-    // // glm::vec3 offset{ 0.01, 0.01, 0.01 };
-    // glm::vec3 offset{ 0.03, 0.03, 0.03 };
-    // // glm::vec3 offset{ 0.05, 0.05, 0.05 };
-    // // glm::vec3 offset{ 10, 10, 10 };
-    // // sample_sphere(points, offset);
-    // // sample_cube(points, offset);
-    // for (auto& point: points) {
-    //     point += offset;
-    // }
-    // map.dothingy(points, offset);
 
     map.print_memory_usage();
     map.reconstruct("mesh", true);

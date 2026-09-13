@@ -101,7 +101,7 @@ namespace chad {
         // finalize current active submap
         void finalize_active_submap();
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
-        void reconstruct(const std::string& foldername, uint32_t submaps_per_chunk, bool clean_first = false);
+        void reconstruct(const std::string& foldername, bool clean_first = false);
 
     private:
         // insert pointcloud (internal function used by all insert(...) calls)
