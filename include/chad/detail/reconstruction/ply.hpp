@@ -65,14 +65,16 @@ property uint8 blue\n";
 namespace chad::detail::reconstruction {
     using LeafHashmap = gtl::parallel_flat_hash_map<MortonCode, LeafCopy>;
     // Step 0: write ply header without vertex/face counts
-    void inline write_header(std::ofstream& ofs) {
+    void inline write_header(std::ofstream& ofs, bool contains_faces = true) {
         ofs << std::string("ply\n");
         ofs << std::string("format binary_little_endian 1.0\n");
         ofs << fmt::format("comment {}\n", COMMENT);
         ofs << std::string("element vertex                     \n");
         ofs << PROPERTIES;
-        ofs << std::string("element face                     \n");
-        ofs << std::string("property list uint8 uint32 vertex_indices\n");
+        if (contains_faces) {
+            ofs << std::string("element face                     \n");
+            ofs << std::string("property list uint8 uint32 vertex_indices\n");
+        }
         ofs << std::string("end_header\n");
     }
 
@@ -347,8 +349,10 @@ namespace chad::detail::reconstruction {
     void inline update_header(std::ofstream& ofs, uint32_t vertex_count, uint32_t face_count) {
         ofs.seekp(60  + COMMENT.size());
         ofs << vertex_count;
-        ofs.seekp(94 + COMMENT.size() + PROPERTIES.size());
-        ofs << face_count;
+        if (face_count > 0) {
+            ofs.seekp(94 + COMMENT.size() + PROPERTIES.size());
+            ofs << face_count;
+        }
     }
 }
 
@@ -363,6 +367,23 @@ namespace chad::detail::reconstruction {
         std::uint32_t vertex_count = create_vertices(ofs, leaves, sdf_res);
         std::uint32_t face_count = create_faces(ofs, leaves);
         update_header(ofs, vertex_count, face_count);
+        ofs.close();
+    }
+    void inline reconstruct_points(const std::string& filename, const dag::Storage& dag, dag::Addresses roots, float sdf_res, float sdf_trunc) {
+        std::ofstream ofs{ filename, std::ios::binary };
+        if (!ofs.is_open()) fmt::println("Failed to open {} for writing", filename);
+        write_header(ofs, false);
+
+        // sample points from the tsdf dag (without considering triangles)
+        std::vector<glm::aligned_vec3> points = dag.sample_points_from_tsdf(roots._tsdfs, sdf_res, sdf_trunc);
+        for (const auto& point: points) {
+            Vertex v {
+                ._position = point,
+                ._color = glm::u8vec3{ 1, 1, 1 }
+            };
+            v.write(ofs);
+        }
+        update_header(ofs, points.size(), 0);
         ofs.close();
     }
 }

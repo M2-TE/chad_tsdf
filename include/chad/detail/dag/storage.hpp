@@ -128,7 +128,7 @@ namespace chad::detail::dag {
         }
 
         // build cache of nodes for a given tree
-        auto build_cache(ADDR_T root) /*const*/ -> NodeCache { // TODO: MAKE CONST AGAIN
+        auto build_cache(ADDR_T root) const -> NodeCache {
             std::array<std::uint8_t,  _cache_depth> path{}; // child indices along path
             std::array<ADDR_T, _cache_depth> addresses{}; // addresses along path
             addresses[0] = root;
@@ -255,7 +255,7 @@ namespace chad::detail::dag {
             }}}
         }
         // return points that lie inbetween flipping signs
-        auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_res, float sdf_trunc) -> std::vector<glm::aligned_vec3> const {
+        auto sample_points_from_tsdf(ADDR_T tsdf_root, float sdf_res, float sdf_trunc) const -> std::vector<glm::aligned_vec3> {
             constexpr std::size_t FINAL_DEPTH = MAX_DEPTH - 2;
             std::array<std::uint8_t, FINAL_DEPTH - _cache_depth + 1> path{}; // child indices along path
             std::array<ADDR_T,       FINAL_DEPTH - _cache_depth + 1> addresses{}; // addresses along path
