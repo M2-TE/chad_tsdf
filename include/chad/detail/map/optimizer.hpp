@@ -195,8 +195,8 @@ namespace chad::detail::map {
                         // iterate over the 64 children (leaves)
                         for (std::uint32_t lc_i = 0; lc_i < octree_t::Node::DEPTH_CHILDREN; lc_i += 8) {
                             // 8 leaves will form a leaf cluster
-                            LeafCluster lc_tsdfs{};
-                            LeafCluster lc_weigh{};
+                            dag::LeafCluster lc_tsdfs{};
+                            dag::LeafCluster lc_weigh{};
                             for (std::uint32_t leaf_i = 0; leaf_i < 8; leaf_i++) {
                                 const octree_t::Leaf& leaf = leaves[lc_i + leaf_i];
                                 if (leaf._weight == 0) {
@@ -302,11 +302,14 @@ namespace chad::detail::map {
         }
 
         // [on_sub_submap_completion]: match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
-        auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
+        auto get_loop_closure_candidates(const ndd::Descriptor::LookupKey& key, DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
             std::lock_guard lock{ _submaps_mutex };
             // active submap mutex is already locked at this time
+
+            // create the key beforehand so it can be safely used afterwards
+            ndd::Descriptor::LookupKey lookup_key = descriptor.get_lookup_key();
 
             // lookup keys may be in use by the kdtree constructor, so we have to synchronize it
             std::unique_lock lock_lookup_keys{ _lookup_keys_mutex, std::defer_lock };
@@ -315,15 +318,15 @@ namespace chad::detail::map {
                 _lookup_keys.insert(_lookup_keys.end(), std::make_move_iterator(_lookup_keys_spillage.begin()), std::make_move_iterator(_lookup_keys_spillage.end()));
                 _lookup_keys_spillage.clear();
                 // add the current key afterwards
-                _lookup_keys.push_back(descriptor.get_lookup_key());
+                _lookup_keys.push_back(lookup_key);
                 lock_lookup_keys.unlock();
             }
             else {
-                _lookup_keys_spillage.push_back(descriptor.get_lookup_key());
+                _lookup_keys_spillage.push_back(lookup_key);
                 if (_lookup_keys_spillage.size() > 10) CHAD_MESSAGE("WARNING: lookup key spillage > 10");
             }
 
-            // descriptor permanently
+            // add descriptor permanently
             DescriptorIndex descriptor_i = static_cast<DescriptorIndex>(_descriptors.size());
             _descriptors.push_back(std::move(descriptor));
 
@@ -334,7 +337,7 @@ namespace chad::detail::map {
             active_submap._sub_submaps.push_back(SubSubmap{
                 ._pose = pose,
                 ._descriptor_i = descriptor_i,
-                ._correlations = get_loop_closure_candidates(descriptor_i),
+                ._correlations = get_loop_closure_candidates(lookup_key, descriptor_i),
             });
         }
 
@@ -367,7 +370,7 @@ namespace chad::detail::map {
         std::vector<ndd::Descriptor>                        _descriptors;
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys;
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys_spillage; // when mutex is busy, write keys into this spill container
-        std::shared_mutex                                   _lookup_keys_mutex;
+        std::mutex                                          _lookup_keys_mutex;
 
         // persistent data for loop closure things
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic

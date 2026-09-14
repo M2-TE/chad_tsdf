@@ -109,7 +109,7 @@ namespace chad::detail::map {
         MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
 
         // create a new kdtree (kdtree does not overwrite yet, so it does not need to be synced)
-        std::shared_lock lock_lookup_keys{ _lookup_keys_mutex };
+        std::unique_lock lock_lookup_keys{ _lookup_keys_mutex };
         // TODO: check out the effectiveness of final param "n_thread_build" when building this thing takes too long
         KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
         lock_lookup_keys.unlock();
@@ -255,17 +255,12 @@ namespace chad::detail::map {
     }
 
     // [on_sub_submap_completion]: match descriptor and its key to other descriptors to find potential correlations (loop closure candidates)
-    auto Optimizer::get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation> {
+    auto Optimizer::get_loop_closure_candidates(const ndd::Descriptor::LookupKey& key, DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation> {
         std::lock_guard lock{ _ndd_kdtree_mutex };
         const auto& descriptor = _descriptors[descriptor_i];
 
-        // just copy the key out during a short mutex grab
-        std::shared_lock lookup_keys_lock{ _lookup_keys_mutex };
-        auto key = _lookup_keys[descriptor_i];
-        lookup_keys_lock.unlock();
-
         // set up knn search within tree and find neighbours for the current descriptor key
-        constexpr std::uint32_t max_matches_limit = 20;
+        constexpr std::uint32_t max_matches_limit = 10;
         std::uint32_t max_matches = std::min<std::uint32_t>(max_matches_limit, _ndd_kdtree_size);
         auto out_dists_sqr = std::vector<float>(max_matches);
         auto candidate_indices = std::vector<DescriptorIndex>(max_matches);

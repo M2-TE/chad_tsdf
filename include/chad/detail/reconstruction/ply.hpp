@@ -48,7 +48,7 @@ property uint8 blue\n";
 
     // cheap heatmap color calculation based on cell weights
     auto inline get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
-        glm::u8vec3 color{ 1, 1, 1 };
+        glm::u8vec3 color{ 255, 255, 255 };
         // if (cell_weight <= 127) {
         //     color.b = (127 - cell_weight) * 2;
         //     color.g = (      cell_weight) * 2;
@@ -123,8 +123,8 @@ namespace chad::detail::reconstruction {
                 std::uint32_t child_addr_wght = dag.get_node(depth_final, addr_wght[depth_final], child_i);
 
                 // fetch actual leaf cluster
-                const LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
-                const LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
+                const dag::LeafCluster& cluster_tsdf = dag.get_lc(child_addr_tsdf);
+                const dag::LeafCluster& cluster_wght = dag.get_lc(child_addr_wght);
 
                 // reconstruct morton code from path
                 std::uint64_t code = 0;

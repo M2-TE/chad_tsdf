@@ -4,7 +4,7 @@
 #include <cassert>
 #include <algorithm>
 
-namespace chad {
+namespace chad::detail::dag {
     // Cluster of 8 separate 8-bit leaves. Choose only one of the union partitions.
     struct LeafCluster {
         // Wrapper for cluster of 8 TSDF values

@@ -1,6 +1,6 @@
 #pragma once
-#include "chad/cluster.hpp"
 #include "chad/detail/dag/node.hpp"
+#include "chad/detail/dag/cluster.hpp"
 #include "chad/detail/misc/virtual_array.hpp"
 
 namespace chad::detail::dag {
