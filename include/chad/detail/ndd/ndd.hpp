@@ -21,8 +21,8 @@ namespace chad::detail::ndd {
         using LookupKey = Sector;
         using AlignmentKey = Ring;
         struct CellIndex {
-            std::uint32_t ring_i;
-            std::uint32_t sector_i;
+            std::uint32_t ring_i = std::numeric_limits<std::uint32_t>::max();
+            std::uint32_t sector_i = std::numeric_limits<std::uint32_t>::max();
         };
 
         // TODO: prevent CV from being non-inversible (see original paper)
@@ -30,50 +30,74 @@ namespace chad::detail::ndd {
             // reset all cells to 0
             for (auto& ring: _cells) ring.fill(0.0f);
 
-            // just having 4 threads works perfectly for this workload
-            constexpr std::size_t thread_count = 4;
-            std::vector<std::jthread> threads;
-            threads.reserve(thread_count);
-
-            // have those 4 threads write all the cell indices
+            // prep cell indices
             std::vector<CellIndex> cell_indices;
             cell_indices.resize(points.size());
 
-            // calculate the cell index for each point beforehand (spread out across 4 threads)
-            for (std::uint32_t thread_i = 0; thread_i < thread_count; thread_i++) {
-                std::uint32_t step = points.size() / thread_count;
-                std::uint32_t beg = step * thread_i;
-                std::uint32_t end = (thread_i == thread_count - 1) ? (points.size() - 1) : (beg + step - 1);
-                threads.emplace_back([&points, &cell_indices, position, beg, end]() {
-                    for (std::uint32_t point_i = beg; point_i < end; point_i++) {
-                        // make sure points are centered around position
-                        glm::aligned_vec3 point = points[point_i] - position;
-                        // calc position of point on circular 2D plane in format of azimuth angle/distance from center
-                        const float azim_range = std::sqrt(point.x * point.x + point.y * point.y);
-                        if (azim_range > MAX_RADIUS) continue;
+            // // just having 4 threads works perfectly for this workload
+            // constexpr std::size_t thread_count = 4; // TODO: benchmark whether threads are even needed here
+            // std::vector<std::jthread> threads;
+            // threads.reserve(thread_count);
 
-                        float azim_angle = 0.0f;
-                        if      (point.x >= 0.0f && point.y >= 0.0f) azim_angle =   0.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
-                        else if (point.x <  0.0f && point.y >= 0.0f) azim_angle = 180.0f - 180.0f / std::numbers::pi * std::atan(+point.y / -point.x);
-                        else if (point.x <  0.0f && point.y <  0.0f) azim_angle = 180.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
-                        else if (point.x >= 0.0f && point.y <  0.0f) azim_angle = 360.0f - 180.0f / std::numbers::pi * std::atan(-point.y / +point.x);
+            // // calculate the cell index for each point beforehand (spread out across 4 threads)
+            // for (std::uint32_t thread_i = 0; thread_i < thread_count; thread_i++) {
+            //     std::uint32_t step = points.size() / thread_count;
+            //     std::uint32_t beg = step * thread_i;
+            //     std::uint32_t end = (thread_i == thread_count - 1) ? (points.size() - 1) : (beg + step - 1);
+            //     threads.emplace_back([&points, &cell_indices, position, beg, end]() {
+            //         for (std::uint32_t point_i = beg; point_i < end; point_i++) {
+            //             // make sure points are centered around position
+            //             glm::aligned_vec3 point = points[point_i] - position;
+            //             // calc position of point on circular 2D plane in format of azimuth angle/distance from center
+            //             const float azim_range = std::sqrt(point.x * point.x + point.y * point.y);
+            //             if (azim_range > MAX_RADIUS || point.z > MAX_RADIUS) continue;
 
-                        // convert azimuth angle/range into ring/sector indices
-                        std::uint32_t ring_i = std::ceil(azim_range / MAX_RADIUS * float(N_RINGS));
-                        std::uint32_t sector_i = std::ceil(azim_angle / 360.0f * float(N_SECTORS));
+            //             float azim_angle = 0.0f;
+            //             if      (point.x >= 0.0f && point.y >= 0.0f) azim_angle =   0.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
+            //             else if (point.x <  0.0f && point.y >= 0.0f) azim_angle = 180.0f - 180.0f / std::numbers::pi * std::atan(+point.y / -point.x);
+            //             else if (point.x <  0.0f && point.y <  0.0f) azim_angle = 180.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
+            //             else if (point.x >= 0.0f && point.y <  0.0f) azim_angle = 360.0f - 180.0f / std::numbers::pi * std::atan(-point.y / +point.x);
 
-                        // clamp just for safety sake
-                        ring_i = std::clamp<std::uint32_t>(ring_i, 1, N_RINGS);
-                        sector_i = std::clamp<std::uint32_t>(sector_i, 1, N_SECTORS);
-                        cell_indices[point_i] = CellIndex{ ring_i - 1, sector_i - 1 };
-                    }
-                });
+            //             // convert azimuth angle/range into ring/sector indices
+            //             std::uint32_t ring_i = std::ceil(azim_range / MAX_RADIUS * float(N_RINGS));
+            //             std::uint32_t sector_i = std::ceil(azim_angle / 360.0f * float(N_SECTORS));
+
+            //             // clamp just for safety sake
+            //             ring_i = std::clamp<std::uint32_t>(ring_i, 1, N_RINGS);
+            //             sector_i = std::clamp<std::uint32_t>(sector_i, 1, N_SECTORS);
+            //             cell_indices[point_i] = CellIndex{ ring_i - 1, sector_i - 1 };
+            //         }
+            //     });
+            // }
+            // for (auto& thread: threads) thread.join();
+
+            for (std::uint32_t point_i = 0; point_i < points.size(); point_i++) {
+                // make sure points are centered around position
+                glm::aligned_vec3 point = points[point_i] - position;
+                // calc position of point on circular 2D plane in format of azimuth angle/distance from center
+                const float azim_range = std::sqrt(point.x * point.x + point.y * point.y);
+                if (azim_range > MAX_RADIUS || point.z > MAX_RADIUS) continue;
+
+                float azim_angle = 0.0f;
+                if      (point.x >= 0.0f && point.y >= 0.0f) azim_angle =   0.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
+                else if (point.x <  0.0f && point.y >= 0.0f) azim_angle = 180.0f - 180.0f / std::numbers::pi * std::atan(+point.y / -point.x);
+                else if (point.x <  0.0f && point.y <  0.0f) azim_angle = 180.0f + 180.0f / std::numbers::pi * std::atan(+point.y / +point.x);
+                else if (point.x >= 0.0f && point.y <  0.0f) azim_angle = 360.0f - 180.0f / std::numbers::pi * std::atan(-point.y / +point.x);
+
+                // convert azimuth angle/range into ring/sector indices
+                std::uint32_t ring_i = std::ceil(azim_range / MAX_RADIUS * float(N_RINGS));
+                std::uint32_t sector_i = std::ceil(azim_angle / 360.0f * float(N_SECTORS));
+
+                // clamp just for safety sake
+                ring_i = std::clamp<std::uint32_t>(ring_i, 1, N_RINGS);
+                sector_i = std::clamp<std::uint32_t>(sector_i, 1, N_SECTORS);
+                cell_indices[point_i] = CellIndex{ ring_i - 1, sector_i - 1 };
             }
-            for (auto& thread: threads) thread.join();
 
             // count the number of points that will be stored in each cell
             std::array<std::array<std::uint32_t, N_SECTORS>, N_RINGS> cell_pointcounts{};
             for (const auto& index: cell_indices) {
+                if (index.ring_i == std::numeric_limits<std::uint32_t>::max()) continue;
                 cell_pointcounts[index.ring_i][index.sector_i]++;
             }
 
@@ -88,10 +112,11 @@ namespace chad::detail::ndd {
 
             // add points to their respective cells
             for (std::uint32_t i = 0; i < points.size(); i++) {
+                CellIndex index = cell_indices[i];
+                if (index.ring_i == std::numeric_limits<std::uint32_t>::max()) continue;
                 // make sure points are centered around position
                 glm::aligned_vec3 point = points[i] - position;
                 // add point to the corresponding cell
-                CellIndex index = cell_indices[i];
                 cell_points[index.ring_i][index.sector_i].push_back(point);
             }
 
@@ -132,6 +157,15 @@ namespace chad::detail::ndd {
                     cv[1][0] = cv[0][1];
                     cv[2][0] = cv[0][2];
                     cv[2][1] = cv[1][2];
+
+                    // prevent cv from being non-inversible
+                    const double trace = cv[0][0] + cv[1][1] + cv[2][2];
+                    const double scale = std::max(trace / 3.0, 1.0);
+                    // Scale-dependent diagonal regularization.
+                    const double lambda = 1e-6 * scale;
+                    cv[0][0] += lambda;
+                    cv[1][1] += lambda;
+                    cv[2][2] += lambda;
 
                     cv = glm::inverse(cv);
 
