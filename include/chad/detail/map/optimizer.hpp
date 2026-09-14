@@ -52,7 +52,7 @@ namespace chad::detail::map {
                 float distance = glm::distance(pose_first._position, pose._position);
                 if (distance > _submap_xyz_threshhold) {
                     // create new submap (still empty)
-                    std::unique_lock lock_sub{ _submap_mutex };
+                    std::unique_lock lock_sub{ _submaps_mutex };
                     std::size_t submap_i = _submaps.size();
                     _submaps.emplace_back(active_submap_p->_all_poses, active_submap_p->_sub_submaps);
                     lock_sub.unlock();
@@ -111,14 +111,14 @@ namespace chad::detail::map {
             if (active_submap._all_poses.empty()) return;
 
             // create new submap (still empty)
-            std::unique_lock lock_sub{ _submap_mutex };
+            std::unique_lock lock_sub{ _submaps_mutex };
             std::size_t submap_i = _submaps.size();
             _submaps.emplace_back(active_submap._all_poses, active_submap._sub_submaps);
             lock_sub.unlock();
 
             // let another thread handle dag writes
-            lock_active_submap.unlock();
             map::ActiveSubmap* active_submap_p = &active_submap;
+            lock_active_submap.unlock();
             _active_threads[_active_i] = std::jthread{ [this, active_submap_p, submap_i]() {
                 on_submap_completion(*active_submap_p, submap_i);
             }};
@@ -268,7 +268,7 @@ namespace chad::detail::map {
                 throw std::logic_error("More than one DAG root for a single submap. Did not happen during my testing yet; either your map is too wide or some inserted points have corrupted positions.");
             }
             const auto& [morton_code, blueprint] = *blueprint_map.cbegin();
-            std::lock_guard lock{ _submap_mutex };
+            std::lock_guard lock{ _submaps_mutex };
             _submaps[submap_i]._roots = dag::Addresses{
                 ._tsdfs = _dag.add_node(blueprint._tsdfs, depth),
                 ._weigh = _dag.add_node(blueprint._weigh, depth),
@@ -305,11 +305,26 @@ namespace chad::detail::map {
         auto get_loop_closure_candidates(DescriptorIndex descriptor_i) -> std::vector<ndd::Correlation>;
         // finish only the sub-submap
         void on_sub_submap_completion(ActiveSubmap& active_submap, Pose pose, ndd::Descriptor&& descriptor) {
-            std::lock_guard lock{ _submap_mutex };
+            std::lock_guard lock{ _submaps_mutex };
+            // active submap mutex is already locked at this time
 
-            // store lookup key and descriptor permanently
+            // lookup keys may be in use by the kdtree constructor, so we have to synchronize it
+            std::unique_lock lock_lookup_keys{ _lookup_keys_mutex, std::defer_lock };
+            if (lock_lookup_keys.try_lock()) {
+                // insert the spilled lookup keys now that we grabbed the mutex
+                _lookup_keys.insert(_lookup_keys.end(), std::make_move_iterator(_lookup_keys_spillage.begin()), std::make_move_iterator(_lookup_keys_spillage.end()));
+                _lookup_keys_spillage.clear();
+                // add the current key afterwards
+                _lookup_keys.push_back(descriptor.get_lookup_key());
+                lock_lookup_keys.unlock();
+            }
+            else {
+                _lookup_keys_spillage.push_back(descriptor.get_lookup_key());
+                if (_lookup_keys_spillage.size() > 10) CHAD_MESSAGE("WARNING: lookup key spillage > 10");
+            }
+
+            // descriptor permanently
             DescriptorIndex descriptor_i = static_cast<DescriptorIndex>(_descriptors.size());
-            _lookup_keys.push_back(descriptor.get_lookup_key());
             _descriptors.push_back(std::move(descriptor));
 
             // remember the future submap index for the newly stored descriptor
@@ -345,12 +360,14 @@ namespace chad::detail::map {
 
         // persistent data for submaps
         std::vector<Submap> _submaps;
-        std::mutex          _submap_mutex; // (TODO: better naming) mutex for all the containers of submaps, descriptors, keys, etc
+        std::mutex          _submaps_mutex; // mutex for _submaps container
 
         // persistent data for sub-submaps
         std::vector<std::pair<SubmapIndex, SubSubmapIndex>> _submap_indices; // to correlate descriptor indices to submap indices
         std::vector<ndd::Descriptor>                        _descriptors;
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys;
+        std::vector<ndd::Descriptor::LookupKey>             _lookup_keys_spillage; // when mutex is busy, write keys into this spill container
+        std::mutex                                          _lookup_keys_mutex;
 
         // persistent data for loop closure things
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic

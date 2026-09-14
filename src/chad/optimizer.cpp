@@ -61,7 +61,7 @@ namespace chad::detail::map {
         using gtsam::symbol_shorthand::X;
 
         std::lock_guard lock_gtsam{ _gtsam_mutex };
-        std::lock_guard lock_submaps{ _submap_mutex };
+        std::lock_guard lock_submaps{ _submaps_mutex };
         const Submap& submap = _submaps[submap_i];
 
         // need to convert pose to gtsam::Pose3
@@ -108,12 +108,14 @@ namespace chad::detail::map {
     void Optimizer::update_kdtree() {
         MEASURE_DEBUG(auto timestamp = std::chrono::steady_clock::now());
 
-        // create a new kdtree, which needs no synchronization
-        KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
+        // create a new kdtree (kdtree does not overwrite yet, so it does not need to be synced)
+        std::unique_lock lock_lookup_keys{ _lookup_keys_mutex };
         // TODO: check out the effectiveness of final param "n_thread_build" when building this thing takes too long
+        KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
+        lock_lookup_keys.unlock();
 
         // delete old kdtree
-        std::lock_guard lock{ _ndd_kdtree_mutex };
+        std::lock_guard lock_kdtree{ _ndd_kdtree_mutex };
         delete static_cast<KDTree*>(_ndd_kdtree_p);
         // set new one
         _ndd_kdtree_p = ndd_kdtree_new_p;
@@ -124,7 +126,7 @@ namespace chad::detail::map {
     // [on_submap_completion]: when requirements for loop closure are met, perform point-to-tsdf matching to obtain error estimate
     void Optimizer::perform_loop_closure(const ActiveSubmap& active_submap, SubmapIndex submap_i) {
         // only need read access
-        std::unique_lock submaps_lock{ _submap_mutex };
+        std::unique_lock submaps_lock{ _submaps_mutex };
 
         // TODO: instead of filtering by max distance here, build KDTree such that only nearby NDDs are considered
         // TODO: for above, could make a widening angle in forward direction so that loop closures behind are not considered?
@@ -292,7 +294,6 @@ namespace chad::detail::map {
     //         auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
     //         auto rot = res.rotation().xyz();
     //         auto pos = res.translation();
-
     //         const Pose& pose = _submaps[i]._pose_avg;
     //         const Pose pose_true{
     //             glm::aligned_dvec3(pos.x(), pos.y(), pos.z()),
@@ -307,7 +308,6 @@ namespace chad::detail::map {
     //             pose._position.x, pose._position.y, pose._position.z,
     //             pos.x(), pos.y(), pos.z()
     //         );
-
     //     }
     // }
 }
