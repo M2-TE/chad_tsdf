@@ -111,6 +111,7 @@ namespace chad::detail::map {
         // create a new kdtree (kdtree does not overwrite yet, so it does not need to be synced)
         std::unique_lock lock_lookup_keys{ _lookup_keys_mutex };
         // TODO: check out the effectiveness of final param "n_thread_build" when building this thing takes too long
+        std::uint32_t lookup_keys_n = _lookup_keys.size();
         KDTree* ndd_kdtree_new_p = new KDTree{ ndd::Descriptor::N_RINGS, _lookup_keys, 10, 1 };
         lock_lookup_keys.unlock();
 
@@ -119,7 +120,7 @@ namespace chad::detail::map {
         delete static_cast<KDTree*>(_ndd_kdtree_p);
         // set new one
         _ndd_kdtree_p = ndd_kdtree_new_p;
-        _ndd_kdtree_size = _lookup_keys.size();
+        _ndd_kdtree_size = lookup_keys_n;
 
         MEASURE_DEBUG(MEASURE_TIME(timestamp, "KDTree constructed"));
     }
@@ -266,7 +267,7 @@ namespace chad::detail::map {
         auto candidate_indices = std::vector<DescriptorIndex>(max_matches);
         auto knnsearch_result = nanoflann::KNNResultSet<float, DescriptorIndex>{ max_matches };
         knnsearch_result.init(candidate_indices.data(), out_dists_sqr.data());
-        static_cast<const KDTree*>(_ndd_kdtree_p)->index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10));
+        static_cast<const KDTree*>(_ndd_kdtree_p)->index->findNeighbors(knnsearch_result, key.data(), nanoflann::SearchParameters(10, false));
 
         // go over all candidates to find potential correlations
         std::vector<ndd::Correlation> correlations;
