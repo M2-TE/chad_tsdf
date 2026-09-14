@@ -101,7 +101,7 @@ namespace chad::detail::map {
 
             // insert new data into active submap
             MEASURE_DEBUG(timestamp = std::chrono::steady_clock::now());
-            active_submap_p->add_frame(std::move(points), normals, pose, _sdf_res, _sdf_trunc);
+            active_submap_p->add_frame(points, normals, pose, _sdf_res, _sdf_trunc);
             MEASURE_DEBUG(MEASURE_TIME(timestamp, "Sub-submap integration"));
         }
         // finalize active submap if it contains any data
@@ -235,7 +235,7 @@ namespace chad::detail::map {
 
             // clean up active submap to be able to continue writing to it in main thread
             active_submap.clear();
-            lock_active_sub.unlock();
+            // lock_active_sub.unlock();
 
             // build the rest of the DAG levels
             std::uint64_t depth = octree_t::_DEPTH_START - 1;
@@ -294,6 +294,7 @@ namespace chad::detail::map {
             perform_loop_closure(active_submap, submap_i);
             // construct the full DAG tree for this submap
             build_dag_tree(active_submap, submap_i, lock_active_sub);
+            lock_active_sub.unlock();
 
             // finally, ensure kdd tree is fully built and ready
             kdtree_thread.join();

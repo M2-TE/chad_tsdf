@@ -80,8 +80,8 @@ namespace chad {
             std::string filename = fmt::format("{}/submap_{}.ply", foldername, i);
 
             // reconstruct 3D mesh from the merged octree
-            // reconstruction::reconstruct(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
-            reconstruction::reconstruct_points(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
+            reconstruction::reconstruct(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
+            // reconstruction::reconstruct_points(filename, *_dag_p, submap._roots, _sdf_res, _sdf_trunc);
 
             MEASURE_TIME(beg, fmt::format(">> Reconstructing submap \"{}\"", filename));
         }

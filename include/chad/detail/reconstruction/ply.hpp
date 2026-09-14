@@ -48,15 +48,15 @@ property uint8 blue\n";
 
     // cheap heatmap color calculation based on cell weights
     auto inline get_gradient_color(uint32_t cell_weight) -> glm::u8vec3 {
-        glm::u8vec3 color{ 0, 0, 0 };
-        if (cell_weight <= 127) {
-            color.b = (127 - cell_weight) * 2;
-            color.g = (      cell_weight) * 2;
-        }
-        else {
-            color.g = (127 - (cell_weight - 128)) * 2;
-            color.r = (      (cell_weight - 128)) * 2;
-        }
+        glm::u8vec3 color{ 1, 1, 1 };
+        // if (cell_weight <= 127) {
+        //     color.b = (127 - cell_weight) * 2;
+        //     color.g = (      cell_weight) * 2;
+        // }
+        // else {
+        //     color.g = (127 - (cell_weight - 128)) * 2;
+        //     color.r = (      (cell_weight - 128)) * 2;
+        // }
         return color;
     }
 }

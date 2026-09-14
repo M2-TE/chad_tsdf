@@ -133,6 +133,9 @@ namespace chad::detail::map {
         gtl::flat_hash_map<SubmapIndex, std::vector<ndd::Correlation>> correlation_groups;
         for (const auto& sub_submap: active_submap._sub_submaps) {
             for (const auto& correlation: sub_submap._correlations) {
+                // DEBUG only allow correlations that are n descriptors apart
+                if (correlation.original_descriptor_i - correlation.matching_descriptor_i < 30) continue; // TODO: parameterize
+
                 auto [submap_i, subsubmap_i] = _submap_indices[correlation.matching_descriptor_i];
                 correlation_groups[submap_i].push_back(correlation);
             }
@@ -256,7 +259,7 @@ namespace chad::detail::map {
         const auto& descriptor = _descriptors[descriptor_i];
 
         // set up knn search within tree and find neighbours for the current descriptor key
-        constexpr std::uint32_t max_matches_limit = 10;
+        constexpr std::uint32_t max_matches_limit = 20;
         std::uint32_t max_matches = std::min<std::uint32_t>(max_matches_limit, _ndd_kdtree_size);
         auto out_dists_sqr = std::vector<float>(max_matches);
         auto candidate_indices = std::vector<DescriptorIndex>(max_matches);
