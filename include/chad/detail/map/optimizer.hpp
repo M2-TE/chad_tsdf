@@ -367,7 +367,7 @@ namespace chad::detail::map {
         std::vector<ndd::Descriptor>                        _descriptors;
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys;
         std::vector<ndd::Descriptor::LookupKey>             _lookup_keys_spillage; // when mutex is busy, write keys into this spill container
-        std::mutex                                          _lookup_keys_mutex;
+        std::shared_mutex                                   _lookup_keys_mutex;
 
         // persistent data for loop closure things
         std::unique_ptr<struct GTSAMData> _gtsam; // forward declared GTSAM, since those headers are gigantic
