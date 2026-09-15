@@ -55,9 +55,25 @@ namespace chad::detail::map {
         // couldnt make it a unique pointer since it is void*
         if (_ndd_kdtree_p != nullptr) delete static_cast<KDTree*>(_ndd_kdtree_p);
     }
-
-    // [on_submap_completion]: TESTING
-    void Optimizer::gtsam_add_factor(SubmapIndex submap_i) {
+    auto Optimizer::posegraph_get(SubmapIndex submap_i) -> Pose {
+        using gtsam::symbol_shorthand::X;
+        std::lock_guard lock{ _gtsam_mutex };
+        gtsam::Pose3 pose_gtsam = _gtsam->_isam.calculateEstimate<gtsam::Pose3>(X(submap_i));
+        auto pos_gtsam = pose_gtsam.translation();
+        auto rot_gtsam = pose_gtsam.rotation().xyz();
+        return Pose {
+            glm::aligned_dvec3{ pos_gtsam.x(), pos_gtsam.x(), pos_gtsam.x() },
+            glm::aligned_dvec3{ rot_gtsam.x(), rot_gtsam.y(), rot_gtsam.z() }
+        };
+    }
+    void Optimizer::posegraph_finalize() {
+        std::lock_guard lock{ _gtsam_mutex };
+        _gtsam->_isam.update(_gtsam->factors, _gtsam->values);
+        _gtsam->factors = gtsam::NonlinearFactorGraph{};
+        _gtsam->values = gtsam::Values{};
+    }
+    // [on_submap_completion]: add the submap as a new factor (new position + factor to previous position)
+    void Optimizer::posegraph_add_factor(SubmapIndex submap_i) {
         using gtsam::symbol_shorthand::X;
 
         std::lock_guard lock_gtsam{ _gtsam_mutex };
@@ -210,13 +226,7 @@ namespace chad::detail::map {
 
         // with updated isam, estimate pose for matched submap
         timestamp = std::chrono::steady_clock::now();
-        gtsam::Pose3 pose_gtsam = _gtsam->_isam.calculateEstimate<gtsam::Pose3>(X(max_submap_i));
-        auto pos_gtsam = pose_gtsam.translation();
-        auto rot_gtsam = pose_gtsam.rotation().xyz();
-        Pose matched_pose_real {
-            glm::aligned_dvec3{ pos_gtsam.x(), pos_gtsam.x(), pos_gtsam.x() },
-            glm::aligned_dvec3{ rot_gtsam.x(), rot_gtsam.y(), rot_gtsam.z() }
-        };
+        Pose matched_pose_real = posegraph_get(max_submap_i);
         lock_gtsam.unlock();
         MEASURE_TIME(timestamp, "ISAM2 ESTIMATE TIME");
 
@@ -286,28 +296,4 @@ namespace chad::detail::map {
         }
         return correlations;
     }
-
-    // void Optimizer::debug_thingy() {
-    //     gtsam::Values result = _gtsam->_isam.calculateEstimate();
-    //     std::cout << "Final optimized poses:\n";
-    //     for (uint32_t i = 0; i < result.size(); ++i) {
-    //         auto res = result.at<gtsam::Pose3>(gtsam::symbol_shorthand::X(i));
-    //         auto rot = res.rotation().xyz();
-    //         auto pos = res.translation();
-    //         const Pose& pose = _submaps[i]._pose_avg;
-    //         const Pose pose_true{
-    //             glm::aligned_dvec3(pos.x(), pos.y(), pos.z()),
-    //             glm::aligned_dvec3(rot.x(), rot.y(), rot.z())
-    //         };
-    //         // adjust pose error as per gtsam graph
-    //         _submaps[i]._pose_err = {
-    //             pose._position - pose_true._position,
-    //             pose_true._rotation
-    //         };
-    //         fmt::println("position was ({:.2f},{:.2f},{:.2f}) and should be ({:.2f},{:.2f},{:.2f})",
-    //             pose._position.x, pose._position.y, pose._position.z,
-    //             pos.x(), pos.y(), pos.z()
-    //         );
-    //     }
-    // }
 }

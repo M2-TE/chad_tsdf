@@ -55,6 +55,10 @@ namespace chad::detail::dag {
             _occupied_segments_n = 1;
             _segments.push_back(NodeSegment{});
         }
+        void release_hashes() {
+            _addr_set.clear();
+            _addr_set.rehash(0);
+        }
 
         std::uint32_t _uniques_n, _dupes_n; // for statistics
         std::uint32_t _occupied_segments_n; // number of actually occupied segments

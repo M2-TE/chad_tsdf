@@ -13,14 +13,9 @@
 
 namespace chad {
     namespace detail {
-        namespace map {
-            struct Optimizer;
-        }
-        namespace dag {
-            struct Storage;
-        }
+        namespace map { struct Optimizer; }
+        namespace dag { struct Storage; }
     }
-
     using PointFlags = std::uint64_t;
     enum PointFlagBits: std::uint64_t {
         eNone     = 0,
@@ -44,7 +39,7 @@ namespace chad {
         TSDFMap& operator=(      TSDFMap&& other) = delete; // move assignment
 
         // initialize a TSDF map with the given voxel size and truncation distance
-        TSDFMap(float sdf_res = 0.05f, float sdf_trunc = 0.1f, float submap_xyz_threshhold = 5.0f, float submap_cor_threshhold = 0.95f);
+        TSDFMap(double sdf_res = 0.05, double sdf_trunc = 0.1, double submap_xyz_threshhold = 5.0, double submap_cor_threshhold = 0.95);
         // explicit destructor to free forward-declared allocations
         ~TSDFMap();
 
@@ -64,6 +59,9 @@ namespace chad {
                 std::array<double, 3> rotation_arr{ rotation.x, rotation.y, rotation.z };
                 insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
             }
+            void inline insert(const std::vector<glm::vec3>& points, const glm::vec3& position, const glm::vec3& rotation) {
+                insert(points, static_cast<glm::dvec3>(position), static_cast<glm::dvec3>(rotation));
+            }
         #endif
 
         #if __has_include(<Eigen/Eigen>)
@@ -82,6 +80,10 @@ namespace chad {
                 std::array<double, 3> rotation_arr{ rotation.x(), rotation.y(), rotation.z() };
                 insert_internal(data_p, data_bytes, data_flags, position_arr, rotation_arr);
             }
+            // insert pointcloud alongside estimated scanner position and (euler) rotation
+            void inline insert(const std::vector<Eigen::Vector3f>& points, const Eigen::Vector3f& position, const Eigen::Vector3f& rotation) {
+                insert(points, Eigen::Vector3d{ position.x(), position.y(), position.z() }, Eigen::Vector3d{ rotation.x(), rotation.y(), rotation.z() });
+            }
         #endif
 
         // insert pointcloud alongside estimated scanner position and (euler) rotation
@@ -89,17 +91,14 @@ namespace chad {
             insert_internal(data_p, data_bytes, data_flags, position, rotation);
         }
 
-        // clear all data and release memory
+        // clear all data without deallocating memory
         void clear();
-        // release all hash-related memory, useful when memory is tight for reconstructions (insertions will fail until rebuild_hashes() has been called)
+        // release all hashmap memory (useful when memory is tight, automatically called by reconstruct)
         void release_hashes();
-        // rebuild all hash structures to allow insertion of new data
+        // rebuild all hashmaps based on existing trees to allow insertion of new data
         void rebuild_hashes();
         // print full memory footprint of different components
         void print_memory_usage();
-
-        // finalize current active submap
-        void finalize_active_submap();
         // reconstruct 3D mesh(es) as chunks of submeshes (see _submaps_per_chunk) and write it to disk
         void reconstruct(const std::string& foldername, bool clean_first = false);
 
@@ -108,8 +107,8 @@ namespace chad {
         void insert_internal(const std::uint8_t* data_p, std::size_t data_bytes, PointFlags data_flags, std::array<double, 3> position, std::array<double, 3> rotation);
 
     public:
-        const float _sdf_res;
-        const float _sdf_trunc;
+        const double _sdf_res;
+        const double _sdf_trunc;
 
     private:
         std::unique_ptr<struct detail::dag::Storage> _dag_p; // storage for persistent hashed nodes

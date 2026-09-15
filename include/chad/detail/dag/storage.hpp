@@ -8,9 +8,14 @@ namespace chad::detail::dag {
         using NodeCache = gtl::flat_hash_map<MortonCode, ADDR_T>;
 
         // clear data without deallocating anything
-        void inline clear() {
+        void clear() {
             for (auto& level: _node_levels) level.clear();
             _leaf_cluster_level.clear();
+        }
+        // release all allocated hashmap memory
+        void release_hashes() {
+            for (auto& level: _node_levels) level.release_hashes();
+            _leaf_cluster_level.release_hashes();
         }
 
         // add a DAG node and return address of new or existing one

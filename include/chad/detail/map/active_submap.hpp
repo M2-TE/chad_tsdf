@@ -16,7 +16,7 @@ namespace chad::detail::map {
         void add_frame(const std::vector<glm::aligned_vec3>& points, const std::vector<glm::aligned_vec3>& normals, Pose pose, float sdf_res, float sdf_trunc) {
             _all_poses.push_back(pose);
             // async version causes trouble with gcc
-            write_octree<double>(points, normals, pose, sdf_res, sdf_trunc);
+            write_octree_async<double>(points, normals, pose, sdf_res, sdf_trunc);
         }
 
     private:

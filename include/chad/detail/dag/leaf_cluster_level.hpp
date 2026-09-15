@@ -33,6 +33,10 @@ namespace chad::detail::dag {
             // reserve first index
             _leaf_clusters.push_back(LeafCluster{});
         }
+        void release_hashes() {
+            _addr_set.clear();
+            _addr_set.rehash(0);
+        }
 
         std::uint32_t _uniques_n, _dupes_n; // for statistics
         VirtualArray<LeafCluster> _leaf_clusters; // leaf cluster data

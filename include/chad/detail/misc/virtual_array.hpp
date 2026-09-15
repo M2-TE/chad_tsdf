@@ -139,7 +139,7 @@ namespace chad::detail {
             free_virtual(_virtual_p + new_page_end, last_page_end - new_page_end);
             _capacity = new_page_end;
         }
-        // reset the array without and optionally free allocated pages
+        // reset the array and optionally free allocated pages
         void inline clear(bool free_pages = false) {
             if (free_pages) {
                 free_virtual(_virtual_p, capacity());

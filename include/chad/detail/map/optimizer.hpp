@@ -127,7 +127,12 @@ namespace chad::detail::map {
             for (auto& thread: _active_threads) {
                 if (thread.joinable()) thread.join();
             }
+
+            // now that all submaps are done, finalize the pose graph (otherwise only gets updated on loop closure)
+            posegraph_finalize();
         }
+        // get the final pose for a submap, as per pose graph
+        auto posegraph_get(SubmapIndex submap_i) -> Pose;
 
     private:
         // output warning msg when locking is not immediate
@@ -138,9 +143,11 @@ namespace chad::detail::map {
                 MEASURE_TIME(timestamp, fmt::format("\t-> WARNING: {}", msg));
             }
         }
+        // finalize the posegraph by adding leftover transient values and factors to it
+        void posegraph_finalize();
 
-        // [on_submap_completion]: TESTING
-        void gtsam_add_factor(SubmapIndex submap_i);
+        // [on_submap_completion]: add the submap as a new factor (new position + factor to previous position)
+        void posegraph_add_factor(SubmapIndex submap_i);
         // [on_submap_completion]: separate function to update the kdtree, doesnt need to be immediate
         void update_kdtree();
         // [on_submap_completion]: when requirements for loop closure are met, perform point-to-tsdf matching to obtain error estimate
@@ -289,7 +296,7 @@ namespace chad::detail::map {
             auto timestamp = std::chrono::steady_clock::now();
 
             // add factor to graph (no updates just yet, those are expensive)
-            gtsam_add_factor(submap_i);
+            posegraph_add_factor(submap_i);
             // attempt to find loop closure
             perform_loop_closure(active_submap, submap_i);
             // construct the full DAG tree for this submap
@@ -344,15 +351,15 @@ namespace chad::detail::map {
     public:
         // settings
         dag::Storage& _dag;
-        const float _sdf_res;   // copied from TSDFMap::_sdf_res
-        const float _sdf_trunc; // copied from TSDFMap::_sdf_trunc
-        const float _sdf_res_reciprocal;
-        const float _sdf_trunc_reciprocal;
-        const float _submap_xyz_threshhold;
-        const float _submap_cor_threshhold;
-        const float _trajectory_threshhold = 0.1f;
-        const float _pos_delta_min = 0.2f; // multiplied by _sdf_res, this value is considered squared
-        const float _rot_delta_min = 0.1f; // considered squared
+        const double _sdf_res;   // copied from TSDFMap::_sdf_res
+        const double _sdf_trunc; // copied from TSDFMap::_sdf_trunc
+        const double _sdf_res_reciprocal;
+        const double _sdf_trunc_reciprocal;
+        const double _submap_xyz_threshhold;
+        const double _submap_cor_threshhold;
+        const double _trajectory_threshhold = 0.1;
+        const double _pos_delta_min = 0.2; // multiplied by _sdf_res, this value is considered squared
+        const double _rot_delta_min = 0.1; // considered squared
         const std::uint32_t _point_to_tsdf_it_limit = 10;
 
         // transient data during submapping

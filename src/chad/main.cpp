@@ -78,7 +78,7 @@ void inline do_thingy() {
         // { 7.0, 0, 0 },
         // { 10.0, 0, 0 }, // TODO: fix segfault when waiting for dag
     };
-    for (int a = 0; a < 1; a++) {
+    for (int a = 0; a < 2; a++) {
         glm::vec3 position = positions.back() + glm::vec3{ 3.5, 3.5, 3.5 };
         for (int b = 0; b < 10; b++) {
             positions.push_back(position);
@@ -96,6 +96,34 @@ void inline do_thingy() {
     map.reconstruct("mesh", true);
 }
 int main() {
+    // glm::vec3 point{ 1, 2, 0 };
+    // glm::vec3 pos{ 1, 1, 0 };
+    // glm::vec3 pos_real{ 1, 1, 0 };
+    // glm::quat rot_real{ glm::vec3{ 0.0, 0.0, glm::radians(180.0) }};
+    // fmt::println("{}", point);
+
+    // // // 1. -pos (old)
+    // // point -= pos;
+    // // // fmt::println("{}", point);
+    // // // 2. rotate (real)
+    // // point = rot_real * point;
+    // // // fmt::println("{}", point);
+    // // // 3. +pos (real)
+    // // point += pos_real;
+    // // // fmt::println("{}", point);
+    // // // 2.00 1.00 0.00
+
+    // glm::mat4x4 transform = glm::identity<glm::mat4x4>();
+    // // glm::mat4x4 identity{};
+    // // transform = glm::translate(identity, pos_real);
+    // // transform *= glm::mat4_cast(rot_real);
+    // // transform *= glm::translate(identity, pos);
+    // transform = glm::translate(transform, pos_real);
+    // transform = transform * glm::mat4_cast(rot_real);
+    // transform = glm::translate(transform, -pos);
+    // point = static_cast<glm::vec3>(transform * glm::vec4{ point, 1.0f });
+    // fmt::println("{}", point);
+
     do_thingy();
     return 0;
 }
